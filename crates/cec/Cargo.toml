@@ -1,0 +1,28 @@
+[package]
+name = "tv-rs-cec"
+description = "HDMI-CEC control for panels that cannot be reached over the network, via a local cec-client adapter."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["hdmi-cec", "cec", "smart-tv", "signage", "libcec"]
+categories = ["api-bindings", "hardware-support", "network-programming"]
+
+[features]
+default = []
+
+# Shell out to a `cec-client` binary instead of linking libcec. Keeps the crate
+# safe Rust and free of a native library dependency that most build machines lack.
+client = ["dep:tokio"]
+
+[dependencies]
+async-trait.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["process"], optional = true }
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true

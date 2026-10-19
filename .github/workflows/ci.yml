@@ -73,6 +73,7 @@ jobs:
       - run: cargo test -p tv-rs --features conformance
       # The optional providers pull reqwest/rumqttc; default builds stay lean.
       - run: cargo test -p tv-rs-agent --features "http mqtt"
+      - run: cargo test -p tv-rs-cec --features client
 
   docs:
     name: rustdoc

@@ -13,6 +13,8 @@
 //! all of them), and keeping it in the workspace means `cargo` itself can check
 //! that every name in the order still exists as a package.
 
+mod hw;
+
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, ExitCode, Stdio};
@@ -22,7 +24,7 @@ use std::time::Duration;
 /// Publish order. Every path dependency must reach crates.io before its
 /// dependents, so `transport` leads and the facade follows the protocol crates.
 /// Keep in sync with `docs/adr/001-crate-publication.md`.
-const ORDER: [&str; 10] = [
+const ORDER: [&str; 11] = [
     "tv-rs-core",
     "tv-rs-transport",
     "tv-rs-discovery",
@@ -33,6 +35,7 @@ const ORDER: [&str; 10] = [
     "tv-rs",
     "tv-rs-media",
     "tv-rs-agent",
+    "tv-rs-cec",
 ];
 
 /// Seconds to wait after each upload so the crates.io index catches up.
@@ -56,6 +59,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
 
     match command.as_str() {
         "publish" => publish(&args[1..]),
+        "hw-test" => hw::run(&args[1..]),
         "-h" | "--help" | "help" => {
             print_help();
             Ok(())
@@ -71,7 +75,8 @@ fn print_help() {
     println!(
         "workspace automation\n\n\
          USAGE:\n\
-         \x20   cargo xtask publish [--dry-run] [--version X.Y.Z] [--token TOKEN] [--skip-tests] [--yes]\n\n\
+         \x20   cargo xtask publish [--dry-run] [--version X.Y.Z] [--token TOKEN] [--skip-tests] [--yes]\n\
+         \x20   cargo xtask hw-test [--timeout SECONDS] [--json] [--write-doc]\n\n\
          FLAGS:\n\
          \x20   --dry-run     package and verify every crate, upload nothing\n\
          \x20   --version     bump the workspace version and every pinned path dependency\n\

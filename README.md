@@ -109,7 +109,8 @@ crates/transport     TLS + WS plumbing (package `tv-rs-transport`)
 crates/media         206 + HLS server  (package `tv-rs-media`)
 crates/cli           terminal front end (package `tv-rs-cli`, not published)
 crates/agent         fleet reconciliation (package `tv-rs-agent`)
-xtask                `cargo xtask publish`
+crates/cec           HDMI-CEC (package `tv-rs-cec`)
+xtask                `cargo xtask publish` · `cargo xtask hw-test`
 ```
 
 The root `Cargo.toml` is a virtual workspace, so a bare `cargo build` does nothing
