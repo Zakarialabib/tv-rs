@@ -1,0 +1,27 @@
+[package]
+name = "tv-rs-tizen"
+description = "Samsung Tizen TV control: WebSocket remote channel (8001/8002), pairing tokens and DIAL app launching (8080)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["samsung", "tizen", "smart-tv", "dial", "websocket"]
+categories = ["api-bindings", "network-programming"]
+
+[dependencies]
+async-trait.workspace = true
+base64.workspace = true
+futures-util.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tv-rs-transport = { workspace = true, features = ["ws"] }
+url.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+wiremock.workspace = true
