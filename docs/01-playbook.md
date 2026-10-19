@@ -1,104 +1,185 @@
-# TV Control & Communications Playbook (Full)
+# Protocol playbook
 
-Source content: pasted playbook from user (Qwen 3.8 Max). Organized by section number matching original.
+What each TV protocol actually does, at the level of detail you need to write or
+debug a client. Ports, handshakes, payload shapes, and the traps that cost an
+afternoon.
 
----
+This page is the reference the crates were built from. It is deliberately
+protocol-only: no vendor app is described here, and nothing depends on one.
 
-## 1. Network Discovery & Enumeration (The Foundation)
+## Discovery
 
-Before any control, locate TV on LAN and identify make/model/capabilities.
+Three mechanisms find a TV on a LAN. This workspace implements the first.
 
-- **SSDP (Simple Service Discovery Protocol)** — UDP port 1900, M-SEARCH broadcast. TVs respond with LOCATION header → XML Device Descriptor (model, friendly name, API endpoints). Used by UPnP, Samsung Tizen, LG webOS.
-- **mDNS / Bonjour (Port 5353)** — Apple AirPlay, Google Cast (Chromecast), some Android TV. Multicast announcements: `_googlecast._tcp.local`, `_airplay._tcp.local`.
-- **ARP Scanning** — Resolve TV IP → MAC for Wake-on-LAN before deep sleep.
+**SSDP** (Simple Service Discovery Protocol) — UDP multicast to
+`239.255.255.250:1900`. Send an `M-SEARCH`; devices answer with `LOCATION`,
+`SERVER`, `USN` and `ST` headers. `LOCATION` is an HTTP URL serving an XML
+description with `<friendlyName>`, `<manufacturer>`, `<modelName>` and `<UDN>`.
+No credentials are involved at any point.
 
-## 2. Power Management (Wake & Sleep)
+```
+M-SEARCH * HTTP/1.1
+HOST: 239.255.255.250:1900
+MAN: "ssdp:discover"
+MX: 3
+ST: ssdp:all
+```
 
-- **Wake-on-LAN (WoL) / Wake-on-Wireless-LAN (WoWLAN)** — UDP "Magic Packet" (MAC repeated 16 times) to port 9. Only reliable hard-off wake method.
-- **Power State Polling** — REST/WebSocket pings to check main CPU awake vs network-only standby.
+Traps:
+- Header names are case-insensitive, and each line must be split once only — a
+  `LOCATION` value contains colons.
+- The same device answers several times (once per service). Deduplicate by
+  `USN`, or by `LOCATION`.
+- A firewall that eats multicast looks exactly like "no TVs here". Distinguish a
+  bind failure from an empty sweep, or you will chase a phantom.
 
-## 3. Samsung Tizen OS (WebSocket & DIAL)
+**mDNS / Bonjour** — UDP 5353, used by AirPlay and Cast (`_airplay._tcp.local`,
+`_googlecast._tcp.local`). Not implemented here.
 
-- **WebSocket API:**
-  - Legacy (Pre-2018): Port 8001 (HTTP/WS, unencrypted)
-  - Modern (2018+): Port 8002 (TLS/WSS) — requires strict certificate handling
-- **Handshake:** `{"method":"ms.channel.connect","params":{"token":"<saved_token>"}}`. No token = PIN displayed on screen.
-- **DIAL (Discovery And Launch)** — REST protocol (Netflix/Google). DIAL server usually port 8080. POST XML payload to launch native apps (YouTube, Netflix) without user prompt.
+**ARP** — resolving an IP to a MAC so Wake-on-LAN can target a sleeping device.
+Also not implemented; ask the user for the MAC once and store it.
 
-## 4. LG webOS (SSAP Protocol)
+## Power
 
-- **SSAP (Second Screen Application Protocol)** — proprietary.
-- **WebSocket Endpoints:**
-  - Port 3000 (Legacy HTTP/WS)
-  - Port 3001 (Modern TLS/WSS)
-- **Communication Model:** JSON-RPC framing. Commands to specific URIs: `ssap://system.launcher/launch`, `ssap://audio/setVolume`.
-- **Pairing:** First connection triggers on-screen prompt ("Allow [Device Name]?"). Once accepted, TV returns `client-key` — must persist in Rust backend.
+**Wake-on-LAN** — a UDP "magic packet" to port 9: six `0xFF` bytes, then the
+target MAC six bytes repeated sixteen times (102 bytes total). It is the only
+reliable way to leave a hard-off state; every other approach assumes the TV is
+awake.
 
-## 5. Roku OS (ECP — External Control Protocol)
+Broadcast to `255.255.255.255` by default, but directed broadcasts
+(`192.168.1.255:9`) survive routers that drop the all-ones address.
 
-- Most "hacker-friendly" OS — unauthenticated local-network REST API.
-- **Port 8060** — HTTP server on every Roku device.
-- **Endpoints:**
-  - `GET /query/device-info` — XML response: firmware, MAC, screen resolution.
-  - `POST /keypress/PowerOff` — simulates remote button press.
-  - `POST /launch/12` — launches app by numeric ID.
-- **Security:** No authentication if request from local subnet.
+**Power-state probing** — a short TCP connect tells you more than any status
+endpoint:
+- connect succeeds → the application services are up (`On`);
+- connection refused → the network interface answers but services are down
+  (`Standby`, i.e. the TV is "off" but listening);
+- timeout → nothing answered (`Off`);
+- anything else → `Unknown`.
 
-## 6. Android TV / Google TV (ADB over TCP/IP)
+`Standby` is the state that matters for a control loop: WoL worked, the service
+has not started yet. Retry, don't fail.
 
-- **Port 5555** — standard ADB TCP/IP.
-- **Prerequisite:** Developer Options + ADB Debugging over Network enabled on TV.
-- **Capabilities (shell commands):**
-  - `input keyevent KEYCODE_HOME`
-  - `am start -n com.netflix.ninja/.MainActivity` (launch apps)
-  - `cmd display` (resolution + HDR)
+## Samsung Tizen
 
-## 7. Universal Media Rendering (UPnP / DLNA)
+**Remote channel** — a WebSocket at `/api/v2/channels/samsung.remote.control`:
+- `ws://<ip>:8001` on legacy sets (plaintext),
+- `wss://<ip>:8002` on 2018+ sets (TLS, self-signed certificate).
 
-- **SOAP / XML:** HTTP POST with XML bodies (SOAP envelopes).
-- **AVTransport Service:** Core playback service. `SetAVTransportURI` (media server URL) → `Play`.
-- **RenderingControl:** Volume / mute adjustments.
+The name is passed as a query parameter, base64-encoded, and identifies the
+client in the TV's on-screen prompt.
 
-## 8. Media Streaming & Seeking Mechanics
+**Handshake**
 
-- **HTTP 206 Partial Content:** TV native players demand this. User seeks → TV sends `Range: bytes=...` header. Rust server must calculate byte offset, seek file, return `206 Partial Content` with correct `Content-Range` header.
-- **HLS (HTTP Live Streaming):** `.m3u8` manifest preferred over raw MP4; native decoder handles chunking.
+```json
+{"method":"ms.channel.connect","params":{"token":"<saved token>"}}
+```
 
-## 9. Proprietary Casting Protocols (Google Cast & AirPlay)
+The reply carries `data.token` on 2018+ firmware. Present that token next time
+and the TV does not prompt. Without persistence every reconnect shows a PIN
+dialog, which is fatal for an unattended client.
 
-- **Google Cast:** mDNS discovery → TLS connection on port 8009. Serialized Protocol Buffers (Protobuf).
-- **AirPlay:** Bonjour discovery → HTTP for photo/video pushing. Proprietary binary protocol (RAOP) for audio mirroring, often protected by FairPlay DRM or PIN authentication.
+**Key presses** go as `ms.remote.control` frames with `Click` commands. **App
+launch** goes through DIAL on port 8080 (`/ws/apps/{id}`), which needs no
+approval prompt at all; well-known ids are stable (Netflix `1110110`, YouTube
+`2019010019`, Prime Video `3201512006786`).
 
----
+**Idle sockets die.** A channel left open for hours is closed by the TV; a send
+then fails. The fix is a pooled channel with one reopen-and-retry, which is what
+`TizenConnectionPool` does — not a reconnect per key press, which would re-prompt
+on sets without a stored token.
 
-## 10. The "Black Box": What We May Miss & Why We Need REA
+**What is not implemented:** certificate pinning for the self-signed TV cert,
+token derivation for enterprise panels, and AES-GCM payload framing on newer
+firmware. Those return `Unsupported`.
 
-Publicly documented protocols (above) are the base. Total control requires undocumented/encrypted/proprietary layers.
+## LG webOS
 
-### Gap A: SSL Certificate Pinning & WSS Handshakes
-- **Problem:** Modern Samsung (Port 8002) and LG (Port 3001) use WSS with self-signed certificates → TLS handshake fails with standard Rust clients.
-- **REA Solution:** Decompile Samsung SmartThings and LG ThinQ APKs (JADX). Find exact Java/Kotlin `TrustManager` / SSL socket factory code. Extract certificate validation bypass or hardcoded self-signed CA certificate → allows `tokio-tungstenite` client to connect seamlessly.
+**SSAP** (Second Screen Application Protocol) — a JSON-RPC-flavoured WebSocket on
+port 3000 (plain) or 3001 (TLS).
 
-### Gap B: The "Token Generation" Math
-- **Problem:** Enterprise/high-end commercial TVs require cryptographic token from TV MAC + hardcoded secret salt.
-- **REA Solution:** Feed official control app APK into REA's JADX analyzer. Prompt AI: *"Find authentication header generation function. Extract hashing algorithm, salt. Write equivalent Rust code."*
+The first connection registers a manifest and triggers an on-screen "Allow?"
+prompt. Acceptance returns a `client-key`; send it in later `register` payloads
+and the prompt never appears again.
 
-### Gap C: Undocumented Deep-Link Intents & Payloads
-- **Problem:** ECP (Roku) and SSAP (LG) have documented commands (Netflix, YouTube). Hidden payloads for hidden web browser launch, HDMI input force, local file index refresh are unknown.
-- **REA Solution:** Analyze `.har` / `.pcap` captures recorded during manual QA button presses in official mobile app. REA AI maps UI presses → exact JSON payloads / REST endpoints → generates `serde` structs for Rust crate automatically.
+Commands are addressed by URI rather than method name:
 
-### Gap D: Firmware-Specific Quirks (The "Matrix" of TVs)
-- **Problem:** 2019 Samsung accepts plain-text token; 2024 encrypts WebSocket payload with AES-GCM (key derived during pairing).
-- **REA Solution:** Download older + newer official manufacturer APK versions. Compare binaries. Prompt AI: *"Analyze WebSocket connection class differences between v2.1 and v3.0. Generate Rust trait handling legacy plain-text auth and modern AES-GCM encrypted framing."*
+```
+ssap://system.launcher/launch    {"id": "com.webos.app.browser"}
+ssap://audio/setVolume           {"volume": 15}
+ssap://audio/getVolume
+ssap://system/turnOff
+ssap://com.webos.applicationManager/getForegroundAppInfo
+```
 
-### Gap E: Proprietary Protobuf Schemas (Google Cast)
-- **Problem:** Google Cast uses compiled Protocol Buffers. `.proto` definition files not published by Google.
-- **REA Solution:** Feed Chromecast-enabled Android APK into REA. AI locates compiled Protobuf classes, reverse-engineers field mappings, outputs `.proto` files → compile with `prost-build` in Rust workspace.
+Traps:
+- One persistent session per TV. SSAP is a long-lived socket, not a request per
+  call.
+- Responses are matched by `id`; a session that ignores this will read another
+  command's reply.
+- Port 3001 uses a self-signed certificate, so a strict TLS client fails there.
+  Do not disable verification to make it work — report the gap instead.
 
----
+## Roku
 
-## Execution Plan Summary
+**ECP** (External Control Protocol) — plain HTTP on port 8060, no authentication
+on the local subnet. The most cooperative of the three:
 
-1. **Phase 1:** Build Rust skeleton using known protocols (ECP, standard WebSocket, SSDP).
-2. **Phase 2 (REA Phase):** Target official Android APKs (SmartThings, ThinQ, Roku). REA automates SSL bypass, token math, hidden JSON schema extraction.
-3. **Phase 3:** Feed REA-generated Rust structs and cryptographic functions back into crate → 100% parity with official mobile apps.
+| Endpoint | Method | Returns |
+|---|---|---|
+| `/query/device-info` | GET | XML: model, serial, firmware, power mode, MAC |
+| `/query/apps` | GET | installed apps with their numeric ids |
+| `/keypress/{Key}` | POST | emulates a remote button (`Home`, `Up`, `Select`, `Back`, `PowerOff`) |
+| `/launch/{appId}` | POST | starts an app |
+
+Traps:
+- Different models expose different subsets of `<device-info>`; every field must
+  be optional in your parser.
+- App ids are numeric and model-dependent; resolve a name to an id at runtime
+  instead of hard-coding.
+- `PowerOff` is a key press, not a power API — some sets ignore it when a
+  screensaver is active.
+
+## Media serving
+
+Two behaviours a TV player will reject you for not having.
+
+**`206 Partial Content`** — when a viewer seeks, the player sends
+`Range: bytes=N-` and expects a `206` with `Content-Range: bytes N-end/total`
+and `Accept-Ranges: bytes`. Serving the whole file instead makes the seek bar
+dead. Support the three real-world forms (`bytes=N-`, `bytes=A-B`, `bytes=-N`),
+clamp an over-long end, and answer `416` with `Content-Range: bytes */total` when
+the range starts past the end.
+
+**HLS** — an `.m3u8` playlist of segments, so the TV's own decoder handles
+chunking and bitrate. The minimum a player accepts:
+
+```
+#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:6
+#EXT-X-MEDIA-SEQUENCE:0
+#EXT-X-PLAYLIST-TYPE:VOD
+#EXTINF:6.000,
+seg0.ts
+#EXT-X-ENDLIST
+```
+
+`TARGETDURATION` must be the rounded-up maximum segment length; a value smaller
+than the longest segment makes some players refuse the playlist.
+
+## Casting (not implemented)
+
+**Google Cast** — mDNS discovery, then TLS on port 8009, protobuf payloads.
+**AirPlay** — Bonjour, HTTP for media, a binary RAOP channel for audio, with
+PIN/FairPlay protection.
+
+Both are out of scope here: they are sender protocols with their own payload
+schemas, and a partial implementation is worse than none.
+
+## Android TV (not implemented)
+
+ADB over TCP (`5555`) gives total control (`input keyevent`, `am start`,
+`cmd display`) but requires developer mode on the device and a pairing step per
+TV. It is a different trust model from the three protocols above, which is why it
+is not part of this workspace.

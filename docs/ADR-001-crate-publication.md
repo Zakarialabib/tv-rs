@@ -40,7 +40,7 @@ All dependencies are MIT-compatible (`tokio`, `serde`, `reqwest`, `thiserror`,
 
 | # | Item | Status |
 |---|---|---|
-| 1 | `LICENSE` (MIT) at workspace root | **Done** — file exists, `Copyright (c) 2026 Zakaria (tv-rs / signage-master)`. |
+| 1 | `LICENSE` (MIT) at workspace root | **Done** — file exists, `Copyright (c) 2026 Zakaria Labib`. |
 | 2 | `docs/glossary.md` | **Done** — terminology, protocol mapping, phase terms, license rules. |
 | 3 | `release.yml` hardening | **Partially done** — license check, `cargo test --workspace`, and `--dry-run` are all in place. But see the unresolved blocker below. |
 | 4 | Phase → crate version link | **Done** — `docs/03-matrix.md` maps every Playbook § to its crate and status. |
@@ -94,7 +94,7 @@ extendability, per §Consequences. The cost is additional manifest overhead, whi
 is accepted.
 
 Auth insertion points (`auth.rs` in `tizen`, `webos`, `roku`) are trait boundaries
-naming the REA Phase 2 work. Real implementations must not be inserted until REA
-output is validated on hardware — see `01-playbook.md` §10 and `03-matrix.md`.
+naming deferred authentication work. Real implementations must not be inserted
+until the behaviour is verified against hardware — see `03-matrix.md` §Deferred.
 `discovery` and `power` have no `auth.rs`: those protocols are unauthenticated and
 the file would have been an empty abstraction.

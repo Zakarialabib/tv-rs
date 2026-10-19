@@ -39,10 +39,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Known limitations
 
-- Reverse-engineering gaps A–E from `docs/01-playbook.md` §10 (TLS
-  certificate-pinning bypass, enterprise token math, undocumented payloads,
-  AES-GCM framing, Cast protobuf) are unimplemented. They surface as typed
-  `Unsupported` errors rather than panics.
+- Vendor authentication that depends on undocumented behaviour (self-signed TLS
+  pinning, enterprise token derivation, encrypted framing) is unimplemented. It
+  surfaces as typed `Unsupported` errors rather than panics or a disabled
+  certificate check.
 - mDNS/Bonjour discovery and Android TV ADB are not implemented.
 - No crate has been verified against physical hardware in CI; use the `hil`
   harness.

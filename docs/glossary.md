@@ -1,84 +1,108 @@
-# Glossary — tv-rs Architecture
+# Glossary — and the map of these docs
 
-Durable definitions for terms used across `docs/ADR-001-crate-publication.md`,
-`docs/03-matrix.md` and `docs/01-playbook.md`. Engineering and naming rules are
-not repeated here — see `00-rust-package-standard.md`.
+Every term here is one you will meet in the code or in the protocol docs, and
+each row tells you **where** to read more. Use it as the index; the numbered
+pages are the long form.
 
-## Workspace Terms
+## Start here
 
-- **Facade (`tv-rs`)** — the root package (`src/lib.rs`). Re-exports the five
-  protocol crates behind one interface and adds coordination: `discover()`,
-  `identify_vendor()`, `DiscoveredTv`, `TvClient`, `TvVendor`, `TvError`. Holds no
-  protocol logic of its own.
-- **Protocol crate** — a focused crate in its own directory at the repository
-  root (`discovery/`, `power/`, `tizen/`, `webos/`, `roku/`) implementing one
-  Playbook section: `discovery` (§1), `power` (§2), `tizen` (§3), `webos` (§4),
-  `roku` (§5).
-- **Aggregate client (`TvClient`)** — enum over the vendor clients. Covers only
-  operations that exist on all three vendors (`power_off`, `launch_app`); vendor
-  specifics go through `as_tizen()` / `as_webos()` / `as_roku()`.
-- **Vendor identification** — the documented heuristic in `identify_vendor()` that
-  classifies an SSDP reply by substring match over its advertised fields. SSDP
-  carries no authoritative vendor ID, so an unrecognised device is reported as
-  `TvVendor::Unknown` rather than guessed at.
-- **Virtual vs root manifest** — the workspace root is `[package] tv-rs` *and*
-  `[workspace]` at once (the `tokio` pattern). A purely virtual manifest cannot be
-  published, which is why the root is a real package.
+| If you are… | Read |
+|---|---|
+| new to the project | [README](../README.md) → this page → [01-playbook](01-playbook.md) |
+| integrating it into an app | [README §Install](../README.md#install) → [glossary: facade](#facade) |
+| adding a vendor | [03-matrix](03-matrix.md) → [02-naming](02-naming-conventions.md) |
+| reviewing a release | [ADR-001](ADR-001-crate-publication.md) |
+| wondering why a call returns `Unsupported` | [glossary: deferred capability](#deferred-capability) |
 
-## Protocol Terms (Playbook Mapping)
+## Architecture
 
-- **SSDP** (§1) — Simple Service Discovery Protocol. UDP multicast 1900,
-  `M-SEARCH`, replies carry a `LOCATION` URL pointing at a UPnP device descriptor
-  in XML. Unauthenticated.
-- **UPnP device descriptor** — the XML document at the SSDP `LOCATION`: friendly
-  name, manufacturer, model, serial number.
-- **WoL / WoWLAN** (§2) — Wake-on-LAN magic packet: the target MAC repeated 16
-  times behind 6 leading `0xFF` bytes (102 bytes total), sent to UDP 9.
-- **DIAL** (§3) — Discovery And Launch. REST/XML on port 8080 used to start
-  native Tizen apps (YouTube, Netflix) without a user prompt.
-- **Tizen remote channel** (§3) — WebSocket on 8001 (legacy, plain) or 8002
-  (TLS). Handshake is `ms.channel.connect`; without a saved token the TV shows a
-  PIN/allow prompt and returns a token to reuse.
-- **SSAP** (§4) — Second Screen Application Protocol. LG webOS JSON-RPC over
-  WebSocket, 3000 plain or 3001 TLS, addressed by URIs such as
-  `ssap://system.launcher/launch`. First connection triggers an on-screen prompt
-  and returns a `client-key` to persist.
-- **ECP** (§5) — External Control Protocol. Roku's documented, unauthenticated
-  REST API on port 8060. Requests from the local subnet need no credentials.
-- **mDNS / Bonjour** (§1) — multicast DNS on 5353. Used by AirPlay and Google
-  Cast. **Not implemented**; represented by `DiscoveryMethod` only.
-- **ARP scanning** (§1) — resolving IP → MAC before Wake-on-LAN. **Not
-  implemented.**
+**Facade** — the `tv-rs` crate: `discover()`, `identify_vendor()`, `TvClient`.
+It holds no protocol logic; it classifies a device and forwards. Where: [README §How it fits together](../README.md#how-it-fits-together), [`src/client.rs`](../src/client.rs).
 
-## REA / Phase Terms
+**Protocol crate** — one crate per vendor or concern (`tv-rs-tizen`,
+`tv-rs-webos`, `tv-rs-roku`, `tv-rs-discovery`, `tv-rs-power`). Each has the same
+module shape. Where: [02-naming-conventions](02-naming-conventions.md).
 
-- **Phase 1** — the protocol implementations in this workspace. Complete:
-  discovery, power, and the three vendor control channels, with tests.
-- **Phase 2** — REA: JADX decompilation of the official Samsung SmartThings, LG
-  ThinQ and Roku APKs to recover SSL-pinning bypasses, token/secret math, AES-GCM
-  framing, hidden deep-link payloads and protobuf schemas. Not started.
-- **Phase 3** — reintegration: implement the Phase 2 findings in place of the
-  typed `Unsupported` errors currently returned by the affected code paths.
-- **REA** — "Reverse Engineer Anything", a local MCP server and CLI for binary
-  analysis. See `02-external-refs.md` §3.
-- **Gap A** — SSL certificate pinning / WSS handshake handling for the
-  self-signed certificates on Samsung 8002 and LG 3001.
-- **Gap B** — enterprise token-generation math (TV MAC + hardcoded secret salt).
-- **Gap C** — undocumented deep-link intents and payloads.
-- **Gap D** — AES-GCM encrypted WebSocket framing on newer Samsung firmware.
-- **Gap E** — proprietary Google Cast protobuf schemas.
+**Transport crate** — `tv-rs-transport`: the TLS policy and connector, and the
+budgeted WebSocket frame reader both vendor crates share. Where: [`transport/src/`](../transport/src/).
 
-All five gaps are described in `01-playbook.md` §10.
+**Aggregate client** — `TvClient`, the enum that wraps a vendor client and
+exposes only the operations every vendor supports (`power_off`, `launch_app`)
+plus typed accessors (`as_tizen`, `as_webos`, `as_roku`). Where: [`src/client.rs`](../src/client.rs).
 
-## License / Integration Terms
+**Media server** — `tv-rs-media`: an HTTP server that answers `Range` requests
+with `206 Partial Content` and renders HLS playlists. Deliberately separate so
+`axum` never enters a protocol crate's dependency graph. Where: [`media/src/`](../media/src/).
 
-- **Direct dependency OK** — MIT / BSD / Apache-2.0 / MPL-2.0. Every dependency in
-  this workspace qualifies: `tokio`, `serde`, `reqwest`, `thiserror`,
-  `futures-util`, `async-trait`, `roxmltree`, `base64`, `url`, `rustls` (default TLS backend; `native-tls` opt-in),
-  `tokio-tungstenite`, `clap`, `wiremock`.
-- **Sidecar / binary isolation** — only required for GPL/AGPL. Not needed here.
-- **License file** — `LICENSE` (MIT) exists at the workspace root. Its absence was
-  the trigger for `ADR-001`; that part is resolved.
-- **Deployment** — distinct from crate publication and out of scope for it. The
-  earlier `npm run deploy` reference described a profile-standard path that was
-  never verified and has been dropped from `README.md`.
+## Protocols
+
+**SSDP** — multicast discovery over UDP 1900. An `M-SEARCH` datagram goes out,
+devices answer with a `LOCATION` header pointing at an XML description. No
+credentials. Where: [01-playbook §discovery](01-playbook.md#discovery).
+
+**UPnP descriptor** — the XML document behind `LOCATION`: friendly name,
+manufacturer, model, `UDN`. Where: [`discovery/src/client.rs`](../discovery/src/client.rs).
+
+**WoL (Wake-on-LAN)** — a 102-byte "magic packet" (six `0xFF` then the MAC
+sixteen times) to UDP 9. Only reliable way to wake a TV from a hard-off state.
+Where: [01-playbook §power](01-playbook.md#power).
+
+**Power state** — `On` / `Standby` / `Off` / `Unknown`, from a short TCP connect:
+refused means the NIC is up but services are not (`Standby`), timeout means
+`Off`. Where: [`power/src/types.rs`](../power/src/types.rs).
+
+**Tizen** — Samsung's TV OS. Remote channel is a WebSocket: `ws://:8001`
+(legacy) or `wss://:8002` (2018+). The handshake is
+`{"method":"ms.channel.connect"}`; a 2018+ set returns a `token` you present next
+time instead of asking the viewer to approve. Where: [01-playbook §tizen](01-playbook.md#samsung-tizen).
+
+**DIAL** — a REST launcher on port 8080 that starts an app by id without a
+prompt. Where: [`tizen/src/client.rs`](../tizen/src/client.rs).
+
+**SSAP** — LG webOS's JSON-RPC-ish WebSocket protocol on 3000 (plain) / 3001
+(TLS). The first connection shows an "Allow?" prompt and returns a `client-key`.
+Where: [01-playbook §webos](01-playbook.md#lg-webos).
+
+**ECP** — Roku's External Control Protocol: an unauthenticated HTTP server on
+port 8060 (`/query/device-info`, `/keypress/{key}`, `/launch/{id}`). Where:
+[01-playbook §roku](01-playbook.md#roku).
+
+**HLS** — an `.m3u8` playlist of media segments; the portable format for a TV
+player. Where: [`media/src/hls.rs`](../media/src/hls.rs).
+
+**HTTP 206** — partial content. A player that cannot get a `206` with the right
+`Content-Range` will not let the viewer seek. Where: [`media/src/range.rs`](../media/src/range.rs).
+
+## Code vocabulary
+
+**`TlsPolicy`** — `Strict` (validate the certificate) or `AcceptInvalid` (accept
+a self-signed TV certificate). One definition, in `tv-rs-transport`, because its
+consequences are a workspace-wide security property. Where: [`transport/src/tls.rs`](../transport/src/tls.rs).
+
+**Deferred capability** — a call that needs authentication behaviour this project
+does not implement (certificate pinning, token derivation, encrypted framing). It
+returns an `Unsupported` error carrying a phase and a reason, and never panics.
+Where: [`transport/src/unsupported.rs`](../transport/src/unsupported.rs).
+
+**`TizenConnectionPool`** — one WebSocket channel per TV; a failed send reopens
+it once and replays the frame, because TVs drop idle sockets. Where: [`tizen/src/pool.rs`](../tizen/src/pool.rs).
+
+**`SamsungTokenStore`** — file-backed pairing tokens keyed by IP. A corrupt file
+is quarantined instead of aborting startup, and an empty token never overwrites a
+stored one. Where: [`tizen/src/token_store.rs`](../tizen/src/token_store.rs).
+
+**`identify_vendor`** — the heuristic that turns an SSDP reply and its descriptor
+into `Samsung` / `Lg` / `Roku` / `Unknown`. Deliberately narrow: unknown is a
+normal answer. Where: [`src/client.rs`](../src/client.rs).
+
+**HIL** — hardware in the loop: tests that talk to real televisions, compiled out
+unless `--features hil` is on. Where: [`tests/hardware_in_the_loop.rs`](../tests/hardware_in_the_loop.rs).
+
+## Process
+
+**ADR** — architecture decision record. Where: [ADR-001](ADR-001-crate-publication.md).
+
+**Release order** — the fixed publish sequence that keeps the facade's version
+dependencies resolvable on crates.io. Where: [`scripts/release.sh`](../scripts/release.sh), [ADR-001](ADR-001-crate-publication.md).
+
+**Gates** — fmt, clippy, tests, rustdoc. Where: [CONTRIBUTING](../CONTRIBUTING.md).

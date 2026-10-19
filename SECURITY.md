@@ -30,7 +30,7 @@ credentials. Reports in these areas are especially relevant:
 ## Out of scope
 
 - Anything requiring physical access to a TV or its firmware.
-- The reverse-engineering gaps documented in `docs/01-playbook.md` §10 — those
-  features are deliberately unimplemented and fail closed.
+- Vendor authentication features that are deliberately unimplemented — they fail
+  closed with a typed `Unsupported` error, which is the intended behaviour.
 - Vulnerabilities in the vendor SDK (`OpenNetStream.dll`); report those to the
   vendor. This workspace never redistributes it.

@@ -1,48 +1,38 @@
-# tv-rs — Documentation Index
+# Documentation
 
-Start here. The numbered files are the **operational set** — read them in order.
-The unnumbered files are **durable references** that change rarely.
+Nine crates, one facade, one idea: speak each TV's own protocol and never hide a
+failure behind a panic. These pages are the long version of that.
 
-## Operational set
+## Read in this order
 
-| File | Purpose |
+| # | Page | What it answers |
+|---|---|---|
+| 0 | [`glossary.md`](glossary.md) | **The map.** Every term, and the page or file that explains it. Start here if you only have five minutes. |
+| 1 | [`01-playbook.md`](01-playbook.md) | The protocol facts: ports, handshakes, discovery, media, and what each vendor exposes. |
+| 2 | [`02-naming-conventions.md`](02-naming-conventions.md) | Where a file, trait, struct or constant belongs. |
+| 3 | [`03-matrix.md`](03-matrix.md) | State: what is implemented, what is deferred, verified test counts, remaining gaps. |
+| 4 | [`03-external-refs.md`](03-external-refs.md) | Protocol references, prior art, and the crates this workspace learned from. |
+| 5 | [`04-rust-package-standard.md`](04-rust-package-standard.md) | The engineering standard the whole workspace follows — reusable outside this repo. |
+| 6 | [`ADR-001-crate-publication.md`](ADR-001-crate-publication.md) | Why eight crates, how a release is ordered, and the CI that guards it. |
+| — | [`skeleton-map.md`](skeleton-map.md) | Which playbook section became which crate. |
+
+## Conventions used here
+
+- **Claims about code are checked against code.** If a page says a function
+  exists, it exists in `src/`. When the two disagree, the code is right and the
+  page is a bug.
+- **Deferred is a feature.** A capability that is not implemented returns a typed
+  `Unsupported` error with a reason. No page promises something the code refuses
+  to do.
+- **Numbers are dated.** Test counts and file inventories in `03-matrix.md` carry
+  the date they were measured; they rot, the source does not.
+
+## Where the code lives
+
+| Path | Contents |
 |---|---|
-| [`01-playbook.md`](01-playbook.md) | The TV Control & Communications Playbook, §1–10: discovery, power, Tizen, webOS, Roku, ADB, DLNA, Cast/AirPlay, and §10 the reverse-engineering gaps. Source material for the whole workspace, plus §11 on the media & signage layer. |
-| [`02-naming-conventions.md`](02-naming-conventions.md) | tv-rs specifics: the module inventory per crate, the deliberate deviations from the standard's vocabulary, and the facade re-export naming. Universal naming rules are in the standard §6. |
-| [`03-external-refs.md`](03-external-refs.md) | External SDK and protocol docs, prior-art crates, the REA reverse-engineering tooling, and the research findings with what we did about each. |
-| [`03-matrix.md`](03-matrix.md) | **State matrix** — per-component Done / Left / Next, verified test counts, publish readiness, the Phase 2 & 3 roadmap, and the remaining gaps. The authoritative status document. |
-| [`05-signage-adoption.md`](05-signage-adoption.md) | **Consumer guide (SignageMaster).** What the platform already runs, the crate-vs-platform gap table, a six-phase migration plan, and six prompts: audit → plan → LG → Roku → power → Samsung swap → parity gate. |
-| [`04-rust-package-standard.md`](04-rust-package-standard.md) | **The reusable engineering standard.** Repository shape, facade pattern, crate-root and error contracts, testability, naming, docs structure, dependency policy, CI gates, publishing. Project-agnostic and duplicated into `ezviz-openapi-rs`. |
-
-## Durable references
-
-| File | Purpose |
-|---|---|
-| [`ADR-001-crate-publication.md`](ADR-001-crate-publication.md) | Why the workspace is six publishable crates, the license and CI decisions, and the release blocker. |
-| [`glossary.md`](glossary.md) | Terms: facade, protocol crate, aggregate client, SSDP/SSAP/ECP/DIAL, Phase 1–3, Gaps A–E, license rules. |
-| [`skeleton-map.md`](skeleton-map.md) | Compact Playbook § → crate mapping with Phase 1/2/3 assignment. |
-
-## Numbering
-
-This repository uses two `03-` prefixes: `03-external-refs.md` (external
-references) and `03-matrix.md` (state matrix). The standard's §7 slot table is
-the general rule; this file is the fact on disk. The standard itself sits at
-`04-` here rather than `00-`, because the index occupies `00-`.
-
-## Outside `docs/`
-
-- Root [`README.md`](../README.md) — what the project is, crate table, usage, build and test commands, publishing order.
-- Crate-level rustdoc — each crate root carries a doc block and at least one doctest (`cargo doc --workspace --open`).
-
-## Keeping these current
-
-`03-matrix.md` is the file most likely to drift, because it makes claims about
-code. When code changes, verify its claims rather than trusting them: the test
-counts and status columns have been wrong before. Next most likely is
-`02-naming-conventions.md`, because its module inventory is a factual claim about
-which files exist — re-check it against `*/src/` rather than by eye.
-
-The standard (`04-rust-package-standard.md`) is duplicated into
-`ezviz-openapi-rs` as `00-rust-package-standard.md`. It has a single source of
-truth here; after editing it, copy it across so the two repositories do not
-diverge.
+| `src/` | facade: discovery orchestration, vendor identification, `TvClient` |
+| `discovery/`, `power/`, `tizen/`, `webos/`, `roku/`, `transport/`, `media/` | protocol and support crates, one per concern |
+| `cli/` | the reference consumer (`publish = false`) |
+| `tests/` | hardware-in-the-loop suite, compiled out by default |
+| `scripts/` | ordered release |

@@ -37,9 +37,9 @@ Each protocol crate follows the same module shape — see
 <protocol>/src/{lib,auth,protocol,payload,types,client,error}.rs
 ```
 
-- `auth.rs` holds the authentication trait. Anything blocked on the
-  reverse-engineering phase returns a typed `Unsupported` error; library code
-  must never panic and must never use `unimplemented!()`.
+- `auth.rs` holds the authentication trait. Anything that depends on
+  undocumented vendor behaviour returns a typed `Unsupported` error; library
+  code must never panic and must never use `unimplemented!()`.
 - `payload.rs` holds the serde/XML structs, named
   `<Protocol><Payload>`.
 - Pure parsing and formatting live in free functions so they test without a
