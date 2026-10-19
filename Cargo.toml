@@ -6,12 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Cross-platform TV control and communications: SSDP/mDNS discovery, Wake-on-LAN, Samsung Tizen, LG webOS and Roku ECP, behind one facade."
-keywords = ["tv", "tizen", "webos", "roku", "upnp", "wake-on-lan"]
+keywords = ["tv", "crates/tizen", "crates/webos", "crates/roku", "upnp", "wake-on-lan"]
 categories = ["api-bindings", "network-programming", "multimedia"]
 
 [workspace]
 resolver = "2"
-members = ["cli", "discovery", "media", "power", "roku", "tizen", "transport", "webos"]
+members = ["core/*", "crates/*", "utils/cli"]
 
 [workspace.package]
 version = "0.1.0"
@@ -22,17 +22,17 @@ repository = "https://github.com/Zakarialabib/tv-rs"
 
 [workspace.dependencies]
 # --- protocol crates (path + version: `path` is stripped at publish time) ---
-tv-rs-discovery = { path = "discovery", version = "0.1.0" }
-tv-rs-power = { path = "power", version = "0.1.0" }
-tv-rs-roku = { path = "roku", version = "0.1.0" }
-tv-rs-tizen = { path = "tizen", version = "0.1.0" }
-tv-rs-webos = { path = "webos", version = "0.1.0" }
+tv-rs-discovery = { path = "core/discovery", version = "0.1.0" }
+tv-rs-power = { path = "core/power", version = "0.1.0" }
+tv-rs-roku = { path = "crates/roku", version = "0.1.0" }
+tv-rs-tizen = { path = "crates/tizen", version = "0.1.0" }
+tv-rs-webos = { path = "crates/webos", version = "0.1.0" }
 # Shared transport vocabulary; must be published before tizen/webos.
 #
 # `default-features = false` keeps a TLS stack out of the crates that only need
 # the `Unsupported` error vocabulary; `tizen`/`webos` opt back into the
 # connector and frame reader with `features = ["ws"]`.
-tv-rs-transport = { path = "transport", version = "0.1.0", default-features = false }
+tv-rs-transport = { path = "core/transport", version = "0.1.0", default-features = false }
 
 # --- runtime / async ---
 tokio = { version = "1", features = ["net", "time", "io-util", "fs", "macros", "rt-multi-thread", "sync"] }

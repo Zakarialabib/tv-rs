@@ -32,7 +32,8 @@ failure behind a panic. These pages are the long version of that.
 | Path | Contents |
 |---|---|
 | `src/` | facade: discovery orchestration, vendor identification, `TvClient` |
-| `discovery/`, `power/`, `tizen/`, `webos/`, `roku/`, `transport/`, `media/` | protocol and support crates, one per concern |
-| `cli/` | the reference consumer (`publish = false`) |
+| `core/` | `transport` (TLS + frame reader), `discovery` (SSDP), `power` (WoL) — no vendor knowledge |
+| `crates/` | `tizen`, `webos`, `roku`, `media` — vendor protocols and the media server |
+| `utils/` | `cli` (reference consumer, `publish = false`) and `scripts/` (ordered release) |
 | `tests/` | hardware-in-the-loop suite, compiled out by default |
 | `scripts/` | ordered release |

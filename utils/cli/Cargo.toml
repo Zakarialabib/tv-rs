@@ -13,7 +13,7 @@ name = "tv-rs"
 path = "src/main.rs"
 
 [dependencies]
-tv-rs = { path = ".." }
+tv-rs = { path = "../.." }
 clap.workspace = true
 tokio.workspace = true
 thiserror.workspace = true

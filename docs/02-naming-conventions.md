@@ -52,9 +52,9 @@ Both forms appear throughout these docs, deliberately:
 - **Package name** (`tv-rs-tizen`) when discussing publishing, dependencies, or
   `use` statements. This is the name that appears on crates.io and as
   `tv_rs_tizen` in Rust source.
-- **Directory name** (`tizen`, or `tizen/`) when discussing the source tree.
+- **Directory name** (`crates/tizen`, or `tizen/`) when discussing the source tree.
 
-So `tizen/` and `tv-rs-tizen` are the same crate. `docs/03-matrix.md` uses
+So `crates/tizen/` and `tv-rs-tizen` are the same crate. `docs/03-matrix.md` uses
 both in the same table; that is not an inconsistency.
 
 ## Facade Re-export Naming

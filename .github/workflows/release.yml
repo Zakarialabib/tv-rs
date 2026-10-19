@@ -26,10 +26,10 @@ jobs:
       # Six crates must be published in dependency order; a single root-level
       # `cargo publish` cannot do that (path deps are stripped at publish time).
       - name: Dry run the ordered release
-        run: bash scripts/release.sh --dry-run --skip-tests
+        run: bash utils/scripts/release.sh --dry-run --skip-tests
 
       - name: Publish in dependency order
         if: github.event_name == 'push' || inputs.dry_run == false
-        run: bash scripts/release.sh --yes --token "$CRATES_IO_TOKEN"
+        run: bash utils/scripts/release.sh --yes --token "$CRATES_IO_TOKEN"
         env:
           CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}

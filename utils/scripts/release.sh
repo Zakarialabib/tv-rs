@@ -27,7 +27,7 @@
 
 set -euo pipefail
 
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 # Publish order: every path dependency must reach crates.io before its dependents.
 # `transport` is the leaf every other workspace crate builds on — its

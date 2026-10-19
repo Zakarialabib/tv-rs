@@ -162,8 +162,8 @@ tv-rs-discovery → tv-rs-power → tv-rs-transport → tv-rs-tizen
 ```
 
 ```bash
-bash scripts/release.sh --dry-run        # verify all eight, upload nothing
-bash scripts/release.sh --version 0.2.0  # bump and publish in order
+bash utils/scripts/release.sh --dry-run        # verify all eight, upload nothing
+bash utils/scripts/release.sh --version 0.2.0  # bump and publish in order
 ```
 
 ## Docs

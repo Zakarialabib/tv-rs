@@ -61,13 +61,13 @@ Group related files in a commit; do not mix formatting churn with behaviour.
 
 ## Releasing
 
-Eight crates publish in dependency order via `scripts/release.sh`. crates.io
+Eight crates publish in dependency order via `utils/scripts/release.sh`. crates.io
 yanks rather than deletes, so a partial publish burns the version — dry-run
 first:
 
 ```bash
-bash scripts/release.sh --dry-run
-bash scripts/release.sh --version 0.2.0
+bash utils/scripts/release.sh --dry-run
+bash utils/scripts/release.sh --version 0.2.0
 ```
 
 ## Docs
