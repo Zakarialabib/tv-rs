@@ -26,7 +26,7 @@ looks organised.
 
 | Split is justified when | Example |
 |---|---|
-| Two parts need **conflicting transitive dependencies** that cannot coexist | `tv-rs`: `native-tls` (tizen/webos) vs `rustls` (discovery/roku) |
+| Two parts need **conflicting transitive dependencies** that cannot coexist | `tv-rs`: originally `native-tls` (tizen/webos) vs `rustls` (discovery/roku); now one backend selected by feature |
 | Units need **independent versions** and independent release cadences | `tv-rs` protocol crates |
 | Parts have **genuinely separate dependency graphs**, so a consumer of one should not compile the others | a discovery-only consumer must not pull the WebSocket stack |
 

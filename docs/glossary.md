@@ -74,7 +74,7 @@ All five gaps are described in `01-playbook.md` §10.
 
 - **Direct dependency OK** — MIT / BSD / Apache-2.0 / MPL-2.0. Every dependency in
   this workspace qualifies: `tokio`, `serde`, `reqwest`, `thiserror`,
-  `futures-util`, `async-trait`, `roxmltree`, `base64`, `url`, `native-tls`,
+  `futures-util`, `async-trait`, `roxmltree`, `base64`, `url`, `rustls` (default TLS backend; `native-tls` opt-in),
   `tokio-tungstenite`, `clap`, `wiremock`.
 - **Sidecar / binary isolation** — only required for GPL/AGPL. Not needed here.
 - **License file** — `LICENSE` (MIT) exists at the workspace root. Its absence was

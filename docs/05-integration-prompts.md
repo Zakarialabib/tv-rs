@@ -92,7 +92,11 @@ Three rules every scenario inherits:
 > - **Persist the pairing token.** `client.with_token(saved)` on every later
 >   connect; `session.token()` after the first handshake. Without persistence
 >   the TV shows a PIN prompt on every reconnect, which is unacceptable in an
->   unattended player.
+>   unattended player. `tv_rs_tizen::SamsungTokenStore` already does the file
+>   part (quarantines corrupt files, never clobbers a stored token with an empty
+>   one); `save_token()`/`load_token()` are the one-liners for a host that keeps
+>   its own store. Find TVs with `discover_samsung(timeout)` and launch with
+>   `resolve_app_id("netflix")` instead of hard-coding ids.
 > - Launch DIAL apps without user interaction:
 >   `client.launch_app_via_dial(app_id, payload)`; discovery of the launcher is
 >   `client.dial_device_description()`.

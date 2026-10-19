@@ -19,7 +19,7 @@ All five protocol crates contain real implementations rather than stubs:
 Playbook gap.
 
 All dependencies are MIT-compatible (`tokio`, `serde`, `reqwest`, `thiserror`,
-`futures-util`, `async-trait`, `roxmltree`, `base64`, `url`, `native-tls`,
+`futures-util`, `async-trait`, `roxmltree`, `base64`, `url`, `rustls` (default TLS backend; `native-tls` opt-in),
 `tokio-tungstenite`), so direct linking is fine and no sidecar isolation is needed.
 
 ## Decision
