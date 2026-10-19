@@ -8,8 +8,13 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
-# No dependencies on purpose: a task runner that needs compiling a tree of crates
-# is slower than the script it replaced.
+[dependencies]
+tv-rs = { path = "../crates/tv-rs" }
+tv-rs-discovery.workspace = true
+tokio = { workspace = true, features = ["rt", "macros"] }
+
+# One dependency tree, two jobs: publishing needs nothing but `cargo`, while
+# `hw-test` probes the LAN through the facade, which needs tokio.
 
 [lints]
 workspace = true
