@@ -1,0 +1,26 @@
+[package]
+name = "tv-rs-transport"
+description = "Shared transport vocabulary for the tv-rs workspace: the TLS policy and connector, the budgeted WebSocket frame reader and the deferred-capability error type."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["websocket", "tls", "native-tls", "tokio-tungstenite", "smart-tv"]
+categories = ["api-bindings", "network-programming"]
+
+[features]
+default = ["ws"]
+
+# TLS connector construction and the budgeted WebSocket frame reader. Turn it
+# off (`default-features = false`) to depend on this crate for the
+# `Unsupported` vocabulary alone; that keeps a TLS stack out of crates such as
+# `tv-rs-power` and `tv-rs-discovery`, which never open a WebSocket.
+ws = ["dep:futures-util", "dep:native-tls", "dep:tokio", "dep:tokio-tungstenite"]
+
+[dependencies]
+futures-util = { workspace = true, optional = true }
+native-tls = { workspace = true, optional = true }
+thiserror.workspace = true
+tokio = { workspace = true, optional = true }
+tokio-tungstenite = { workspace = true, optional = true }
