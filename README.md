@@ -84,6 +84,17 @@ only need the file server.
 | `tv-rs-media` | `206` + HLS HTTP server | pulls `axum`; must never enter a protocol crate's graph |
 | `tv-rs-cli` | `discover`, `wake`, `power-off`, `key`, `launch` | the facade's reference consumer (`publish = false`) |
 
+### When to reach for which
+
+| You want to… | Use |
+|---|---|
+| find whatever is on the LAN and control it | `tv-rs` (facade) |
+| control one known vendor, nothing else | that vendor's crate (`tv-rs-tizen`, `tv-rs-webos`, `tv-rs-roku`) |
+| turn a TV on from cold | `tv-rs-power` — it works without any control protocol |
+| only enumerate devices | `tv-rs-discovery` — no TLS, no vendor knowledge |
+| serve video to a TV | `tv-rs-media` — nothing else pulls `axum` |
+| poke at a TV from a terminal | `tv-rs-cli` |
+
 ## How it fits together
 
 ```
