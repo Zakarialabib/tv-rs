@@ -43,7 +43,9 @@ pub mod unsupported;
 
 #[cfg(feature = "ws")]
 pub use frame::{read_until, ReadOutcome, WsStream};
-pub use tls::TlsPolicy;
+#[cfg(all(feature = "ws", feature = "rustls"))]
+pub use tls::{cert_sink, CertSink};
 #[cfg(feature = "ws")]
 pub use tls::{connector, TlsError};
+pub use tls::{CertFingerprint, TlsPolicy};
 pub use unsupported::Unsupported;

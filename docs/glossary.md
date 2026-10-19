@@ -75,7 +75,8 @@ player. Where: [`crates/media/src/hls.rs`](../crates/media/src/hls.rs).
 
 ## Code vocabulary
 
-**`TlsPolicy`** — `Strict` (validate the certificate) or `AcceptInvalid` (accept
+**`TlsPolicy`** — `Strict` (validate the certificate), `Pinned` (verify one fingerprint),
+`TrustOnFirstUse` (record on the first handshake, verify afterwards) or `AcceptInvalid` (accept
 a self-signed TV certificate). One definition, in `tv-rs-transport`, because its
 consequences are a workspace-wide security property. Where: [`crates/transport/src/tls.rs`](../crates/transport/src/tls.rs).
 

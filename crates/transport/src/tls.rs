@@ -9,9 +9,45 @@
 //!
 //! Both honour [`TlsPolicy`], and every `danger_accept_invalid_*` equivalent is
 //! reachable only from this module.
+//!
+//! # Self-signed TV certificates
+//!
+//! Retail TVs present a certificate no public CA signed, so [`TlsPolicy::Strict`]
+//! — the default — rejects them. Two policies make them usable without disabling
+//! validation:
+//!
+//! * [`TlsPolicy::TrustOnFirstUse`] accepts the certificate the TV presents on the
+//!   first connection and records its [`CertFingerprint`]. Persist that value and
+//!   use [`TlsPolicy::Pinned`] from then on.
+//! * [`TlsPolicy::Pinned`] accepts exactly one certificate and nothing else.
+//!
+//! Both are implemented by verifying the attacker-controlled part of the handshake
+//! the same way a CA-signed chain would be checked: the certificate *is* the
+//! identity, and a fingerprint is a 32-byte identity. Losing the pin means
+//! re-pairing, which is the correct failure mode for a device on your own LAN.
 
+//! # Recording a pin
+//!
+//! ```no_run
+//! use tv_rs_transport::{cert_sink, TlsPolicy};
+//!
+//! // First connection to a TV that has never been seen.
+//! let policy = TlsPolicy::TrustOnFirstUse(cert_sink());
+//! // … connect: the handshake accepts and records the certificate.
+//!
+//! if let Some(fingerprint) = policy.recorded_fingerprint() {
+//!     std::fs::write("living-room.pin", fingerprint.to_hex()).expect("persist");
+//! }
+//!
+//! // Every later connection verifies that exact certificate.
+//! let stored = std::fs::read_to_string("living-room.pin").expect("read");
+//! let policy = TlsPolicy::pinned(stored.trim()).expect("valid fingerprint");
+//! ```
+//!
+#[cfg(feature = "ws")]
+use std::fmt;
 #[cfg(all(feature = "ws", feature = "rustls"))]
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[cfg(all(feature = "ws", feature = "native-tls", not(feature = "rustls")))]
 use native_tls::TlsConnector;
@@ -36,34 +72,186 @@ compile_error!(
     "tv-rs-transport: the `ws` feature needs a TLS backend — enable `rustls` or `native-tls`"
 );
 
+/// SHA-256 fingerprint of a TV's certificate.
+///
+/// This is the identity a pinned channel verifies against. It is derived from the
+/// DER certificate the TV presents, so it changes when the TV's firmware
+/// regenerates its certificate — at which point the connection fails and the
+/// caller re-runs the trust-on-first-use step.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CertFingerprint([u8; 32]);
+
+impl CertFingerprint {
+    /// Computes the fingerprint of a DER-encoded certificate.
+    #[cfg(all(feature = "ws", feature = "rustls"))]
+    #[must_use]
+    pub fn of_der(cert: &[u8]) -> Self {
+        use sha2::{Digest, Sha256};
+        let digest = Sha256::digest(cert);
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(&digest);
+        Self(bytes)
+    }
+
+    /// The raw 32 bytes.
+    #[must_use]
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// Lowercase hex, the form to store in config or print in a log.
+    #[must_use]
+    pub fn to_hex(&self) -> String {
+        let mut out = String::with_capacity(64);
+        for byte in self.0 {
+            out.push(char::from(HEX[usize::from(byte >> 4)]));
+            out.push(char::from(HEX[usize::from(byte & 0x0f)]));
+        }
+        out
+    }
+
+    /// Parses the hex form produced by [`CertFingerprint::to_hex`].
+    ///
+    /// Colon separators are accepted because that is how people copy
+    /// fingerprints out of `openssl x509 -fingerprint`.
+    pub fn from_hex(text: &str) -> Result<Self, TlsError> {
+        let compact: String = text
+            .chars()
+            .filter(|c| !matches!(c, ':' | ' ' | '-' | '_'))
+            .collect();
+        if compact.len() != 64 {
+            return Err(TlsError::BadFingerprint(format!(
+                "expected 64 hex characters, got {}",
+                compact.len()
+            )));
+        }
+        let mut bytes = [0u8; 32];
+        for (index, chunk) in compact.as_bytes().chunks_exact(2).enumerate() {
+            let pair = std::str::from_utf8(chunk)
+                .map_err(|_| TlsError::BadFingerprint("not utf-8".to_string()))?;
+            bytes[index] = u8::from_str_radix(pair, 16)
+                .map_err(|_| TlsError::BadFingerprint(format!("'{pair}' is not hex")))?;
+        }
+        Ok(Self(bytes))
+    }
+}
+
+const HEX: &[u8; 16] = b"0123456789abcdef";
+
+impl fmt::Debug for CertFingerprint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "CertFingerprint({})", self.to_hex())
+    }
+}
+
+impl fmt::Display for CertFingerprint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.to_hex())
+    }
+}
+
+/// Where [`TlsPolicy::TrustOnFirstUse`] records the certificate it observed.
+///
+/// One sink is meant to live as long as one client: the first handshake fills it,
+/// every later handshake on the same sink must match what is already there.
+#[cfg(all(feature = "ws", feature = "rustls"))]
+pub type CertSink = Arc<Mutex<Option<CertFingerprint>>>;
+
+/// Creates an empty [`CertSink`].
+#[cfg(all(feature = "ws", feature = "rustls"))]
+#[must_use]
+pub fn cert_sink() -> CertSink {
+    Arc::new(Mutex::new(None))
+}
+
 /// TLS certificate-validation policy for a `wss://` remote channel.
 ///
-/// [`TlsPolicy::AcceptInvalid`] is the Phase-1 interim standing in for the
-/// certificate-pinning bypass described in `docs/01-playbook.md` §10 Gap A (\"SSL
-/// Certificate Pinning & WSS Handshakes\"). It disables certificate *and* hostname
-/// validation entirely and must NOT be used in production; it exists only until
-/// the reverse-engineering phase supplies the correct self-signed CA material.
+/// Defaults to [`TlsPolicy::Strict`]. The two pinning variants exist because TVs
+/// ship self-signed certificates; [`TlsPolicy::AcceptInvalid`] exists only for
+/// debugging a handshake and is never needed by application code.
 ///
 /// This type is defined once, here, rather than in each vendor crate: its
 /// consequences are a security property of the whole workspace, so two copies
 /// drifting apart was not an acceptable risk.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, Default)]
 pub enum TlsPolicy {
-    /// Validate the TV certificate normally. This fails against the self-signed
-    /// certificates shipped by retail TVs until the §10 Gap A pinning bypass lands.
+    /// Validate the TV certificate against the platform trust store.
     #[default]
     Strict,
-    /// Accept invalid certificates and hostnames. Phase-1 interim only; unsafe.
+    /// Accept exactly the certificate with this fingerprint.
+    Pinned(CertFingerprint),
+    /// Accept the certificate presented now and record it in the sink; reject any
+    /// later certificate that does not match what was recorded.
+    #[cfg(all(feature = "ws", feature = "rustls"))]
+    TrustOnFirstUse(CertSink),
+    /// Accept invalid certificates and hostnames. Debugging only; unsafe.
     AcceptInvalid,
 }
 
-/// Failure while building the TLS connector.
+impl fmt::Debug for TlsPolicy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Strict => f.write_str("Strict"),
+            Self::Pinned(fingerprint) => write!(f, "Pinned({fingerprint})"),
+            #[cfg(all(feature = "ws", feature = "rustls"))]
+            Self::TrustOnFirstUse(sink) => {
+                let recorded = sink.lock().ok().and_then(|guard| *guard);
+                match recorded {
+                    Some(fingerprint) => write!(f, "TrustOnFirstUse({fingerprint})"),
+                    None => f.write_str("TrustOnFirstUse(unrecorded)"),
+                }
+            }
+            Self::AcceptInvalid => f.write_str("AcceptInvalid"),
+        }
+    }
+}
+
+impl PartialEq for TlsPolicy {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Strict, Self::Strict) | (Self::AcceptInvalid, Self::AcceptInvalid) => true,
+            (Self::Pinned(left), Self::Pinned(right)) => left == right,
+            #[cfg(all(feature = "ws", feature = "rustls"))]
+            (Self::TrustOnFirstUse(left), Self::TrustOnFirstUse(right)) => Arc::ptr_eq(left, right),
+            _ => false,
+        }
+    }
+}
+
+impl Eq for TlsPolicy {}
+
+impl TlsPolicy {
+    /// Convenience for the documented two-step flow: parse a stored fingerprint.
+    pub fn pinned(hex: &str) -> Result<Self, TlsError> {
+        Ok(Self::Pinned(CertFingerprint::from_hex(hex)?))
+    }
+
+    /// The fingerprint a [`TlsPolicy::TrustOnFirstUse`] policy recorded, if any.
+    #[cfg(all(feature = "ws", feature = "rustls"))]
+    #[must_use]
+    pub fn recorded_fingerprint(&self) -> Option<CertFingerprint> {
+        match self {
+            Self::TrustOnFirstUse(sink) => sink.lock().ok().and_then(|guard| *guard),
+            Self::Pinned(fingerprint) => Some(*fingerprint),
+            _ => None,
+        }
+    }
+}
+
+/// Failure while building the TLS connector or parsing a fingerprint.
 #[cfg(feature = "ws")]
 #[derive(Debug, Error)]
 pub enum TlsError {
     /// The TLS backend refused to build a connector.
     #[error("failed to build the TLS connector: {0}")]
     Build(String),
+    /// A fingerprint string was not 32 hex-encoded bytes.
+    #[error("invalid certificate fingerprint: {0}")]
+    BadFingerprint(String),
+    /// Pinning needs the rustls backend; `native-tls` cannot verify a custom
+    /// fingerprint through `tokio-tungstenite`'s connector.
+    #[error("certificate pinning requires the `rustls` backend (this build uses `native-tls`)")]
+    PinningUnavailable,
 }
 
 /// Builds the connector to hand to `connect_async_tls_with_config`.
@@ -73,8 +261,7 @@ pub enum TlsError {
 /// `policy`.
 ///
 /// Every accept-any-certificate path in the workspace is reachable only through
-/// this function, so the escape hatch has exactly one definition and one place to
-/// delete when the §10 Gap A pinning bypass lands.
+/// this function, so the escape hatches have exactly one definition.
 #[cfg(all(feature = "ws", feature = "rustls"))]
 pub fn connector(policy: TlsPolicy, tls: bool) -> Result<Connector, TlsError> {
     if !tls {
@@ -94,9 +281,15 @@ pub fn connector(policy: TlsPolicy, tls: bool) -> Result<Connector, TlsError> {
     }
 
     let mut builder = TlsConnector::builder();
-    if policy == TlsPolicy::AcceptInvalid {
-        builder.danger_accept_invalid_certs(true);
-        builder.danger_accept_invalid_hostnames(true);
+    match policy {
+        TlsPolicy::AcceptInvalid => {
+            builder.danger_accept_invalid_certs(true);
+            builder.danger_accept_invalid_hostnames(true);
+        }
+        TlsPolicy::Pinned(_) | TlsPolicy::TrustOnFirstUse(_) => {
+            return Err(TlsError::PinningUnavailable);
+        }
+        TlsPolicy::Strict => {}
     }
     let connector = builder
         .build()
@@ -106,10 +299,9 @@ pub fn connector(policy: TlsPolicy, tls: bool) -> Result<Connector, TlsError> {
 
 /// Builds a rustls client config for `policy`.
 ///
-/// `Strict` verifies against the platform trust store. `AcceptInvalid` installs
-/// an accept-any-cert verifier, which is the rustls equivalent of
-/// `danger_accept_invalid_certs` and exists only for TVs that present a
-/// self-signed certificate.
+/// `Strict` verifies against the platform trust store. `Pinned` and
+/// `TrustOnFirstUse` install a fingerprint verifier; `AcceptInvalid` installs an
+/// accept-any-cert verifier.
 #[cfg(all(feature = "ws", feature = "rustls"))]
 pub fn rustls_config(policy: TlsPolicy) -> Result<ClientConfig, TlsError> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
@@ -121,9 +313,27 @@ pub fn rustls_config(policy: TlsPolicy) -> Result<ClientConfig, TlsError> {
         TlsPolicy::AcceptInvalid => builder
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(AcceptAnyTvCert(provider))),
+        TlsPolicy::Pinned(fingerprint) => {
+            builder
+                .dangerous()
+                .with_custom_certificate_verifier(Arc::new(FingerprintVerifier::new(
+                    Some(fingerprint),
+                    None,
+                    provider,
+                )))
+        }
+        TlsPolicy::TrustOnFirstUse(sink) => {
+            let expected = sink.lock().ok().and_then(|guard| *guard);
+            builder
+                .dangerous()
+                .with_custom_certificate_verifier(Arc::new(FingerprintVerifier::new(
+                    expected,
+                    Some(sink),
+                    provider,
+                )))
+        }
         TlsPolicy::Strict => {
-            // Platform trust store; TVs with self-signed certs will (correctly)
-            // fail here until the pinning bypass lands.
+            // Platform trust store; TVs with self-signed certs fail here by design.
             let mut roots = RootCertStore::empty();
             let native = rustls_native_certs::load_native_certs();
             for cert in native.certs {
@@ -192,6 +402,121 @@ impl ServerCertVerifier for AcceptAnyTvCert {
     }
 }
 
+/// Verifier that compares the presented certificate against a SHA-256 fingerprint.
+///
+/// `expected` is the pin. When it is `None` the policy is trust-on-first-use: the
+/// presented fingerprint is written into `sink` and the handshake proceeds. A
+/// later handshake through the same sink sees a non-empty `expected` and is
+/// verified like a normal pin.
+#[cfg(all(feature = "ws", feature = "rustls"))]
+#[derive(Debug)]
+struct FingerprintVerifier {
+    expected: Option<CertFingerprint>,
+    sink: Option<CertSink>,
+    provider: Arc<rustls::crypto::CryptoProvider>,
+}
+
+#[cfg(all(feature = "ws", feature = "rustls"))]
+impl FingerprintVerifier {
+    fn new(
+        expected: Option<CertFingerprint>,
+        sink: Option<CertSink>,
+        provider: Arc<rustls::crypto::CryptoProvider>,
+    ) -> Self {
+        Self {
+            expected,
+            sink,
+            provider,
+        }
+    }
+
+    /// Compares (or records) the fingerprint, returning the rustls verdict.
+    fn check(&self, end_entity: &CertificateDer<'_>) -> Result<ServerCertVerified, rustls::Error> {
+        let observed = CertFingerprint::of_der(end_entity.as_ref());
+        match self.expected {
+            Some(expected) if expected != observed => {
+                return Err(rustls::Error::General(format!(
+                    "certificate fingerprint mismatch: expected {expected}, TV presented {observed}"
+                )));
+            }
+            Some(_) => {}
+            None => {
+                if let Some(sink) = &self.sink {
+                    // A poisoned lock means another thread panicked mid-write; the
+                    // safe response is to fail the handshake rather than trust it.
+                    match sink.lock() {
+                        Ok(mut slot) => {
+                            if let Some(recorded) = *slot {
+                                if recorded != observed {
+                                    return Err(rustls::Error::General(format!(
+                                        "certificate fingerprint changed: recorded {recorded}, TV presented {observed}"
+                                    )));
+                                }
+                            } else {
+                                *slot = Some(observed);
+                            }
+                        }
+                        Err(_) => {
+                            return Err(rustls::Error::General(
+                                "certificate sink lock poisoned".to_string(),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(ServerCertVerified::assertion())
+    }
+}
+
+#[cfg(all(feature = "ws", feature = "rustls"))]
+impl ServerCertVerifier for FingerprintVerifier {
+    fn verify_server_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: UnixTime,
+    ) -> Result<ServerCertVerified, rustls::Error> {
+        self.check(end_entity)
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.provider.signature_verification_algorithms,
+        )
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.provider.signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.provider
+            .signature_verification_algorithms
+            .supported_schemes()
+    }
+}
+
 #[cfg(all(test, feature = "ws"))]
 mod tests {
     use tokio_tungstenite::Connector;
@@ -228,5 +553,103 @@ mod tests {
     fn accept_invalid_still_builds_a_config() {
         let config = super::rustls_config(TlsPolicy::AcceptInvalid).expect("permissive config");
         assert!(config.alpn_protocols.is_empty());
+    }
+
+    #[cfg(feature = "rustls")]
+    #[test]
+    fn fingerprint_hex_round_trip() {
+        let fingerprint = super::CertFingerprint::of_der(b"not really a certificate");
+        let hex = fingerprint.to_hex();
+        assert_eq!(hex.len(), 64);
+        assert_eq!(
+            super::CertFingerprint::from_hex(&hex).expect("parse hex"),
+            fingerprint
+        );
+
+        // Colons and upper case, as copied out of openssl.
+        let pretty = hex
+            .to_uppercase()
+            .as_bytes()
+            .chunks(2)
+            .map(|pair| std::str::from_utf8(pair).expect("utf-8").to_string())
+            .collect::<Vec<_>>()
+            .join(":");
+        assert_eq!(
+            super::CertFingerprint::from_hex(&pretty).expect("parse colon hex"),
+            fingerprint
+        );
+    }
+
+    #[cfg(feature = "rustls")]
+    #[test]
+    fn bad_fingerprints_are_rejected() {
+        assert!(super::CertFingerprint::from_hex("abc").is_err());
+        assert!(super::CertFingerprint::from_hex(&"zz".repeat(32)).is_err());
+    }
+
+    #[cfg(feature = "rustls")]
+    #[test]
+    fn pinned_policy_compares_fingerprints() {
+        let left = super::CertFingerprint::of_der(b"left");
+        let right = super::CertFingerprint::of_der(b"right");
+        assert_eq!(TlsPolicy::Pinned(left), TlsPolicy::Pinned(left));
+        assert_ne!(TlsPolicy::Pinned(left), TlsPolicy::Pinned(right));
+        assert_ne!(TlsPolicy::Pinned(left), TlsPolicy::Strict);
+    }
+
+    #[cfg(feature = "rustls")]
+    #[test]
+    fn trust_on_first_use_records_then_enforces() {
+        use rustls::client::danger::ServerCertVerifier;
+        use rustls::pki_types::CertificateDer;
+
+        let sink = super::cert_sink();
+        let provider = std::sync::Arc::new(rustls::crypto::ring::default_provider());
+        let policy = TlsPolicy::TrustOnFirstUse(std::sync::Arc::clone(&sink));
+        assert_eq!(policy.recorded_fingerprint(), None);
+
+        let first = super::FingerprintVerifier::new(
+            None,
+            Some(std::sync::Arc::clone(&sink)),
+            provider.clone(),
+        );
+        let cert = CertificateDer::from(vec![0x30, 0x82, 0x01]);
+        let name = rustls::pki_types::ServerName::try_from("192.168.1.10")
+            .expect("server name")
+            .to_owned();
+
+        assert!(first
+            .verify_server_cert(&cert, &[], &name, &[], rustls::pki_types::UnixTime::now())
+            .is_ok());
+        let recorded = policy.recorded_fingerprint().expect("fingerprint recorded");
+        assert_eq!(recorded, super::CertFingerprint::of_der(cert.as_ref()));
+
+        // Second connection: the same certificate still passes.
+        let again = super::FingerprintVerifier::new(
+            Some(recorded),
+            Some(std::sync::Arc::clone(&sink)),
+            provider.clone(),
+        );
+        assert!(again
+            .verify_server_cert(&cert, &[], &name, &[], rustls::pki_types::UnixTime::now())
+            .is_ok());
+
+        // A different certificate is refused, and the pin is not overwritten.
+        let impostor = CertificateDer::from(vec![0x30, 0x82, 0x02]);
+        let mismatch = super::FingerprintVerifier::new(
+            Some(recorded),
+            Some(std::sync::Arc::clone(&sink)),
+            provider,
+        );
+        assert!(mismatch
+            .verify_server_cert(
+                &impostor,
+                &[],
+                &name,
+                &[],
+                rustls::pki_types::UnixTime::now()
+            )
+            .is_err());
+        assert_eq!(policy.recorded_fingerprint(), Some(recorded));
     }
 }

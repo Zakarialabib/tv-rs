@@ -53,9 +53,10 @@ It does not decode video, render anything, or transcode. It returns URLs and
 issues commands; what you do with the picture is your call. It also does not
 implement Android TV ADB or Google Cast/AirPlay.
 
-A few vendor behaviours are deliberately unimplemented because they depend on
-undocumented authentication (self-signed TLS pinning, enterprise token
-derivation, encrypted framing). Those calls return `Unsupported` errors instead
+Self-signed TV certificates are handled without disabling validation: connect
+once with `TlsPolicy::TrustOnFirstUse`, store the `CertFingerprint` it reports,
+and use `TlsPolicy::Pinned` from then on. Enterprise token derivation and
+encrypted framing are still unimplemented and return `Unsupported` errors instead
 of pretending to work.
 
 ## Install

@@ -178,7 +178,7 @@ impl WebosClient {
     /// Returns the configured TLS policy.
     #[must_use]
     pub fn tls_policy(&self) -> TlsPolicy {
-        self.tls
+        self.tls.clone()
     }
 
     /// Returns the currently configured `client-key`, if any.
@@ -290,7 +290,7 @@ impl WebosClient {
 
     /// Builds the transport connector honouring the configured [`TlsPolicy`].
     fn connector(&self) -> Result<tokio_tungstenite::Connector> {
-        tv_rs_transport::connector(self.tls, self.port == WEBOS_WSS_PORT).map_err(|error| {
+        tv_rs_transport::connector(self.tls.clone(), self.port == WEBOS_WSS_PORT).map_err(|error| {
             WebosError::Protocol(format!("failed to build TLS connector: {error}"))
         })
     }
