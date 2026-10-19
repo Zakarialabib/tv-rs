@@ -1,0 +1,19 @@
+[package]
+name = "tv-rs-cli"
+description = "Command-line front end for the tv-rs facade: discover, wake and control televisions."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "tv-rs"
+path = "src/main.rs"
+
+[dependencies]
+tv-rs = { path = ".." }
+clap.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
