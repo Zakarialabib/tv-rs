@@ -36,6 +36,7 @@ pub mod client;
 pub mod discovery;
 pub mod error;
 pub mod payload;
+pub mod pool;
 pub mod protocol;
 pub mod token_store;
 pub mod types;
@@ -57,6 +58,7 @@ pub use payload::{
     TizenChannelConnectResponse, TizenChannelConnectResponseData, TizenDialLaunchResponse,
     TizenRemoteCommand, TizenRemoteCommandParams,
 };
+pub use pool::{LiveChannelFactory, TizenChannel, TizenChannelFactory, TizenConnectionPool};
 pub use protocol::{DialLauncher, WebSocketHandshake};
 pub use token_store::{load_token, save_token, PairedTv, SamsungTokenStore};
 pub use tv_rs_transport::TlsPolicy;

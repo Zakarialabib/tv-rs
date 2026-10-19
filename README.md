@@ -20,7 +20,7 @@ unimplemented and fail closed, never panic.
 | `tv-rs` | — | Facade: discovery orchestration, vendor identification, aggregate client |
 | `tv-rs-discovery` | §1 | SSDP `M-SEARCH` (UDP 1900) and UPnP device descriptor parsing |
 | `tv-rs-power` | §2 | Wake-on-LAN magic packets (UDP 9) and power-state probing |
-| `tv-rs-tizen` | §3 | Samsung Tizen remote channel (WS 8001/8002), DIAL launcher (8080), `SamsungTokenStore` pairing persistence, Samsung-specific SSDP discovery and app presets |
+| `tv-rs-tizen` | §3 | Samsung Tizen remote channel (WS 8001/8002), DIAL launcher (8080), `SamsungTokenStore` pairing persistence, Samsung-specific SSDP discovery, app presets and a connection pool that survives idle socket drops |
 | `tv-rs-webos` | §4 | LG webOS SSAP over WebSocket (3000/3001) |
 | `tv-rs-roku` | §5 | Roku ECP REST (8060) |
 | `tv-rs-transport` | — | Shared transport vocabulary: TLS policy/connector, budgeted WebSocket frame reader, deferred-capability error |

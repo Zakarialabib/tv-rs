@@ -15,15 +15,15 @@ and passing tests, and draw their shared vocabulary from `transport/`.
 | `tv-rs-media` | 17 unit + 6 socket-level | 2 |
 | `tv-rs-power` | 9 | 1 |
 | `tv-rs-roku` | 9 | 1 |
-| `tv-rs-tizen` | 30 | 4 |
+| `tv-rs-tizen` | 35 | 5 |
 | `tv-rs-transport` | 4 | 2 |
 | `tv-rs-webos` | 14 | 1 |
 | `hardware_in_the_loop` (`--features hil`) | 7 | — |
-| **Total (default features)** | **116** | **14** |
+| **Total (default features)** | **121** | **15** |
 
 `tests/hardware_in_the_loop.rs` compiles to 0 tests unless `--features hil`.
 
-`cargo check --workspace --all-targets` and `cargo test --workspace` both pass (130 tests
+`cargo check --workspace --all-targets` and `cargo test --workspace` both pass (136 tests
 with doctests; the `hil` suite compiles to zero tests unless `--features hil` is set).
 `cargo clippy --workspace --all-targets -- -D warnings` passes. (An earlier
 revision of this document recorded that clippy could not launch on the
@@ -40,7 +40,7 @@ reinstalled, so the real lint gate now runs locally as well as in CI.)
 | Transport | — | `transport/` | The workspace's shared vocabulary: `TlsPolicy` and the connector (the single home of the `danger_accept_invalid_*` calls), `WsStream` / `ReadOutcome` / budgeted `read_until` frame reader, and the `Unsupported { phase, reason }` struct that all five protocol error enums wrap as `#[error(transparent)]`. TLS + WebSocket code sits behind the default-off `ws` feature | Nothing pending — the four real duplications it was created to remove are gone | Keep it vocabulary-thin: `discovery`/`power`/`roku` take `default-features = false`; a third `read_until` consumer belongs in a protocol crate, not here |
 | Discovery | §1 | `discovery/` | `SsdpScanner` (UDP 1900 multicast, `join_multicast_v4`, timeout, interface/bind overrides), `build_msearch`, `parse_msearch_response` (case-insensitive headers, `USN`/`LOCATION` dedup), `parse_device_descriptor` (roxmltree), `discover_tvs` (discover + descriptor fetch), `SsdpDiscovery` trait, `DiscoveryMethod` enum | mDNS/Bonjour on 5353, ARP MAC↔IP resolution | P2 — mDNS listener (`_googlecast._tcp`, `_airplay._tcp`) |
 | Power | §2 | `power/` | `MacAddress` parsing, `build_magic_packet` (102-byte, UDP 9 broadcast), `WolSender`, `poll_power_state`, `PowerControl` trait | WoWLAN wake reasons; vendor-specific standby detection tuning | P2 — wire `poll_power_state` into facade `TvClient` as a liveness probe |
-| Samsung Tizen | §3 | `tizen/` | Unencrypted 8001 / TLS 8002 WebSocket remote channel, DIAL launcher on 8080, token capture/extract, `TizenRemoteKey` (22 keys), `TizenSession::{send_key, send_raw, recv_json}`, `TlsPolicy`, `WebSocketHandshake` / `DialLauncher` traits, `TizenAuthProvider`; **`SamsungTokenStore`** (file-backed pairings, corrupt-file quarantine, no-clobber upsert), **`discover_samsung()`** (ST `urn:samsung-com:device:RemoteControlReceiver:1` + description identity), **`resolve_app_id()`** with netflix/youtube/prime presets | §10 Gap A TLS certificate-pinning bypass, §10 Gap B enterprise token math, §10 Gap D AES-GCM framing | Blocked on REA; the gaps surface as `TizenError::Unsupported`, never a panic |
+| Samsung Tizen | §3 | `tizen/` | Unencrypted 8001 / TLS 8002 WebSocket remote channel, DIAL launcher on 8080, token capture/extract, `TizenRemoteKey` (22 keys), `TizenSession::{send_key, send_raw, recv_json}`, `TlsPolicy`, `WebSocketHandshake` / `DialLauncher` traits, `TizenAuthProvider`; **`SamsungTokenStore`** (file-backed pairings, corrupt-file quarantine, no-clobber upsert), **`discover_samsung()`** (ST `urn:samsung-com:device:RemoteControlReceiver:1` + description identity), **`resolve_app_id()`** with netflix/youtube/prime presets, **`TizenConnectionPool`** (one channel per TV, one reopen+retry on a dead idle socket, injectable factory) | §10 Gap A TLS certificate-pinning bypass, §10 Gap B enterprise token math, §10 Gap D AES-GCM framing | Blocked on REA; the gaps surface as `TizenError::Unsupported`, never a panic |
 | LG webOS | §4 | `webos/` | SSAP JSON-RPC over 3000/3001, pairing handshake + `client-key` persistence (`save_client_key`/`load_client_key`), `WebosSession::{request, set_volume, get_volume, set_mute, launch_app, power_off, foreground_app}`, `SsapUri` enum, `SsapController` trait, `WebosAuthProvider` | §10 Gap A (port 3001 self-signed pinning), richer `SsapUri` coverage | P2 — add input/source switching URIs |
 | Roku ECP | §5 | `roku/` | Unauthenticated ECP REST on 8060: `query_device_info`, `query_apps`, `query_app_id`, `send_keypress` (`RokuKey`, 22 keys), `launch_app`, `power_off` / `power_on`; XML parsers as pure functions; `EcpRestClient` trait, `RokuAuthProvider` | `roku:ecp` SSDP-based discovery path; `query/apps` icon URLs | P2 — parse the ECP device-info `<power-mode>` for true power state |
 | Android TV ADB | §6 | Not a crate | Explicitly excluded | ADB TCP/IP (5555), `am start`, `input keyevent` | P3 — child crate `tv-rs-adb` |
