@@ -75,13 +75,45 @@ jobs:
       - run: cargo test -p tv-rs-agent --features "http mqtt"
       - run: cargo test -p tv-rs-cec --features client
 
+  msrv:
+    name: msrv (${{ matrix.rust }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: ["1.89.0"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2
+      # `rust-version` is a promise; this job is the only thing that checks it.
+      - run: cargo check --workspace --all-targets
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --all-features
+
   docs:
     name: rustdoc
     runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --workspace --no-deps
-        env:
-          RUSTDOCFLAGS: -D warnings
+      # Optional features are documented explicitly: `--all-features` on the
+      # workspace would enable both TLS backends at once, which is a compile error
+      # by design (`rustls` and `native-tls` are mutually exclusive).
+      - run: cargo doc --no-deps -p tv-rs-core --features "mock-backend conformance quirks"
+      - run: cargo doc --no-deps -p tv-rs-agent --features "http mqtt"
+      - run: cargo doc --no-deps -p tv-rs-cec --features client

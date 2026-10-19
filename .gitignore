@@ -2,3 +2,5 @@
 .env
 *.pem
 .git-msg.txt
+*.stackdump
+*.dmp

@@ -342,3 +342,23 @@ Each of these was observed in a real repository, not invented.
    `docs/00-index.md`) complete.
 6. **Write or repair the state matrix last**, against verified output.
 7. **Fix the release path** (§10) before the first release, not during it.
+
+## MSRV
+
+`rust-version = "1.89"` is the **lowest version that actually resolves**, not a
+target chosen for reach: `uuid` (for `CommandId`) and the ICU crates behind `idna`
+declare 1.88–1.89 as their own floor. The CI `msrv` job checks the declared value,
+because a `rust-version` nobody builds against is a claim, not a fact. If a
+dependency raises its floor, either pin it down or raise this number — in the same
+PR, never silently.
+
+## Licensing
+
+**One `LICENSE` at the repository root. No per-crate copies.**
+
+Each manifest declares the licence with the SPDX identifier (`license.workspace =
+true` → `MIT`). crates.io records the SPDX expression; it does not require the text
+inside every tarball, and eleven copies of the same file are eleven chances to drift.
+
+If a crate ever needs its own terms, that crate gets its own `license-file` — and the
+reason goes in the ADR, not in a copy-paste.

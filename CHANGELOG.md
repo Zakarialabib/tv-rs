@@ -73,6 +73,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Phase 6 hardening.** `rust-version` corrected from `1.75` to `1.89` — the old
+  value was never buildable (`uuid` and the ICU crates behind `idna` already require
+  1.88–1.89), and CI now checks the claim in an `msrv` job. Added a `cargo-deny` job
+  with a deliberate advisory/licence/bans policy, an explicit-features rustdoc job
+  (`--all-features` is impossible by design: both TLS backends at once is a compile
+  error), and per-crate README/`deny.toml`. Removed a stray `du.exe.stackdump` and
+  the per-crate `LICENSE` copies, which were eleven chances to drift from the one at
+  the root.
+
 - **Workspace reorganization.** All packages are flattened under `crates/` (one
   home per package), the facade moved from the repository root to
   `crates/tv-rs`, the CLI was promoted from `utils/cli` to `crates/cli`, and the
