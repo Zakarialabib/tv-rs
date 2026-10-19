@@ -1,6 +1,6 @@
 # Documentation
 
-Nine crates, one facade, one idea: speak each TV's own protocol and never hide a
+Eight crates, one facade, one idea: speak each TV's own protocol and never hide a
 failure behind a panic. These pages are the long version of that.
 
 ## Read in this order
@@ -9,17 +9,16 @@ failure behind a panic. These pages are the long version of that.
 |---|---|---|
 | 0 | [`glossary.md`](glossary.md) | **The map.** Every term, and the page or file that explains it. Start here if you only have five minutes. |
 | 1 | [`01-playbook.md`](01-playbook.md) | The protocol facts: ports, handshakes, discovery, media, and what each vendor exposes. |
-| 2 | [`02-naming-conventions.md`](02-naming-conventions.md) | Where a file, trait, struct or constant belongs. |
+| 2 | [`architecture.md`](architecture.md) | The three layers, the dependency rule, the module inventory per crate, the auth rule, and the playbook → crate map. |
 | 3 | [`03-matrix.md`](03-matrix.md) | State: what is implemented, what is deferred, verified test counts, remaining gaps. |
-| 4 | [`03-external-refs.md`](03-external-refs.md) | Protocol references, prior art, and the crates this workspace learned from. |
+| 4 | [`02-external-refs.md`](02-external-refs.md) | Protocol references, prior art, and the crates this workspace learned from. |
 | 5 | [`04-rust-package-standard.md`](04-rust-package-standard.md) | The engineering standard the whole workspace follows — reusable outside this repo. |
-| 6 | [`ADR-001-crate-publication.md`](ADR-001-crate-publication.md) | Why eight crates, how a release is ordered, and the CI that guards it. |
-| — | [`skeleton-map.md`](skeleton-map.md) | Which playbook section became which crate. |
+| — | [`adr/`](adr/) | [001 — crate publication](adr/001-crate-publication.md), [002 — workspace layout](adr/002-workspace-layout.md). |
 
 ## Conventions used here
 
 - **Claims about code are checked against code.** If a page says a function
-  exists, it exists in `src/`. When the two disagree, the code is right and the
+  exists, it exists in `crates/`. When the two disagree, the code is right and the
   page is a bug.
 - **Deferred is a feature.** A capability that is not implemented returns a typed
   `Unsupported` error with a reason. No page promises something the code refuses
@@ -31,9 +30,10 @@ failure behind a panic. These pages are the long version of that.
 
 | Path | Contents |
 |---|---|
-| `src/` | facade: discovery orchestration, vendor identification, `TvClient` |
-| `core/` | `transport` (TLS + frame reader), `discovery` (SSDP), `power` (WoL) — no vendor knowledge |
-| `crates/` | `tizen`, `webos`, `roku`, `media` — vendor protocols and the media server |
-| `utils/` | `cli` (reference consumer, `publish = false`) and `scripts/` (ordered release) |
-| `tests/` | hardware-in-the-loop suite, compiled out by default |
-| `scripts/` | ordered release |
+| `crates/tv-rs` | facade: discovery orchestration, vendor identification, `TvClient` |
+| `crates/{discovery,power,tizen,webos,roku}` | one wire protocol each |
+| `crates/{transport,media}` | support: TLS/frame reader; `206`/HLS server |
+| `crates/cli` | the reference consumer (`publish = false`) |
+| `xtask` | workspace automation: `cargo xtask publish` |
+| `docs/` | these pages |
+| `docs/internal/` | notes kept out of the public set (not linked from here) |

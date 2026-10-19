@@ -95,6 +95,24 @@ only need the file server.
 | serve video to a TV | `tv-rs-media` — nothing else pulls `axum` |
 | poke at a TV from a terminal | `tv-rs-cli` |
 
+## Layout
+
+```
+crates/tv-rs         facade            (package `tv-rs`)
+crates/discovery     SSDP              (package `tv-rs-discovery`)
+crates/power         Wake-on-LAN       (package `tv-rs-power`)
+crates/tizen         Samsung           (package `tv-rs-tizen`)
+crates/webos         LG                (package `tv-rs-webos`)
+crates/roku          Roku              (package `tv-rs-roku`)
+crates/transport     TLS + WS plumbing (package `tv-rs-transport`)
+crates/media         206 + HLS server  (package `tv-rs-media`)
+crates/cli           terminal front end (package `tv-rs-cli`, not published)
+xtask                `cargo xtask publish`
+```
+
+The root `Cargo.toml` is a virtual workspace, so a bare `cargo build` does nothing
+useful — name the package (`cargo build -p tv-rs`) or use `--workspace`.
+
 ## How it fits together
 
 ```
@@ -135,7 +153,7 @@ matches on `TvError` and turns `UnsupportedOperation` into its own exit code.
 
 ```bash
 cargo test --workspace                 # unit + integration, no network needed
-cargo test --features hil --test hardware_in_the_loop   # against real TVs
+cargo test -p tv-rs --features hil --test hardware_in_the_loop   # against real TVs
 ```
 
 The hardware suite compiles to zero tests unless `--features hil` is passed, and
@@ -157,13 +175,16 @@ Eight crates go out in dependency order because `cargo publish` is not atomic �
 a partial release burns the version:
 
 ```
-tv-rs-discovery → tv-rs-power → tv-rs-transport → tv-rs-tizen
-  → tv-rs-webos → tv-rs-roku → tv-rs → tv-rs-media
+tv-rs-transport → tv-rs-discovery → tv-rs-power → tv-rs-roku
+  → tv-rs-tizen → tv-rs-webos → tv-rs → tv-rs-media
 ```
 
+`transport` leads because every protocol crate depends on its shared error
+vocabulary; `media` is last because nothing here depends on it.
+
 ```bash
-bash utils/scripts/release.sh --dry-run        # verify all eight, upload nothing
-bash utils/scripts/release.sh --version 0.2.0  # bump and publish in order
+cargo xtask publish --dry-run          # verify all eight, upload nothing
+cargo xtask publish --version 0.2.0    # bump and publish in order
 ```
 
 ## Docs
@@ -175,10 +196,10 @@ the page that explains it. The short version:
 |---|---|
 | [`docs/01-playbook.md`](docs/01-playbook.md) | the protocol facts: ports, handshakes, what each vendor exposes |
 | [`docs/03-matrix.md`](docs/03-matrix.md) | what is done, what is deferred, and the verified test counts |
-| [`docs/02-naming-conventions.md`](docs/02-naming-conventions.md) | where a new file, trait or constant belongs |
+| [`docs/architecture.md`](docs/architecture.md) | the three layers, the dependency rule, and where a new file belongs |
 | [`docs/04-rust-package-standard.md`](docs/04-rust-package-standard.md) | the engineering standard this workspace follows |
-| [`docs/ADR-001-crate-publication.md`](docs/ADR-001-crate-publication.md) | why eight crates and how a release works |
-| [`docs/03-external-refs.md`](docs/03-external-refs.md) | protocol references and prior art |
+| [`docs/adr/001-crate-publication.md`](docs/adr/001-crate-publication.md) | why eight crates and how a release works |
+| [`docs/02-external-refs.md`](docs/02-external-refs.md) | protocol references and prior art |
 
 ## Contributing
 

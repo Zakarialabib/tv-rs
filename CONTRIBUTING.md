@@ -31,7 +31,7 @@ TV_RS_HIL_ROKU_HOST=192.168.1.40 cargo test --features hil --test hardware_in_th
 ## Layout rules
 
 Each protocol crate follows the same module shape — see
-[`docs/02-naming-conventions.md`](docs/02-naming-conventions.md):
+[`docs/architecture.md`](docs/architecture.md):
 
 ```
 <protocol>/src/{lib,auth,protocol,payload,types,client,error}.rs
@@ -61,13 +61,13 @@ Group related files in a commit; do not mix formatting churn with behaviour.
 
 ## Releasing
 
-Eight crates publish in dependency order via `utils/scripts/release.sh`. crates.io
+Eight crates publish in dependency order via `cargo xtask publish`. crates.io
 yanks rather than deletes, so a partial publish burns the version — dry-run
 first:
 
 ```bash
-bash utils/scripts/release.sh --dry-run
-bash utils/scripts/release.sh --version 0.2.0
+cargo xtask publish --dry-run
+cargo xtask publish --version 0.2.0
 ```
 
 ## Docs
