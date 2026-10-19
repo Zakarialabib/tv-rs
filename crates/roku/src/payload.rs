@@ -44,6 +44,21 @@ pub struct RokuDeviceInfo {
     pub supports_find_remote: Option<bool>,
 }
 
+impl RokuDeviceInfo {
+    /// The reported power state as a typed value.
+    ///
+    /// Returns [`crate::RokuPowerMode::Unknown`] when the firmware omitted `<power-mode>`
+    /// or sent a value this crate does not model — an absent element is not an
+    /// error, it only means the probe learned nothing.
+    #[must_use]
+    pub fn power_state(&self) -> crate::types::RokuPowerMode {
+        self.power_mode
+            .as_deref()
+            .map(crate::types::RokuPowerMode::from_text)
+            .unwrap_or_default()
+    }
+}
+
 /// A single entry from a `GET /query/apps` response.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RokuApp {

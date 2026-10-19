@@ -13,6 +13,7 @@ failure behind a panic. These pages are the long version of that.
 | 3 | [`03-matrix.md`](03-matrix.md) | State: what is implemented, what is deferred, verified test counts, remaining gaps. |
 | 4 | [`02-external-refs.md`](02-external-refs.md) | Protocol references, prior art, and the crates this workspace learned from. |
 | 5 | [`04-rust-package-standard.md`](04-rust-package-standard.md) | The engineering standard the whole workspace follows — reusable outside this repo. |
+| 6 | [`05-roadmap.md`](05-roadmap.md) | Proposals: what to add next, each with the evidence behind it and what it costs. |
 | — | [`adr/`](adr/) | [001 — crate publication](adr/001-crate-publication.md), [002 — workspace layout](adr/002-workspace-layout.md). |
 
 ## Conventions used here

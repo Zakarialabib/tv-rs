@@ -40,6 +40,6 @@ pub use error::{Result, RokuError};
 pub use payload::{RokuApp, RokuDeviceInfo};
 pub use protocol::EcpRestClient;
 pub use types::{
-    RokuKey, ECP_APPS_PATH, ECP_DEVICE_INFO_PATH, ECP_KEYPRESS_PATH_PREFIX, ECP_LAUNCH_PATH_PREFIX,
-    ROKU_ECP_PORT,
+    RokuKey, RokuPowerMode, ECP_APPS_PATH, ECP_DEVICE_INFO_PATH, ECP_KEYPRESS_PATH_PREFIX,
+    ECP_LAUNCH_PATH_PREFIX, ROKU_ECP_PORT,
 };

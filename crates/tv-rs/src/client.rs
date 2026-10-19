@@ -8,7 +8,8 @@
 use crate::error::{Result, TvError};
 use crate::types::{DiscoveredTv, TvVendor};
 use tv_rs_discovery::{SsdpDeviceDescriptor, SsdpMsearchResponse, SsdpScanner};
-use tv_rs_roku::RokuClient;
+use tv_rs_power::PowerState;
+use tv_rs_roku::{RokuClient, RokuPowerMode};
 use tv_rs_tizen::{TizenClient, TizenRemoteKey, TizenSession};
 use tv_rs_webos::WebosClient;
 
@@ -212,6 +213,33 @@ impl TvClient {
         }
     }
 
+    /// Ask the TV for its power state.
+    ///
+    /// Roku answers authoritatively from `/query/device-info`. Tizen and webOS
+    /// have no query that still answers once the panel is off, so the shared TCP
+    /// probe runs against the control port instead: a completed connect means `On`,
+    /// a refused one means `Standby` (network stack up, apps down), and a timeout
+    /// means `Off`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the originating protocol crate's error, wrapped in [`TvError`]. A
+    /// Roku that is genuinely off fails the HTTP request rather than answering
+    /// "off", so a transport failure there is reported, not converted.
+    pub async fn power_state(&self) -> Result<PowerState> {
+        match self {
+            Self::Roku(client) => Ok(map_roku_power(client.power_state().await?)),
+            Self::Tizen(client) => {
+                let probe = format!("{}:{}", client.host(), client.port());
+                Ok(tv_rs_power::poll_power_state(&probe).await?)
+            }
+            Self::Webos(client) => {
+                let probe = format!("{}:{}", client.host(), client.port());
+                Ok(tv_rs_power::poll_power_state(&probe).await?)
+            }
+        }
+    }
+
     /// Launch an installed application by id.
     ///
     /// The id is vendor-specific: a DIAL app id on Tizen, an SSAP app id on
@@ -334,5 +362,50 @@ mod tests {
             assert_eq!(client.vendor(), vendor);
             assert_eq!(client.address(), expected);
         }
+    }
+}
+
+/// Maps a Roku power mode onto the shared power vocabulary.
+///
+/// `Headless` and `Ready` are both "the box is awake": a Roku in either state will
+/// accept a keypress, so reporting them as `Off` would make a working device look
+/// dead. `DisplayOff` is the panel off with the device running, which is what
+/// `Standby` means for the other vendors.
+fn map_roku_power(mode: RokuPowerMode) -> PowerState {
+    match mode {
+        RokuPowerMode::PowerOn => PowerState::On,
+        RokuPowerMode::Headless | RokuPowerMode::Ready | RokuPowerMode::DisplayOff => {
+            PowerState::Standby
+        }
+        RokuPowerMode::Unknown => PowerState::Unknown,
+    }
+}
+
+#[cfg(test)]
+mod power_state_tests {
+    use super::map_roku_power;
+    use tv_rs_power::PowerState;
+    use tv_rs_roku::RokuPowerMode;
+
+    #[test]
+    fn power_on_is_on() {
+        assert_eq!(map_roku_power(RokuPowerMode::PowerOn), PowerState::On);
+    }
+
+    #[test]
+    fn awake_states_are_standby_not_off() {
+        // A Roku in Headless/Ready still accepts keypresses; calling it Off would
+        // make the fleet think the display is unreachable.
+        assert_eq!(map_roku_power(RokuPowerMode::Headless), PowerState::Standby);
+        assert_eq!(map_roku_power(RokuPowerMode::Ready), PowerState::Standby);
+        assert_eq!(
+            map_roku_power(RokuPowerMode::DisplayOff),
+            PowerState::Standby
+        );
+    }
+
+    #[test]
+    fn unknown_stays_unknown() {
+        assert_eq!(map_roku_power(RokuPowerMode::Unknown), PowerState::Unknown);
     }
 }
