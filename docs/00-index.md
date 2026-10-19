@@ -11,7 +11,7 @@ The unnumbered files are **durable references** that change rarely.
 | [`02-naming-conventions.md`](02-naming-conventions.md) | tv-rs specifics: the module inventory per crate, the deliberate deviations from the standard's vocabulary, and the facade re-export naming. Universal naming rules are in the standard §6. |
 | [`03-external-refs.md`](03-external-refs.md) | External SDK and protocol docs, prior-art crates, the REA reverse-engineering tooling, and the research findings with what we did about each. |
 | [`03-matrix.md`](03-matrix.md) | **State matrix** — per-component Done / Left / Next, verified test counts, publish readiness, the Phase 2 & 3 roadmap, and the remaining gaps. The authoritative status document. |
-| [`05-integration-prompts.md`](05-integration-prompts.md) | **Consumer guide** — nine self-contained prompts for integrating the crates into a host app (discovery, wake, per-vendor control, media server, control API, automation, hardware tests), each naming the exact APIs and the definition of done. |
+| [`05-signage-adoption.md`](05-signage-adoption.md) | **Consumer guide (SignageMaster).** What the platform already runs, the crate-vs-platform gap table, a six-phase migration plan, and six prompts: audit → plan → LG → Roku → power → Samsung swap → parity gate. |
 | [`04-rust-package-standard.md`](04-rust-package-standard.md) | **The reusable engineering standard.** Repository shape, facade pattern, crate-root and error contracts, testability, naming, docs structure, dependency policy, CI gates, publishing. Project-agnostic and duplicated into `ezviz-openapi-rs`. |
 
 ## Durable references

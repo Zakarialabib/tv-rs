@@ -62,28 +62,28 @@ reached through the re-exported protocol crates (`tv_rs::webos`, `tv_rs::roku`,
 
 ## Integrate it
 
-Nine copy-paste prompts for wiring this crate into a host app — discovery
-inventory, wake-before-play, Tizen/webOS/Roku control, a 206+HLS media server, a
-single control endpoint, scheduled automation, and hardware tests that stay out
-of CI — live in
-[`docs/05-integration-prompts.md`](docs/05-integration-prompts.md). Each prompt
-names the exact APIs and what "done" means.
+[`docs/05-signage-adoption.md`](docs/05-signage-adoption.md) is the consumer
+guide: what the SignageMaster platform already runs, what these crates actually
+add, a six-phase migration plan, and six prompts that audit the existing display
+surface, decide the extension shape, then implement it (LG, Roku, Wake-on-LAN,
+then moving Samsung onto the crate).
 
-The shortest useful one:
+The shortest useful one — audit before you touch code:
 
 ```text
-Add LAN television discovery using tv-rs. Use tv_rs::discover() for the
-zero-config path, or discover_with() with an SsdpScanner bounded to 3s and
-optional interface/bind overrides. Persist DiscoveredTv{vendor, ip,
-friendly_name, model_name, serial_number}; treat TvVendor::Unknown as a normal
-result, not an error. Refresh on demand, never on a 1s timer. Done when a cold
-scan lists every TV with vendor + label and an empty subnet returns an empty
-list without erroring.
+Analyse this repository's television and display control surface without
+changing code. One row per capability: files, IPC command names, test count,
+covering gate, desktop-gated or not. Cover SSDP discovery and advertise, DLNA
+media server + SOAP Browse, Samsung remote (discovery, pairing, token store,
+keys, app launch, connection pool), mDNS player discovery, Miracast, display
+hardware controls, and any Wake-on-LAN sender — if none exists, say so rather
+than listing the wake_on_lan setting. End with the three largest parity risks of
+moving any of it onto an external crate.
 ```
 
-Two rules that apply to every integration: never `unwrap()` a `TvError` (match
-`UnsupportedVendor` / `UnsupportedOperation`), and remember that this crate
-returns URLs and issues commands — it never renders video.
+Two rules apply to every integration: never `unwrap()` a `TvError` (match
+`UnsupportedVendor` / `UnsupportedOperation`), and remember this crate returns
+URLs and issues commands — it never renders video.
 
 ## Build & test
 
