@@ -7,25 +7,28 @@
 protocol crates are implemented to Phase-1 depth with real types, real transports
 and passing tests, and draw their shared vocabulary from `transport/`.
 
-| Target | Unit tests | Doctests |
+| Target | Unit / integration tests | Doctests |
 |---|---|---|
 | `tv-rs` (facade) | 7 | 1 |
-| `tv-rs-transport` | 3 | 2 |
+| `tv-rs-cli` | 14 | 1 |
 | `tv-rs-discovery` | 6 | 1 |
+| `tv-rs-media` | 17 unit + 6 socket-level | 2 |
 | `tv-rs-power` | 9 | 1 |
 | `tv-rs-roku` | 9 | 1 |
 | `tv-rs-tizen` | 12 | 1 |
+| `tv-rs-transport` | 3 | 2 |
 | `tv-rs-webos` | 14 | 1 |
-| `tv-rs-media` | 17 (+6 socket-level) | 2 |
-| `tv-rs-cli` | 14 | 1 |
-| **Total** | **97** | **11** |
+| `hardware_in_the_loop` (`--features hil`) | 7 | — |
+| **Total (default features)** | **97** | **11** |
 
 `tests/hardware_in_the_loop.rs` compiles to 0 tests unless `--features hil`.
 
-`cargo check --workspace --all-targets` and `cargo test --workspace` both pass.
-`cargo clippy` cannot run in this sandbox (process launch fails with
-`STATUS_DLL_NOT_FOUND` before clippy starts); `RUSTFLAGS="-D warnings" cargo
-check --all-targets` was used as the lint gate instead.
+`cargo check --workspace --all-targets` and `cargo test --workspace` both pass (108 tests
+with doctests; the `hil` suite compiles to zero tests unless `--features hil` is set).
+`cargo clippy --workspace --all-targets -- -D warnings` passes. (An earlier
+revision of this document recorded that clippy could not launch on the
+development host; the `clippy` rustup component was broken and has since been
+reinstalled, so the real lint gate now runs locally as well as in CI.)
 
 ---
 
