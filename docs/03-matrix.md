@@ -30,7 +30,11 @@ in CI (Linux and Windows).
 **Facade.** `discover()` / `discover_with(&SsdpScanner)`; `identify_vendor()`
 over `SERVER`/`ST`/`USN` plus descriptor fields; `TvClient` with `power_off()`,
 `power_state()`, `launch_app()` and typed accessors. `power_state()` asks Roku
-outright and falls back to the TCP probe for Tizen/webOS. Covers only operations every vendor has;
+outright and falls back to the TCP probe for Tizen/webOS. `TvClient` also
+implements the `tv-rs-core` `DeviceHandle` traits, advertising per vendor only
+what works: Tizen has power/key/app, webOS power/app/foreground/volume, Roku
+power/key/app — and none advertise wake (no MAC) or input selection (not
+implemented). Covers only operations every vendor has;
 anything else goes through the accessor.
 
 **Discovery.** Interface/bind overrides, timeout, USN/LOCATION dedup, descriptor

@@ -16,6 +16,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lost acks, malformed replies, mid-session auth expiry and mid-command power-off.
   The crate has no tokio in its dependency graph in any configuration; CI enforces
   that.
+- **The facade speaks the device model.** `TvClient` implements `DeviceHandle`
+  and the five capability traits, with per-vendor capability sets that match what
+  each backend actually does, and backend errors converted into the routing
+  taxonomy (`Unsupported`, `Auth(PairingRequired)`, `Transport(Timeout)`, …).
 - **Certificate pinning for self-signed TV certificates.** `tv-rs-transport`
   gains `CertFingerprint` (SHA-256, hex round-trip), `TlsPolicy::Pinned` and
   `TlsPolicy::TrustOnFirstUse` with a `CertSink`. The default policy stays

@@ -1,29 +1,33 @@
-feat(core): add the device model crate the spec describes
+feat(facade): make TvClient a DeviceHandle with honest capabilities
 
-Phase 1a of docs/spec/00-device-model.md: vocabulary and contracts only, no
-protocol, no runtime.
+Phase 1b. The enum stays — it is the right type for one TV with a known vendor —
+but it now also implements the erased traits, so a fleet can hold it as
+`Arc<dyn DeviceHandle>` and a caller can ask what the device can do before sending
+anything.
 
-- Capability traits (PowerControl, KeyInput, AppLaunch, InputSelect,
-  VolumeControl), all dyn-compatible, and the erased DeviceHandle a fleet holds as
-  `Arc<dyn DeviceHandle>`
-- CommandId plus the contract that backends do not deduplicate: the window is a
-  deployment property, so it belongs to the layer that owns retries
-- Confidence / ObservedField / ObservedState, with constructors that make the
-  claim explicit: only a device read (or a state-changing ack) is High, a 200 is
-  Inferred, and a toggle is never High
-- the six-variant TvError taxonomy plus Remedy, so a caller branches on what to do
-  instead of on which crate failed
-- capability and device vocabulary: Capability, CapabilitySet, Key, Input, AppRef,
-  DeviceId, DeviceOs, DeviceDescriptor, PowerState
-- a scriptable MockBackend (`mock-backend`) that reproduces pre-send failure, lost
-  ack, malformed reply, mid-session auth expiry and mid-command power-off, and
-  records physical actions so tests assert what happened rather than what returned
+Capabilities are per vendor and deliberately incomplete:
 
-The crate is tokio-free in every configuration (std::time::Instant, no runtime
-dependency); CI now proves it with `cargo tree --no-default-features` and runs the
-mock-feature tests and clippy separately.
+| Vendor | power | wake | key | app | foreground | input | volume |
+|---|---|---|---|---|---|---|---|
+| Tizen | yes | no | yes | yes | no | no | no |
+| webOS | yes | no | no | yes | yes | no | yes |
+| Roku | yes | no | yes | yes | no | no | no |
 
-Not in this change, and next in the spec's migration order: the backend crates
-converting their errors into this taxonomy and the facade implementing
-DeviceHandle. The trait shape is exactly what those need, and it is cheaper to
-settle it against the mock first.
+- `wake` is absent everywhere: a discovered device does not carry its MAC yet, and
+  a wake without one would be a promise the crate cannot keep.
+- `key` is absent on webOS because SSAP has no remote-key endpoint.
+- `volume` is absent on Tizen and Roku because both expose relative keys only, so
+  `set_volume` cannot be honoured.
+
+Backend errors are converted into the routing taxonomy at the trait boundary, with
+the attempted capability supplied by the call site (the backends' "unsupported"
+variants do not carry it). Identity falls back to the host when discovery supplied
+no UDN, so a static-IP install still has a stable key.
+
+Two shape changes to `tv-rs-core` fall out of implementing it for real: `id()` and
+`descriptor()` return owned values, because a handle may be a thin wrapper over a
+protocol client that never stored either.
+
+Verification: 7 new facade tests (capability sets, accessor agreement, identity
+fallback, wake refusal, webOS key refusal, unsupported input, error routing) plus
+key-mapping tests; workspace suite, clippy and rustdoc clean.

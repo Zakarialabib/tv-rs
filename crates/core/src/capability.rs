@@ -369,10 +369,16 @@ pub trait VolumeControl: Send + Sync {
 /// caller learns what a device can do *before* it sends anything.
 pub trait DeviceHandle: Send + Sync {
     /// Stable identifier.
-    fn id(&self) -> &DeviceId;
+    ///
+    /// Returned by value because a handle may be a thin wrapper around a protocol
+    /// client that never stored one; the cost is a small clone, not a lifetime.
+    fn id(&self) -> DeviceId;
 
     /// Everything known before a command is sent.
-    fn descriptor(&self) -> &DeviceDescriptor;
+    ///
+    /// A snapshot, not a borrow: backends that learn more after pairing can return
+    /// richer descriptors without the caller holding a lock or a lifetime.
+    fn descriptor(&self) -> DeviceDescriptor;
 
     /// The capabilities this device advertises.
     fn capabilities(&self) -> CapabilitySet;

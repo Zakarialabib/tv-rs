@@ -1809,6 +1809,7 @@ dependencies = [
  "serde",
  "thiserror",
  "tokio",
+ "tv-rs-core",
  "tv-rs-discovery",
  "tv-rs-power",
  "tv-rs-roku",

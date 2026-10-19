@@ -184,12 +184,12 @@ fn error_for(failure: Failure) -> TvError {
 }
 
 impl DeviceHandle for MockBackend {
-    fn id(&self) -> &DeviceId {
-        &self.descriptor.id
+    fn id(&self) -> DeviceId {
+        self.descriptor.id.clone()
     }
 
-    fn descriptor(&self) -> &DeviceDescriptor {
-        &self.descriptor
+    fn descriptor(&self) -> DeviceDescriptor {
+        self.descriptor.clone()
     }
 
     fn capabilities(&self) -> CapabilitySet {

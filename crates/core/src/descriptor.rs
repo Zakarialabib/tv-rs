@@ -28,6 +28,16 @@ impl DeviceId {
         Ok(Self(trimmed.to_owned()))
     }
 
+    /// A placeholder identity for a device that discovery could not name.
+    ///
+    /// Prefer a UDN, a `device-id` or a MAC. This exists so a handle built from an
+    /// address alone (a static-IP install) can still implement the trait without a
+    /// panic path.
+    #[must_use]
+    pub fn anonymous() -> Self {
+        Self("anonymous".to_string())
+    }
+
     /// The identifier as a string slice.
     #[must_use]
     pub fn as_str(&self) -> &str {
