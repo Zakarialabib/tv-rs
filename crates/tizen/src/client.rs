@@ -127,7 +127,7 @@ pub(crate) async fn open_channel(
 ) -> Result<(WsStream, Option<String>)> {
     let use_tls = client.port == TIZEN_WSS_PORT;
     let url = build_ws_url(&client.host, client.port, use_tls, &client.device_name)?;
-    let connector = tv_rs_transport::connector(client.tls, use_tls)
+    let connector = tv_rs_transport::connector(client.tls.clone(), use_tls)
         .map_err(|err| TizenError::Tls(err.to_string()))?;
 
     let (mut stream, _response) =
@@ -253,7 +253,7 @@ impl TizenClient {
 
     /// Returns the configured TLS policy.
     pub fn tls_policy(&self) -> TlsPolicy {
-        self.tls
+        self.tls.clone()
     }
 
     /// Returns the saved pairing token, if any.

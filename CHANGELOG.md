@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Certificate pinning for self-signed TV certificates.** `tv-rs-transport`
+  gains `CertFingerprint` (SHA-256, hex round-trip), `TlsPolicy::Pinned` and
+  `TlsPolicy::TrustOnFirstUse` with a `CertSink`. The default policy stays
+  `Strict`; a pinned channel verifies the exact certificate a TV presented,
+  which is what makes Samsung 8002 / LG 3001 usable without
+  `TlsPolicy::AcceptInvalid`. Rustls only — a `native-tls` build returns
+  `TlsError::PinningUnavailable`.
+
 ### Changed
 
 - **Workspace reorganization.** All packages are flattened under `crates/` (one

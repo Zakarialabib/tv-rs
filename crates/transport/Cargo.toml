@@ -25,6 +25,7 @@ rustls = [
     "ws",
     "dep:rustls",
     "dep:rustls-native-certs",
+    "dep:sha2",
     "tokio-tungstenite/rustls-tls-native-roots",
 ]
 native-tls = ["ws", "dep:native-tls", "tokio-tungstenite/native-tls"]
@@ -34,6 +35,7 @@ futures-util = { workspace = true, optional = true }
 native-tls = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 rustls-native-certs = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, optional = true }
 tokio-tungstenite = { workspace = true, optional = true }

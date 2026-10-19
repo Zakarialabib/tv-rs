@@ -61,8 +61,11 @@ traversal rejected before any file open.
 
 ## Deferred
 
-- **Certificate pinning** for Samsung 8002 / LG 3001 — `TlsPolicy::AcceptInvalid`
-  is the interim, and it is not shippable.
+- **Certificate pinning** for Samsung 8002 / LG 3001 — implemented as
+  `TlsPolicy::TrustOnFirstUse` (record) and `TlsPolicy::Pinned` (verify) in
+  `tv-rs-transport`, rustls only; a `native-tls` build returns
+  `TlsError::PinningUnavailable`. What is *not* done is verifying it against a
+  real TV's certificate.
 - **Enterprise token derivation** and **encrypted framing** on newer Samsung
   firmware.
 - **mDNS/Bonjour** discovery, **ARP** resolution, **WoWLAN** reasons.

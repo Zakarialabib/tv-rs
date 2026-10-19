@@ -89,9 +89,10 @@ then fails. The fix is a pooled channel with one reopen-and-retry, which is what
 `TizenConnectionPool` does — not a reconnect per key press, which would re-prompt
 on sets without a stored token.
 
-**What is not implemented:** certificate pinning for the self-signed TV cert,
-token derivation for enterprise panels, and AES-GCM payload framing on newer
-firmware. Those return `Unsupported`.
+**What is not implemented:** token derivation for enterprise panels and AES-GCM
+payload framing on newer firmware — those return `Unsupported`. The self-signed
+certificate is handled by `TlsPolicy::Pinned` / `TrustOnFirstUse`; see
+[`architecture.md`](architecture.md).
 
 ## LG webOS
 

@@ -106,8 +106,8 @@ of them each crate implements.
 |---|---|---|
 | §1 SSDP discovery + UPnP descriptor | `tv-rs-discovery` | implemented (mDNS and ARP are *planned*) |
 | §2 Wake-on-LAN + power probing | `tv-rs-power` | implemented (WoWLAN reasons planned) |
-| §3 Samsung Tizen channel + DIAL | `tv-rs-tizen` | implemented to Phase 1; TLS pinning, enterprise token math and AES-GCM framing deferred |
-| §4 LG webOS SSAP | `tv-rs-webos` | implemented to Phase 1; 3001 certificate pinning deferred |
+| §3 Samsung Tizen channel + DIAL | `tv-rs-tizen` | implemented to Phase 1; TLS handled by pinning (`Pinned`/`TrustOnFirstUse`), enterprise token math and AES-GCM framing deferred |
+| §4 LG webOS SSAP | `tv-rs-webos` | implemented to Phase 1; 3001 TLS handled by pinning, richer `SsapUri` coverage deferred |
 | §5 Roku ECP | `tv-rs-roku` | implemented in full (ECP is unauthenticated) |
 | §6 Android TV ADB | — | not started |
 | §7–8 DLNA control, `206`, HLS | `tv-rs-media` (serving only) + not started (SOAP control) | range + HLS implemented; DLNA `AVTransport`/`RenderingControl` not started |
