@@ -1,5 +1,9 @@
 # tv-rs — TV Control & Communications
 
+[![CI](https://github.com/Zakarialabib/tv-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/Zakarialabib/tv-rs/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![MSRV 1.75](https://img.shields.io/badge/MSRV-1.75-blue.svg)](Cargo.toml)
+
 Cross-platform TV discovery and control in Rust. One facade crate finds
 televisions on the local network and drives them regardless of vendor; the
 protocol work lives in five focused crates beneath it.
@@ -130,6 +134,12 @@ The script verifies `LICENSE`, runs `cargo check --workspace --all-targets`,
 refuses a dirty tree for a real publish, and bumps `[workspace.package]` plus
 every version-pinned path dependency. CI (`.github/workflows/release.yml`)
 calls it rather than a bare `cargo publish`.
+
+## Project links
+
+- [`CHANGELOG.md`](CHANGELOG.md) — release history and known limitations
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — gates, module layout, commit convention
+- [`SECURITY.md`](SECURITY.md) — private disclosure route and in-scope surfaces
 
 ## License
 
