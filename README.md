@@ -60,6 +60,31 @@ reached through the re-exported protocol crates (`tv_rs::webos`, `tv_rs::roku`,
 `tv_rs::tizen`, `tv_rs::discovery`, `tv_rs::power`) or the typed accessors on
 `TvClient` (`as_tizen`, `as_webos`, `as_roku`).
 
+## Integrate it
+
+Nine copy-paste prompts for wiring this crate into a host app — discovery
+inventory, wake-before-play, Tizen/webOS/Roku control, a 206+HLS media server, a
+single control endpoint, scheduled automation, and hardware tests that stay out
+of CI — live in
+[`docs/05-integration-prompts.md`](docs/05-integration-prompts.md). Each prompt
+names the exact APIs and what "done" means.
+
+The shortest useful one:
+
+```text
+Add LAN television discovery using tv-rs. Use tv_rs::discover() for the
+zero-config path, or discover_with() with an SsdpScanner bounded to 3s and
+optional interface/bind overrides. Persist DiscoveredTv{vendor, ip,
+friendly_name, model_name, serial_number}; treat TvVendor::Unknown as a normal
+result, not an error. Refresh on demand, never on a 1s timer. Done when a cold
+scan lists every TV with vendor + label and an empty subnet returns an empty
+list without erroring.
+```
+
+Two rules that apply to every integration: never `unwrap()` a `TvError` (match
+`UnsupportedVendor` / `UnsupportedOperation`), and remember that this crate
+returns URLs and issues commands — it never renders video.
+
 ## Build & test
 
 ```bash
