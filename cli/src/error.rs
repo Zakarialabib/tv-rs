@@ -20,8 +20,12 @@ pub const EXIT_UNSUPPORTED: u8 = 2;
 #[derive(Debug, Error)]
 pub enum CliError {
     /// The facade (or a protocol crate it forwarded) returned an error.
+    ///
+    /// Boxed because [`tv_rs::TvError`] embeds the protocol crates' transport
+    /// errors and would otherwise make every `Result` in this binary carry a
+    /// large `Err` variant (clippy's `result_large_err`).
     #[error("{0}")]
-    Facade(#[from] tv_rs::TvError),
+    Facade(Box<tv_rs::TvError>),
 
     /// The MAC address argument could not be parsed.
     #[error("invalid MAC address '{input}': {source}")]
@@ -59,6 +63,12 @@ pub enum CliError {
         /// A diagnostic that names the gap and what was requested.
         message: String,
     },
+}
+
+impl From<tv_rs::TvError> for CliError {
+    fn from(error: tv_rs::TvError) -> Self {
+        Self::Facade(Box::new(error))
+    }
 }
 
 impl CliError {
