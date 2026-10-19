@@ -1,29 +1,37 @@
-# TV Control & Communications Playbook — Skeleton Mapping
+# Playbook → Crate Mapping
 
-Mapped against `pasted_content_2026-10-18_...` (Playbook §1-10).
+Compact view of how the Playbook sections in `01-playbook.md` map onto crates and
+phases. For the per-crate detail, test counts and next actions, see `03-matrix.md`.
 
-## Phase 1 — Skeleton Crates (this workspace)
+## Phase 1 — Protocol crates (this workspace)
 
 | Playbook § | Topic | Crate | Status |
 |---|---|---|---|
-| §1 | SSDP / mDNS / Bonjour / ARP | `discovery` | Skeleton |
-| §2 | WoL / WoWLAN / power polling | `power` | Skeleton |
-| §3 | Samsung Tizen (WS 8001/8002, DIAL 8080) | `tizen` | Skeleton |
-| §4 | LG webOS SSAP (3000/3001) | `webos` | Skeleton |
-| §5 | Roku ECP (8060 REST) | `roku` | Skeleton |
+| §1 | SSDP / mDNS / Bonjour / ARP | `tv-rs-discovery` | SSDP and UPnP descriptor parsing implemented; mDNS and ARP pending |
+| §2 | WoL / WoWLAN / power polling | `tv-rs-power` | Implemented |
+| §3 | Samsung Tizen (WS 8001/8002, DIAL 8080) | `tv-rs-tizen` | Implemented except §10 Gaps A, B and D |
+| §4 | LG webOS SSAP (3000/3001) | `tv-rs-webos` | Implemented except §10 Gap A |
+| §5 | Roku ECP (8060 REST) | `tv-rs-roku` | Implemented |
+| — | Facade | `tv-rs` (root `src/`) | Implemented: discovery orchestration, vendor identification, aggregate client |
 
-## Phase 2 — REA (excluded; separate child card)
+## Phase 2 — REA (not started)
 
-§10 Gap A (SSL pinning / WSS handshake)  
-§10 Gap B (token-generation math / MAC + salt)  
-§10 Gap C (undocumented payloads / .pcap mapping)  
-§10 Gap D (AES-GCM framing / firmware versions)  
-§10 Gap E (Google Cast protobuf reverse)  
+| Gap | Topic |
+|---|---|
+| §10 A | SSL certificate pinning / WSS handshake handling |
+| §10 B | Token-generation math (MAC + secret salt) |
+| §10 C | Undocumented deep-link payloads (`.pcap` / `.har` mapping) |
+| §10 D | AES-GCM encrypted framing across firmware versions |
+| §10 E | Google Cast protobuf schema reverse |
 
-These require APK decompilation (SmartThings, ThinQ, Roku) via REA. Not stubbed as real implementations.
+These require APK decompilation of the official SmartThings, ThinQ and Roku apps
+via REA. Until it lands, the affected code paths return typed `Unsupported`
+errors — they are not stubbed with panics. See `02-external-refs.md` §3.
 
-## Phase 3 — Deferred (not skeleton)
+## Phase 3 — Deferred (no crate yet)
 
-§6 Android TV ADB (5555)  
-§7-8 DLNA / HLS / 206 Partial Content  
-§9 Google Cast (TLS 8009 / protobuf) / AirPlay (RAOP / FairPlay)
+| Playbook § | Topic | Planned crate |
+|---|---|---|
+| §6 | Android TV / Google TV over ADB (5555) | `tv-rs-adb` |
+| §7–8 | DLNA media rendering, HLS and HTTP 206 seeking | `tv-rs-media` |
+| §9 | Google Cast (TLS 8009 / protobuf), AirPlay (RAOP / FairPlay) | `tv-rs-cast` |
