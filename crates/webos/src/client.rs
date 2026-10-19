@@ -405,7 +405,6 @@ impl WebosClient {
             device_name: self.device_name.clone(),
         })
     }
-
 }
 
 /// The result of a successful pairing handshake.
