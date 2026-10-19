@@ -1,0 +1,24 @@
+[package]
+name = "tv-rs-webos"
+description = "LG webOS TV control over SSAP: JSON-RPC WebSocket transport (3000/3001), pairing client-key and app launching."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["lg", "webos", "ssap", "smart-tv", "json-rpc"]
+categories = ["api-bindings", "network-programming"]
+
+[dependencies]
+async-trait.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tv-rs-transport = { workspace = true, features = ["ws"] }
+url.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
