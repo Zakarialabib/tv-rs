@@ -129,6 +129,17 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 mod tests {
     use super::*;
 
+    fn unique_dir(prefix: &str) -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let tick = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_nanos())
+            .unwrap_or_default();
+        std::env::temp_dir().join(format!("{prefix}-{}-{nanos}-{tick}", std::process::id()))
+    }
+
     #[test]
     fn entries_serialise_to_one_line_each() {
         let entry = AuditEntry::now("tv-1", "on/netflix", "launch", "ok", "inferred");
@@ -158,7 +169,7 @@ mod tests {
 
     #[tokio::test]
     async fn entries_append_as_jsonl() {
-        let dir = std::env::temp_dir().join(format!("tv-rs-audit-{}", std::process::id()));
+        let dir = unique_dir("tv-rs-audit");
         tokio::fs::create_dir_all(&dir).await.unwrap();
         let path = dir.join("audit.jsonl");
         let log = AuditLog::new(&path);
