@@ -53,13 +53,13 @@ pub use client::{discover, discover_with, identify_vendor, TvClient};
 pub use error::{Result, TvError};
 pub use types::{DiscoveredTv, TvVendor};
 
-/// SSDP / mDNS / UPnP discovery: [`discovery::SsdpScanner`](tv_rs_discovery::SsdpScanner).
+/// SSDP / mDNS / UPnP discovery: [`discovery::SsdpScanner`].
 pub use tv_rs_discovery as discovery;
-/// Wake-on-LAN and power-state probing: [`power::WolSender`](tv_rs_power::WolSender).
+/// Wake-on-LAN and power-state probing: [`power::WolSender`].
 pub use tv_rs_power as power;
-/// Roku OS ECP REST client: [`roku::RokuClient`](tv_rs_roku::RokuClient).
+/// Roku OS ECP REST client: [`roku::RokuClient`].
 pub use tv_rs_roku as roku;
-/// Samsung Tizen remote channel and DIAL: [`tizen::TizenClient`](tv_rs_tizen::TizenClient).
+/// Samsung Tizen remote channel and DIAL: [`tizen::TizenClient`].
 pub use tv_rs_tizen as tizen;
-/// LG webOS SSAP WebSocket client: [`webos::WebosClient`](tv_rs_webos::WebosClient).
+/// LG webOS SSAP WebSocket client: [`webos::WebosClient`].
 pub use tv_rs_webos as webos;
