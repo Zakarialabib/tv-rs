@@ -143,6 +143,7 @@ forwards. Anything vendor-specific is reached through `as_tizen()`,
 
 ```bash
 cargo run -p tv-rs-cli -- discover
+cargo run -p tv-rs-cli -- status        # power + capability set per device
 cargo run -p tv-rs-cli -- wake --mac AA:BB:CC:DD:EE:FF
 cargo run -p tv-rs-cli -- power-off --ip 192.168.1.40
 cargo run -p tv-rs-cli -- key --ip 192.168.1.40 --key home

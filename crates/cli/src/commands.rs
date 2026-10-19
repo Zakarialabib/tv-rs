@@ -16,7 +16,7 @@ use tv_rs::{DiscoveredTv, TvClient, TvError, TvVendor};
 
 use crate::cli::{
     parse_roku_key, parse_tizen_key, roku_key_names, tizen_key_names, Cli, Command, DiscoverArgs,
-    KeyArgs, LaunchArgs, PowerOffArgs, Vendor, WakeArgs,
+    EnsureArgs, KeyArgs, LaunchArgs, PowerOffArgs, StatusArgs, Vendor, WakeArgs,
 };
 use crate::error::CliError;
 use crate::render;
@@ -29,6 +29,8 @@ pub async fn execute(cli: Cli) -> Result<(), CliError> {
         Command::PowerOff(args) => run_power_off(args).await,
         Command::Key(args) => run_key(args).await,
         Command::Launch(args) => run_launch(args).await,
+        Command::Status(args) => run_status(args).await,
+        Command::Ensure(args) => run_ensure(args).await,
     }
 }
 
@@ -149,4 +151,122 @@ async fn run_launch(args: LaunchArgs) -> Result<(), CliError> {
         args.ip
     );
     Ok(())
+}
+
+/// `tv-rs status [--timeout <SECONDS>]`
+///
+/// Discovery plus a power probe plus the capability set. This is the table a
+/// technician reads when a screen misbehaves: it says what the crate can and cannot
+/// do for each device, instead of leaving them to guess from the vendor.
+async fn run_status(args: StatusArgs) -> Result<(), CliError> {
+    let found = discover_all(args.timeout).await?;
+
+    if found.is_empty() {
+        println!("No televisions answered SSDP. Nothing was probed.");
+        return Ok(());
+    }
+
+    let mut rows = Vec::with_capacity(found.len());
+    for tv in &found {
+        let capabilities = match TvClient::from_discovered(tv) {
+            Ok(client) => {
+                use tv_rs::core::DeviceHandle;
+                client
+                    .capabilities()
+                    .iter()
+                    .map(|capability| capability.as_str().to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            }
+            Err(_) => "-".to_string(),
+        };
+
+        let power = match TvClient::from_discovered(tv) {
+            Ok(client) => client
+                .power_state()
+                .await
+                .map(|state| format!("{state:?}"))
+                .unwrap_or_else(|error| format!("probe failed: {error}")),
+            Err(error) => format!("no client: {error}"),
+        };
+
+        rows.push(render::StatusRow {
+            vendor: tv.vendor.as_str().to_string(),
+            label: tv.label().to_string(),
+            address: tv.ip.clone(),
+            power,
+            capabilities,
+        });
+    }
+
+    print!("{}", render::render_status_table(&rows));
+    Ok(())
+}
+
+/// `tv-rs ensure --config <FILE> [--audit <FILE>]`
+///
+/// One reconciliation pass over the discovered fleet. Deliberately `--once`: a
+/// long-running loop belongs in the agent's own binary, not in a CLI that a script
+/// calls and waits on.
+async fn run_ensure(args: EnsureArgs) -> Result<(), CliError> {
+    use std::sync::Arc;
+
+    use tv_rs::core::DeviceHandle;
+    use tv_rs_agent::{AuditLog, Reconciler, StaticFileProvider};
+
+    let found = discover_all(args.timeout).await?;
+    if found.is_empty() {
+        println!("No televisions answered SSDP. Nothing to reconcile.");
+        return Ok(());
+    }
+
+    let mut fleet: Vec<Arc<dyn DeviceHandle>> = Vec::with_capacity(found.len());
+    for tv in &found {
+        match TvClient::from_discovered(tv) {
+            Ok(client) => fleet.push(Arc::new(client)),
+            Err(error) => println!("skipping {}: {error}", tv.label()),
+        }
+    }
+
+    if fleet.is_empty() {
+        println!("Discovered devices, but none had a usable control client.");
+        return Ok(());
+    }
+
+    let provider = Arc::new(StaticFileProvider::new(&args.config));
+    let mut reconciler = Reconciler::new(fleet, provider);
+    if let Some(path) = &args.audit {
+        reconciler = reconciler.with_audit(AuditLog::new(path));
+    }
+
+    let outcomes = reconciler.tick().await;
+    print!("{}", render::render_outcomes(&outcomes));
+
+    let failed = outcomes
+        .iter()
+        .filter(|outcome| outcome.result == "failed")
+        .count();
+    if failed > 0 {
+        return Err(CliError::Agent(format!(
+            "{failed} device(s) failed; see the table above"
+        )));
+    }
+    Ok(())
+}
+
+/// Runs discovery with an optional timeout override.
+async fn discover_all(timeout: Option<u64>) -> Result<Vec<DiscoveredTv>, CliError> {
+    let found = match timeout {
+        Some(seconds) => {
+            let scanner = SsdpScanner::new().with_timeout(Duration::from_secs(seconds));
+            tv_rs::discover_with(&scanner).await?
+        }
+        None => tv_rs::discover().await?,
+    };
+
+    // Loopback responders are the host's own UPnP service, not televisions.
+    Ok(found
+        .into_iter()
+        .filter(|tv| !tv.ip.starts_with("127.") && tv.ip != "::1")
+        .collect())
 }

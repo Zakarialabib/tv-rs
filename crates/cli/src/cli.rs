@@ -39,6 +39,32 @@ pub enum Command {
     Key(KeyArgs),
     /// Launch an installed application by id.
     Launch(LaunchArgs),
+    /// Discover devices and print their power state and capabilities.
+    Status(StatusArgs),
+    /// Converge a fleet towards a desired-state file.
+    Ensure(EnsureArgs),
+}
+
+/// Arguments for `status`.
+#[derive(Debug, Args)]
+pub struct StatusArgs {
+    /// Seconds to wait for SSDP replies; omit to use the scanner's own default.
+    #[arg(long)]
+    pub timeout: Option<u64>,
+}
+
+/// Arguments for `ensure`.
+#[derive(Debug, Args)]
+pub struct EnsureArgs {
+    /// JSON file mapping device id to desired state.
+    #[arg(long)]
+    pub config: String,
+    /// Seconds to wait for SSDP replies; omit to use the scanner's own default.
+    #[arg(long)]
+    pub timeout: Option<u64>,
+    /// Append every action to this JSONL file.
+    #[arg(long)]
+    pub audit: Option<String>,
 }
 
 /// Arguments for `discover`.
