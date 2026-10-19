@@ -1,0 +1,23 @@
+[package]
+name = "tv-rs-discovery"
+description = "SSDP / mDNS / Bonjour discovery and UPnP device-descriptor parsing for TV control."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["ssdp", "upnp", "mdns", "bonjour", "discovery"]
+categories = ["api-bindings", "network-programming"]
+
+[dependencies]
+async-trait.workspace = true
+reqwest.workspace = true
+roxmltree.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+# Vocabulary only: no TLS connector, no WebSocket framing (default features off).
+tv-rs-transport.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
