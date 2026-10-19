@@ -32,11 +32,12 @@ pub fn identify_vendor(
 ) -> TvVendor {
     let mut haystack = String::new();
 
-    for header in [&response.server, &response.st, &response.usn] {
-        if let Some(value) = header {
-            haystack.push_str(value);
-            haystack.push(' ');
-        }
+    for value in [&response.server, &response.st, &response.usn]
+        .into_iter()
+        .flatten()
+    {
+        haystack.push_str(value);
+        haystack.push(' ');
     }
     if let Some(descriptor) = descriptor {
         for value in [
@@ -46,11 +47,12 @@ pub fn identify_vendor(
             &descriptor.model_number,
             &descriptor.device_type,
             &descriptor.udn,
-        ] {
-            if let Some(value) = value {
-                haystack.push_str(value);
-                haystack.push(' ');
-            }
+        ]
+        .into_iter()
+        .flatten()
+        {
+            haystack.push_str(value);
+            haystack.push(' ');
         }
     }
 

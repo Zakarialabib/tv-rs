@@ -34,6 +34,10 @@
 //! self-signed TV certificates is deferred to Phase 3 (`docs/01-playbook.md` §10
 //! Gap A); see [`TlsPolicy`].
 
+// The public error enums embed `tokio_tungstenite`'s error, which is large by
+// construction. Boxing it would break the #[from] conversions callers rely on,
+// and these are cold paths where the extra size costs nothing measurable.
+#![allow(clippy::result_large_err)]
 #![deny(missing_docs)]
 
 pub mod auth;

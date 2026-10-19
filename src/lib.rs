@@ -40,6 +40,10 @@
 //! accessors on [`TvClient`].
 
 #![deny(missing_docs)]
+// The aggregated error embeds the protocol crates' error enums, which are
+// large by construction. Boxing them would break the #[from] conversions the
+// facade relies on, and error paths are cold.
+#![allow(clippy::result_large_err)]
 
 mod client;
 mod error;
