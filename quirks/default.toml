@@ -1,0 +1,79 @@
+# Quirks table
+#
+# Model- and firmware-specific defects with their documented handling.
+#
+# Two rules, both load-bearing:
+#
+#   1. **Order is precedence.** The first matching row wins, so specific rows must
+#      appear above general ones. A general row placed first silently disables every
+#      workaround below it.
+#   2. **A row is a claim.** `note` says why it is here; anything without a source
+#      (vendor documentation, a firmware release note, or a reproduced behaviour)
+#      does not belong in this file.
+#
+# Matching is by prefix: `model_prefix = "QN90"` covers QN90A/QN90B/QN90D, and
+# `firmware_prefix = "T-KTM"` covers every T-KTM* build. Omit either to match all.
+
+# ── Samsung (Tizen) ──────────────────────────────────────────────────────────
+#
+# The remote channel moved: 2016 panels answer plaintext `ws://:8001`, 2017+ panels
+# serve `wss://:8002` with the token-v2 handshake, and `:55000` is the legacy
+# pre-2016 channel that this workspace does not implement.
+[[quirk]]
+vendor = "samsung"
+model_prefix = "QN90"
+firmware_prefix = "T-KTM"
+issue = "ws_8001_disabled"
+action = "start_at_8002"
+note = "2020+ Neo QLED firmwares do not listen on 8001; probing it costs a timeout per command."
+
+[[quirk]]
+vendor = "samsung"
+firmware_prefix = "T-KT"
+issue = "ws_8001_disabled"
+action = "start_at_8002"
+note = "2017-2019 firmwares expose only the TLS channel with the token-v2 handshake."
+
+[[quirk]]
+vendor = "samsung"
+issue = "legacy_port_55000_exists"
+action = "unsupported"
+note = "Pre-2016 panels use :55000; not implemented, so report Unsupported rather than probing 8002 forever."
+
+# ── LG (webOS) ───────────────────────────────────────────────────────────────
+#
+# 2023+ firmware may accept only `wss://:3001`; older sets only `ws://:3000`.
+[[quirk]]
+vendor = "lg"
+firmware_prefix = "23"
+issue = "port_3000_removed"
+action = "start_at_3001"
+note = "webOS 23 firmware drops the plaintext SSAP port."
+
+[[quirk]]
+vendor = "lg"
+firmware_prefix = "24"
+issue = "port_3000_removed"
+action = "start_at_3001"
+note = "Same change, carried forward."
+
+[[quirk]]
+vendor = "lg"
+issue = "wake_on_lan_setting_moved"
+action = "point_user_at_settings"
+note = "Wake-on-LAN was 'Mobile TV On'; 2025 models expose it as IP control settings -> Wake on LAN."
+
+# ── Roku ─────────────────────────────────────────────────────────────────────
+[[quirk]]
+vendor = "roku"
+firmware_prefix = "14.1"
+issue = "keypress_gated"
+action = "auth_not_permitted"
+note = "Roku OS 14.1 requires Settings -> System -> Advanced system settings -> Control by mobile apps for keypress/launch."
+
+[[quirk]]
+vendor = "roku"
+firmware_prefix = "15"
+issue = "power_control_flags"
+action = "read_device_info_flags"
+note = "Roku OS 15 reports supports-tv-power-control / supports-audio-volume-control in /query/device-info; use them instead of guessing from the model."

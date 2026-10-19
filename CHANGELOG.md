@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Conformance suite** (`tv-rs-core`, feature `conformance`): every `DeviceHandle`
+  must pass capability/accessor agreement, unsupported-routing and identity checks.
+  The facade's three clients pass it; the mock does too, which is how the suite
+  itself is validated.
+- **Quirks table** (`tv-rs-core`, feature `quirks`, `quirks/default.toml`): Samsung
+  8001/8002/55000 generations, LG pre/post-2023 ports and the renamed wake-on-LAN
+  setting, Roku OS 14.1's "Control by mobile apps" gate and OS 15's
+  `supports-tv-power-control` flags. First match wins, and file order is the
+  precedence — pinned by a test.
 - **Transport negotiation.** Tizen and webOS now try both port generations
   (`wss://:8002` → `ws://:8001`, `wss://:3001` → `ws://:3000`), remember the one
   that answered per client, and only fall back when the connection was *refused* —
@@ -62,6 +71,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Tizen frame budget is per read.** `TizenSession` decremented one counter for the
+  life of the session, so after a dozen reads every command reported a timeout. Each
+  `recv_json` now takes a fresh budget, and the counter is no longer stored.
+- **Tizen DIAL reuses one HTTP client.** `launch_app_via_dial` and
+  `dial_device_description` built a `reqwest::Client` per call, discarding the
+  connection pool and re-resolving DNS every time.
 - **`Debug` no longer prints credentials.** `TizenClient`'s pairing token and
   `WebosClient`'s `client-key` are redacted: both are bearer credentials, and a log
   line containing one hands over the screen.

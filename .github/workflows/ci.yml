@@ -50,8 +50,8 @@ jobs:
             echo "::error::tv-rs-core must not depend on tokio"
             exit 1
           fi
-      - run: cargo test -p tv-rs-core --features mock-backend
-      - run: cargo clippy -p tv-rs-core --all-targets --features mock-backend
+      - run: cargo test -p tv-rs-core --features "mock-backend conformance quirks"
+      - run: cargo clippy -p tv-rs-core --all-targets --features "mock-backend conformance quirks"
         env:
           RUSTFLAGS: -D warnings
 
@@ -69,6 +69,8 @@ jobs:
       # The `hil` feature is deliberately not enabled: these tests target real
       # televisions and must never run on a hosted runner.
       - run: cargo test --workspace
+      # The facade must satisfy the same conformance suite every backend does.
+      - run: cargo test -p tv-rs --features conformance
 
   docs:
     name: rustdoc

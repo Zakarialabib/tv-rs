@@ -16,9 +16,16 @@ default = []
 # answers immediately, so a caller's executor (tokio, smol, futures) is irrelevant.
 mock-backend = []
 
+# The conformance suite every backend must pass (`tv_rs_core::conformance`).
+conformance = []
+
+# The quirks table (`tv_rs_core::quirks`), parsed from TOML.
+quirks = ["dep:toml"]
+
 [dependencies]
 async-trait.workspace = true
 thiserror.workspace = true
+toml = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
