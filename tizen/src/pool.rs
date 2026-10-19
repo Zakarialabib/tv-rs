@@ -188,6 +188,8 @@ impl<F: TizenChannelFactory> TizenConnectionPool<F> {
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    // `super::*` brings tokio's async Mutex; the fake channel needs a plain one.
+    use std::sync::Mutex as StdMutex;
 
     use super::*;
     use crate::error::TizenError;
@@ -197,22 +199,19 @@ mod tests {
     /// A shared budget is what makes the retry observable: the first channel
     /// fails, the reopened one succeeds.
     struct FakeChannel {
-        failures: Arc<AtomicUsize>,
+        failures: Arc<StdMutex<usize>>,
         sent: Arc<AtomicUsize>,
     }
 
     #[async_trait]
     impl TizenChannel for FakeChannel {
         async fn send_key(&mut self, _key: TizenRemoteKey) -> Result<()> {
-            if self
-                .failures
-                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
-                    left.checked_sub(1)
-                })
-                .is_ok()
-            {
+            let mut budget = self.failures.lock().expect("test mutex");
+            if *budget > 0 {
+                *budget -= 1;
                 return Err(TizenError::Protocol("dead channel".into()));
             }
+            drop(budget);
             self.sent.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
@@ -225,7 +224,7 @@ mod tests {
 
     struct FakeFactory {
         opens: Arc<AtomicUsize>,
-        failures: Arc<AtomicUsize>,
+        failures: Arc<StdMutex<usize>>,
         sent: Arc<AtomicUsize>,
     }
 
@@ -248,7 +247,7 @@ mod tests {
     fn factory(opens: Arc<AtomicUsize>, failures: usize, sent: Arc<AtomicUsize>) -> FakeFactory {
         FakeFactory {
             opens,
-            failures: Arc::new(AtomicUsize::new(failures)),
+            failures: Arc::new(StdMutex::new(failures)),
             sent,
         }
     }
