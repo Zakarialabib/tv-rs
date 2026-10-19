@@ -22,7 +22,7 @@ use std::time::Duration;
 /// Publish order. Every path dependency must reach crates.io before its
 /// dependents, so `transport` leads and the facade follows the protocol crates.
 /// Keep in sync with `docs/adr/001-crate-publication.md`.
-const ORDER: [&str; 9] = [
+const ORDER: [&str; 10] = [
     "tv-rs-core",
     "tv-rs-transport",
     "tv-rs-discovery",
@@ -32,6 +32,7 @@ const ORDER: [&str; 9] = [
     "tv-rs-webos",
     "tv-rs",
     "tv-rs-media",
+    "tv-rs-agent",
 ];
 
 /// Seconds to wait after each upload so the crates.io index catches up.

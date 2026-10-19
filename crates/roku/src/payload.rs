@@ -42,6 +42,15 @@ pub struct RokuDeviceInfo {
     pub supports_suspend: Option<bool>,
     /// Whether the device reports support for find-remote. From `<supports-find-remote>`.
     pub supports_find_remote: Option<bool>,
+    /// Whether the device accepts TV power control over ECP. From
+    /// `<supports-tv-power-control>` (Roku OS 15+).
+    ///
+    /// This is the flag that distinguishes a Roku TV (panel plus ECP) from a
+    /// streaming player, which has no panel to switch off.
+    pub supports_tv_power_control: Option<bool>,
+    /// Whether the device accepts absolute volume over ECP. From
+    /// `<supports-audio-volume-control>` (Roku OS 15+).
+    pub supports_audio_volume_control: Option<bool>,
 }
 
 impl RokuDeviceInfo {

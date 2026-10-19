@@ -53,5 +53,5 @@ pub use capability::{
 };
 pub use command::CommandId;
 pub use descriptor::{DeviceDescriptor, DeviceId, DeviceOs, PowerState};
-pub use error::{AuthError, ProtocolError, QuirkId, StateError, TransportError, TvError};
+pub use error::{AuthError, ProtocolError, QuirkId, Remedy, StateError, TransportError, TvError};
 pub use state::{Confidence, ObservedField, ObservedState};

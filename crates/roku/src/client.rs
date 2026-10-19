@@ -62,6 +62,8 @@ pub fn parse_device_info(xml: &str) -> Result<RokuDeviceInfo> {
         user_device_name: element_text(root, "user-device-name"),
         supports_suspend: element_bool(root, "supports-suspend"),
         supports_find_remote: element_bool(root, "supports-find-remote"),
+        supports_tv_power_control: element_bool(root, "supports-tv-power-control"),
+        supports_audio_volume_control: element_bool(root, "supports-audio-volume-control"),
     })
 }
 
@@ -168,17 +170,31 @@ impl RokuClient {
     }
 
     /// Sends a single remote-key press via `POST /keypress/{key}` with an empty body.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RokuError::NotPermitted`] when the device answers 403 — on Roku OS
+    /// 14.1+ that means *Control by mobile apps* is disabled, and the error says so.
     pub async fn send_keypress(&self, key: RokuKey) -> Result<()> {
-        let url = self.endpoint(&keypress_path(key));
-        self.http.post(url).send().await?.error_for_status()?;
+        self.post(&keypress_path(key)).await
+    }
+
+    /// `POST`s to `path`, translating the two answers that are not failures of this
+    /// client into errors a caller can act on.
+    async fn post(&self, path: &str) -> Result<()> {
+        let response = self.http.post(self.endpoint(path)).send().await?;
+        if response.status() == reqwest::StatusCode::FORBIDDEN {
+            return Err(RokuError::NotPermitted {
+                remedy: crate::types::CONTROL_BY_MOBILE_APPS_REMEDY.to_string(),
+            });
+        }
+        response.error_for_status()?;
         Ok(())
     }
 
     /// Launches an application by id via `POST /launch/{app_id}` with an empty body.
     pub async fn launch_app(&self, app_id: &str) -> Result<()> {
-        let url = self.endpoint(&launch_path(app_id));
-        self.http.post(url).send().await?.error_for_status()?;
-        Ok(())
+        self.post(&launch_path(app_id)).await
     }
 
     /// Resolves an application id from its display name.
@@ -379,5 +395,45 @@ mod tests {
             .await
             .expect("app lookup should succeed");
         assert_eq!(id, "12");
+    }
+
+    #[test]
+    fn os_15_capability_flags_are_parsed() {
+        let xml = r#"<device-info>
+            <vendor-name>Roku</vendor-name>
+            <supports-tv-power-control>true</supports-tv-power-control>
+            <supports-audio-volume-control>false</supports-audio-volume-control>
+        </device-info>"#;
+        let info = parse_device_info(xml).expect("parses");
+        assert_eq!(info.supports_tv_power_control, Some(true));
+        assert_eq!(info.supports_audio_volume_control, Some(false));
+
+        let without =
+            parse_device_info("<device-info><vendor-name>Roku</vendor-name></device-info>")
+                .expect("parses");
+        assert_eq!(
+            without.supports_tv_power_control, None,
+            "an old firmware simply omits the flag"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_forbidden_keypress_names_the_setting_to_enable() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/keypress/Home"))
+            .respond_with(ResponseTemplate::new(403))
+            .mount(&server)
+            .await;
+
+        let client = RokuClient::with_base_url(server.uri());
+        let error = client.send_keypress(RokuKey::Home).await.expect_err("403");
+
+        match error {
+            RokuError::NotPermitted { remedy } => {
+                assert!(remedy.contains("Control by mobile apps"), "{remedy}");
+            }
+            other => panic!("expected NotPermitted, got {other:?}"),
+        }
     }
 }
