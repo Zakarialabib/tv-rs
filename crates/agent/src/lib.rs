@@ -36,6 +36,10 @@
 pub mod audit;
 pub mod desired;
 pub mod healer;
+#[cfg(feature = "http")]
+pub mod http_provider;
+#[cfg(feature = "mqtt")]
+pub mod mqtt_provider;
 pub mod reconciler;
 pub mod runner;
 
@@ -44,5 +48,9 @@ pub use desired::{
     DesiredPower, DesiredState, DesiredStateProvider, ProviderError, StaticFileProvider,
 };
 pub use healer::{HealerAction, HealerLadder};
+#[cfg(feature = "http")]
+pub use http_provider::HttpPollProvider;
+#[cfg(feature = "mqtt")]
+pub use mqtt_provider::MqttSubscribeProvider;
 pub use reconciler::{decide, Decision};
 pub use runner::{Outcome, ReconcilePolicy, Reconciler};

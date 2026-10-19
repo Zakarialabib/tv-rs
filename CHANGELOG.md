@@ -14,6 +14,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Wake → Reconnect → Quarantine (and never retries a missing credential), and an
   append-only JSONL audit log. A 50-device mock fleet converges, quarantines the
   pathological devices, and never sends a power toggle it cannot verify.
+- **Two more desired-state providers.** `HttpPollProvider` (feature `http`) polls a
+  JSON manifest with a 5 s timeout and separates "transport failed" from "manifest
+  is wrong"; `MqttSubscribeProvider` (feature `mqtt`) subscribes to
+  `<prefix>/+/desired`, keeps the latest payload per device and treats a malformed
+  message as one bad publisher rather than a broken subscription. Both are off by
+  default so the agent's dependency graph stays small.
 - **Agent run loop.** `Reconciler::tick()` makes one pass over the fleet;
   `run(stop)` repeats it until told to stop. Per device: ask the provider, read the
   power state, decide, act, audit, and escalate through the healer. A quarantined
