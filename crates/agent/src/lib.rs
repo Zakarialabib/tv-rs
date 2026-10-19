@@ -37,6 +37,7 @@ pub mod audit;
 pub mod desired;
 pub mod healer;
 pub mod reconciler;
+pub mod runner;
 
 pub use audit::{AuditEntry, AuditLog};
 pub use desired::{
@@ -44,3 +45,4 @@ pub use desired::{
 };
 pub use healer::{HealerAction, HealerLadder};
 pub use reconciler::{decide, Decision};
+pub use runner::{Outcome, ReconcilePolicy, Reconciler};

@@ -16,7 +16,7 @@ What exists, what is deferred, and how it is tested. Measured on 2026-10-19 with
 | `tv-rs-webos` | done | 14 + 1 doc | SSAP session, pairing, `client-key` persistence, volume/mute/launch/power |
 | `tv-rs-roku` | done | 9 + 1 doc | ECP device-info, apps, keypress, launch, name→id resolution |
 | `tv-rs-media` | done | 17 + 6 + 2 doc | range parsing, `206`/`416` serving, HLS playlists |
-| `tv-rs-agent` | **new (Phase 4a)** | 19 + 3 fleet + 1 doc | desired-state provider seam, pure decision function, healing ladder, JSONL audit log |
+| `tv-rs-agent` | **new (Phase 4a)** | 23 + 3 fleet + 1 doc | desired-state provider seam, pure decision function, healing ladder, JSONL audit log, `tick()`/`run()` loop with quarantine |
 | `tv-rs-cli` | done (`publish = false`) | 14 + 1 doc | `discover`, `wake`, `power-off`, `key`, `launch` |
 | `tests/hardware_in_the_loop.rs` | opt-in | 7 (`--features hil`) | real devices, skipped when `TV_RS_HIL_*` is unset |
 | **Total (default features)** | | **121 + 15 doc** | 136 tests |

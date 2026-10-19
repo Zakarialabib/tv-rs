@@ -14,6 +14,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Wake → Reconnect → Quarantine (and never retries a missing credential), and an
   append-only JSONL audit log. A 50-device mock fleet converges, quarantines the
   pathological devices, and never sends a power toggle it cannot verify.
+- **Agent run loop.** `Reconciler::tick()` makes one pass over the fleet;
+  `run(stop)` repeats it until told to stop. Per device: ask the provider, read the
+  power state, decide, act, audit, and escalate through the healer. A quarantined
+  device is skipped on later passes, a failed audit write never stops convergence,
+  and one device failing does not abort the pass for the rest.
 - **Conformance suite** (`tv-rs-core`, feature `conformance`): every `DeviceHandle`
   must pass capability/accessor agreement, unsupported-routing and identity checks.
   The facade's three clients pass it; the mock does too, which is how the suite

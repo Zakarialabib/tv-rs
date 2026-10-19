@@ -123,13 +123,24 @@ mod tests {
     use super::*;
     use tv_rs_core::{DeviceId, DeviceOs};
 
+    fn unique_dir(prefix: &str) -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let tick = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_nanos())
+            .unwrap_or_default();
+        std::env::temp_dir().join(format!("{prefix}-{}-{nanos}-{tick}", std::process::id()))
+    }
+
     fn device() -> DeviceDescriptor {
         DeviceDescriptor::new(DeviceId::new("tv-1").unwrap(), DeviceOs::Roku, "10.0.0.5")
     }
 
     #[tokio::test]
     async fn a_file_provider_answers_per_device_and_returns_none_for_others() {
-        let dir = std::env::temp_dir().join(format!("tv-rs-agent-{}", std::process::id()));
+        let dir = unique_dir("tv-rs-agent");
         tokio::fs::create_dir_all(&dir).await.unwrap();
         let path = dir.join("desired.json");
         tokio::fs::write(
