@@ -46,7 +46,7 @@ roxmltree = "0.21"
 
 # --- transport ---
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.30", features = ["native-tls"] }
 native-tls = "0.2"
 url = "2"
 base64 = "0.23"
