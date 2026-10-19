@@ -14,6 +14,13 @@ pub const ECP_APPS_PATH: &str = "/query/apps";
 /// Path prefix for the keypress endpoint (`POST`), followed by the key name.
 pub const ECP_KEYPRESS_PATH_PREFIX: &str = "/keypress/";
 
+/// What the owner must enable when a Roku refuses ECP writes.
+///
+/// Roku OS 14.1 added a user-facing gate; without naming it, a 403 reads as a broken
+/// client rather than a setting to flip.
+pub const CONTROL_BY_MOBILE_APPS_REMEDY: &str =
+    "on the Roku: Settings -> System -> Advanced system settings -> Control by mobile apps -> Enabled";
+
 /// Path prefix for the application launch endpoint (`POST`), followed by the app id.
 pub const ECP_LAUNCH_PATH_PREFIX: &str = "/launch/";
 

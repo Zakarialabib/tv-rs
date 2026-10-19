@@ -108,6 +108,7 @@ crates/roku          Roku              (package `tv-rs-roku`)
 crates/transport     TLS + WS plumbing (package `tv-rs-transport`)
 crates/media         206 + HLS server  (package `tv-rs-media`)
 crates/cli           terminal front end (package `tv-rs-cli`, not published)
+crates/agent         fleet reconciliation (package `tv-rs-agent`)
 xtask                `cargo xtask publish`
 ```
 

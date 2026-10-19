@@ -22,6 +22,17 @@ pub enum RokuError {
     /// A requested resource (for example an application by name) was not found.
     #[error("not found: {0}")]
     NotFound(String),
+
+    /// The device refuses the command behind a setting its owner controls.
+    ///
+    /// Roku OS 14.1+ gates `keypress/*` and `launch/*` behind *Settings → System →
+    /// Advanced system settings → Control by mobile apps*. A 403 without this
+    /// explanation looks like a broken crate to everyone who hits it.
+    #[error("not permitted: {remedy}")]
+    NotPermitted {
+        /// What the owner has to enable.
+        remedy: String,
+    },
 }
 
 /// Convenience alias for `Result` values produced by this crate.

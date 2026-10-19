@@ -131,8 +131,8 @@ impl TvClient {
     /// [`TvVendor::Unknown`], since no protocol crate can drive it.
     pub fn from_discovered(tv: &DiscoveredTv) -> Result<Self> {
         match tv.vendor {
-            TvVendor::Samsung => Ok(Self::Tizen(TizenClient::new(tv.ip.clone()))),
-            TvVendor::Lg => Ok(Self::Webos(WebosClient::new(tv.ip.clone()))),
+            TvVendor::Samsung => Ok(Self::Tizen(TizenClient::new(tv.ip.clone()).with_wss())),
+            TvVendor::Lg => Ok(Self::Webos(WebosClient::new(tv.ip.clone()).with_wss())),
             TvVendor::Roku => Ok(Self::Roku(RokuClient::new(tv.ip.clone()))),
             TvVendor::Unknown => Err(TvError::UnsupportedVendor {
                 ip: tv.ip.clone(),
@@ -156,10 +156,14 @@ impl TvClient {
     pub fn from_discovered_with(tv: &DiscoveredTv, tls: TlsPolicy) -> Result<Self> {
         match tv.vendor {
             TvVendor::Samsung => Ok(Self::Tizen(
-                TizenClient::new(tv.ip.clone()).with_tls_policy(tls),
+                TizenClient::new(tv.ip.clone())
+                    .with_wss()
+                    .with_tls_policy(tls),
             )),
             TvVendor::Lg => Ok(Self::Webos(
-                WebosClient::new(tv.ip.clone()).with_tls_policy(tls),
+                WebosClient::new(tv.ip.clone())
+                    .with_wss()
+                    .with_tls_policy(tls),
             )),
             TvVendor::Roku => Ok(Self::Roku(RokuClient::new(tv.ip.clone()))),
             TvVendor::Unknown => Err(TvError::UnsupportedVendor {

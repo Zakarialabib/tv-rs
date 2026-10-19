@@ -1,0 +1,26 @@
+[package]
+name = "tv-rs-agent"
+description = "Reconciliation loop for fleets of televisions: desired state, healing ladder, quarantine and an audit log."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["smart-tv", "fleet", "reconciler", "signage", "automation"]
+categories = ["api-bindings", "hardware-support"]
+
+[dependencies]
+tv-rs-core.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "rt", "sync", "time"] }
+
+[dev-dependencies]
+tokio.workspace = true
+tv-rs-core = { workspace = true, features = ["mock-backend"] }
+futures = { workspace = true }
+
+[lints]
+workspace = true

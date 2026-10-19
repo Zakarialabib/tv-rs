@@ -374,6 +374,11 @@ fn to_core(error: &TvError, capability: Capability) -> CoreError {
         TvError::Roku(inner) => match inner {
             tv_rs_roku::RokuError::Unsupported(_) => CoreError::Unsupported(capability),
             tv_rs_roku::RokuError::Xml(detail) => protocol(detail.clone()),
+            tv_rs_roku::RokuError::NotPermitted { remedy } => {
+                CoreError::Auth(tv_rs_core::AuthError::NotPermitted {
+                    remedy: remedy.clone(),
+                })
+            }
             _ => unreachable(inner.to_string()),
         },
         _ => unreachable(error.to_string()),
@@ -585,6 +590,19 @@ mod tests {
         for client in [tizen(), webos(), roku()] {
             let violations = tv_rs_core::conformance::run(&client).await;
             assert!(violations.is_empty(), "{:?}", violations);
+        }
+    }
+
+    #[test]
+    fn a_roku_permission_failure_routes_to_reprovisioning() {
+        let error = TvError::Roku(tv_rs_roku::RokuError::NotPermitted {
+            remedy: "enable Control by mobile apps".to_string(),
+        });
+        match to_core(&error, Capability::Key) {
+            CoreError::Auth(tv_rs_core::AuthError::NotPermitted { remedy }) => {
+                assert!(remedy.contains("Control by mobile apps"), "{remedy}");
+            }
+            other => panic!("expected Auth(NotPermitted), got {other:?}"),
         }
     }
 }

@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`tv-rs-agent`**: the reconciliation layer. A `DesiredStateProvider` seam
+  (`StaticFileProvider` reads a JSON map), a pure `decide()` function that turns
+  desired + believed + capable into one action, a `HealerLadder` that escalates
+  Wake → Reconnect → Quarantine (and never retries a missing credential), and an
+  append-only JSONL audit log. A 50-device mock fleet converges, quarantines the
+  pathological devices, and never sends a power toggle it cannot verify.
 - **Conformance suite** (`tv-rs-core`, feature `conformance`): every `DeviceHandle`
   must pass capability/accessor agreement, unsupported-routing and identity checks.
   The facade's three clients pass it; the mock does too, which is how the suite
