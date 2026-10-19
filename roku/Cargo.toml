@@ -1,0 +1,25 @@
+[package]
+name = "tv-rs-roku"
+description = "Roku OS control over the unauthenticated External Control Protocol (ECP) REST API on port 8060."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["roku", "ecp", "smart-tv", "remote-control", "rest"]
+categories = ["api-bindings", "network-programming"]
+
+[dependencies]
+async-trait.workspace = true
+reqwest.workspace = true
+roxmltree.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+# Vocabulary only: no TLS connector, no WebSocket framing (default features off).
+tv-rs-transport.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+wiremock.workspace = true
