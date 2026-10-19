@@ -80,7 +80,9 @@ nothing pretends to work.
 ## Known limits worth knowing before shipping
 
 1. **No hardware in CI.** The `hil` suite is the only thing that touches a real
-   TV, and it is opt-in. Every published claim about a device behaviour comes from
+   TV, and it is opt-in. An SSDP `M-SEARCH` probe from the development host
+   (2026-10-19) returned 0 non-loopback responders, so the hardware pass is
+   still unrun — no claim below is device-verified. Every published claim about a device behaviour comes from
    the protocol documents plus the pure-function tests.
 2. **Two TLS backends, one selected.** A consumer that needs `native-tls` must
    enable it explicitly; enabling both is a compile error, by design.
