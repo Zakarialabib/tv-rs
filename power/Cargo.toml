@@ -1,0 +1,21 @@
+[package]
+name = "tv-rs-power"
+description = "Wake-on-LAN / Wake-on-Wireless-LAN magic packets and TV power-state probing."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["wake-on-lan", "wol", "wowlan", "magic-packet", "power"]
+categories = ["api-bindings", "network-programming"]
+
+[dependencies]
+async-trait.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+# Vocabulary only: no TLS connector, no WebSocket framing (default features off).
+tv-rs-transport.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
