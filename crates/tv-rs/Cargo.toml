@@ -33,5 +33,8 @@ tokio.workspace = true
 # TV_RS_HIL_* environment variables documented in tests/hardware_in_the_loop.rs.
 hil = []
 
+# Runs the shared device-model conformance suite against the facade's clients.
+conformance = ["tv-rs-core/conformance"]
+
 [lints]
 workspace = true

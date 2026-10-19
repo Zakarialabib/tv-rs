@@ -37,10 +37,14 @@
 
 pub mod capability;
 pub mod command;
+#[cfg(feature = "conformance")]
+pub mod conformance;
 pub mod descriptor;
 pub mod error;
 #[cfg(feature = "mock-backend")]
 pub mod mock;
+#[cfg(feature = "quirks")]
+pub mod quirks;
 pub mod state;
 
 pub use capability::{

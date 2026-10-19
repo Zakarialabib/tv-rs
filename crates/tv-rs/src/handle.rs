@@ -578,4 +578,13 @@ mod tests {
             TvError::UnsupportedOperation { vendor: "roku", .. }
         ));
     }
+
+    #[cfg(feature = "conformance")]
+    #[tokio::test]
+    async fn the_facade_passes_the_conformance_suite() {
+        for client in [tizen(), webos(), roku()] {
+            let violations = tv_rs_core::conformance::run(&client).await;
+            assert!(violations.is_empty(), "{:?}", violations);
+        }
+    }
 }

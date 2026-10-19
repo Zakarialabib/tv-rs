@@ -261,6 +261,11 @@ pub struct TizenClient {
     /// Which port actually answered, once one has. Shared across clones: every
     /// session for the same TV should stop re-probing.
     negotiated: Arc<Mutex<Option<u16>>>,
+    /// Shared HTTP client for the DIAL endpoints.
+    ///
+    /// A `reqwest::Client` owns a connection pool and a TLS configuration; building
+    /// one per launch throws both away and re-resolves DNS every time.
+    http: reqwest::Client,
 }
 
 impl std::fmt::Debug for TizenClient {
@@ -276,6 +281,7 @@ impl std::fmt::Debug for TizenClient {
             .field("tls", &self.tls)
             .field("device_name", &self.device_name)
             .field("token", &self.token.as_ref().map(|_| "<redacted>"))
+            .field("negotiated_port", &self.negotiated_port())
             .finish()
     }
 }
@@ -292,6 +298,11 @@ impl TizenClient {
             device_name: TIZEN_APP_ID.to_string(),
             token: None,
             negotiated: Arc::new(Mutex::new(None)),
+            http: reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(5))
+                .timeout(Duration::from_secs(10))
+                .build()
+                .unwrap_or_default(),
         }
     }
 
@@ -368,7 +379,8 @@ impl TizenClient {
     ) -> Result<TizenDialLaunchResponse> {
         let url = build_dial_launch_url(&self.host, self.dial_port, app_id)?;
         let body = payload.unwrap_or("").to_string();
-        let response = reqwest::Client::new()
+        let response = self
+            .http
             .post(url)
             .header(reqwest::header::CONTENT_TYPE, "text/plain;charset=UTF-8")
             .body(body)
@@ -388,11 +400,7 @@ impl TizenClient {
             "http://{}:{}{TIZEN_DIAL_DESC_PATH}",
             self.host, self.dial_port
         );
-        let response = reqwest::Client::new()
-            .get(url)
-            .send()
-            .await?
-            .error_for_status()?;
+        let response = self.http.get(url).send().await?.error_for_status()?;
         Ok(response.text().await?)
     }
 }
@@ -405,7 +413,11 @@ impl TizenClient {
 pub struct TizenSession {
     stream: WsStream,
     token: Option<String>,
-    frame_budget: usize,
+    /// Frames a single `recv_json` call may read before giving up.
+    ///
+    /// Per call, not per session: a session that reused one counter ran out after a
+    /// dozen reads and then reported a timeout for every later command.
+    frame_budget_per_read: usize,
     client: TizenClient,
 }
 
@@ -420,7 +432,7 @@ impl TizenSession {
         Ok(TizenSession {
             stream,
             token,
-            frame_budget: DEFAULT_FRAME_BUDGET,
+            frame_budget_per_read: DEFAULT_FRAME_BUDGET,
             client: client.clone(),
         })
     }
@@ -449,7 +461,10 @@ impl TizenSession {
     /// budget is exhausted without a text frame, and [`TizenError::Protocol`] on a
     /// non-text frame that is neither Ping, Pong, nor Close.
     pub async fn recv_json(&mut self) -> Result<Option<serde_json::Value>> {
-        let outcome = read_until(&mut self.stream, &mut self.frame_budget, |message| {
+        // A fresh budget per call: this guards one read against a chatty TV, it is
+        // not a lifetime quota for the session.
+        let mut budget = self.frame_budget_per_read;
+        let outcome = read_until(&mut self.stream, &mut budget, |message| {
             if message.is_text() {
                 return Ok(Some(serde_json::from_str::<serde_json::Value>(
                     &message.into_text()?,
