@@ -126,7 +126,7 @@ impl CertFingerprint {
             )));
         }
         let mut bytes = [0u8; 32];
-        for (index, chunk) in compact.as_bytes().chunks_exact(2).enumerate() {
+        for (index, chunk) in compact.as_bytes().as_chunks::<2>().0.iter().enumerate() {
             let pair = std::str::from_utf8(chunk)
                 .map_err(|_| TlsError::BadFingerprint("not utf-8".to_string()))?;
             bytes[index] = u8::from_str_radix(pair, 16)
