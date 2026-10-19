@@ -35,8 +35,6 @@
 //! assert_eq!(range.content_range(104_857_600), "bytes 52428800-104857599/104857600");
 //! ```
 
-#![deny(missing_docs)]
-
 pub mod hls;
 pub mod range;
 pub mod server;

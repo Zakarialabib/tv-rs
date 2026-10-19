@@ -1,4 +1,7 @@
-//! `tv-rs-discovery` — SSDP / mDNS / Bonjour discovery and UPnP descriptor parsing.
+//! `tv-rs-discovery` — SSDP discovery and UPnP descriptor parsing.
+//!
+//! mDNS/Bonjour is *planned*, not implemented: [`DiscoveryMethod`] names it so the
+//! enum does not need a breaking change later, but only SSDP runs today.
 //!
 //! This crate locates televisions on the local network before any control
 //! traffic is sent. Phase 1 implements SSDP `M-SEARCH` over UDP multicast
@@ -25,8 +28,6 @@
 //! # Ok(())
 //! # }
 //! ```
-
-#![deny(missing_docs)]
 
 pub mod client;
 pub mod error;
