@@ -321,6 +321,7 @@ Readable by a technician without a Rust toolchain. This is a product requirement
 | Phase | Deliverable | Exit criterion |
 |---|---|---|
 | **0. Audit** | [`01-reconciliation.md`](01-reconciliation.md): every current public item → keep / migrate / rename / remove | the map exists; no code changed |
+| **0b. Correctness slice** *(landed)* | port negotiation with caching, `open_url()`, pinning reachable from `from_discovered_with`, credential redaction in `Debug`, bounded connect/handshake timeouts | a client built from discovery reaches a modern panel without downgrading TLS |
 | **1. Core + mock** | `tv-rs-core` types, traits, taxonomy, mock backend **(landed)**; `TvClient` implements `DeviceHandle` **(landed)** | `cargo test -p tv-rs-core --features mock-backend` green; every transition in §4.4 exercised |
 | **2. Dual-protocol conformance** | Roku and webOS run the shared suite; mixed `Vec<Arc<dyn DeviceHandle>>` | conformance passes on mocks; no generic leaks into user types |
 | **3. Tizen isolation** | Tizen backend on the same suite; quirks loader | conformance passes against a mock simulating both port generations; no hardware needed |

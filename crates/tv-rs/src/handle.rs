@@ -516,4 +516,66 @@ mod tests {
             CoreError::Auth(tv_rs_core::AuthError::PairingRequired)
         ));
     }
+
+    #[test]
+    fn a_caller_supplied_policy_reaches_the_backend() {
+        use crate::types::DiscoveredTv;
+        use tv_rs_transport::{CertFingerprint, TlsPolicy};
+
+        let fingerprint = CertFingerprint::from_hex(&"ab".repeat(32)).expect("valid fingerprint");
+        let discovered = DiscoveredTv {
+            vendor: TvVendor::Lg,
+            ip: "10.0.0.9".to_string(),
+            location: None,
+            friendly_name: None,
+            manufacturer: None,
+            model_name: None,
+            serial_number: None,
+            usn: None,
+        };
+
+        let client = TvClient::from_discovered_with(&discovered, TlsPolicy::Pinned(fingerprint))
+            .expect("lg");
+        assert_eq!(
+            client.as_webos().expect("webos").tls_policy(),
+            TlsPolicy::Pinned(fingerprint)
+        );
+
+        let default = TvClient::from_discovered(&discovered).expect("lg");
+        assert_eq!(
+            default.as_webos().expect("webos").tls_policy(),
+            TlsPolicy::Strict,
+            "the default stays strict"
+        );
+
+        // Roku is plain HTTP on the LAN: the policy is accepted and ignored.
+        let roku = DiscoveredTv {
+            vendor: TvVendor::Roku,
+            ..discovered
+        };
+        assert!(TvClient::from_discovered_with(&roku, TlsPolicy::Pinned(fingerprint)).is_ok());
+    }
+
+    #[tokio::test]
+    async fn open_url_is_refused_where_there_is_no_browser() {
+        let tizen = tizen();
+        assert!(matches!(
+            tizen
+                .open_url("http://10.0.0.9:8080/player")
+                .await
+                .expect_err("no url launcher"),
+            TvError::UnsupportedOperation {
+                vendor: "samsung",
+                ..
+            }
+        ));
+
+        let roku = roku();
+        assert!(matches!(
+            roku.open_url("http://10.0.0.9:8080/player")
+                .await
+                .expect_err("no browser"),
+            TvError::UnsupportedOperation { vendor: "roku", .. }
+        ));
+    }
 }

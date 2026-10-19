@@ -1,33 +1,33 @@
-feat(facade): make TvClient a DeviceHandle with honest capabilities
+fix(transport): negotiate the port generation instead of assuming one
 
-Phase 1b. The enum stays — it is the right type for one TV with a known vendor —
-but it now also implements the erased traits, so a fleet can hold it as
-`Arc<dyn DeviceHandle>` and a caller can ask what the device can do before sending
-anything.
+Both vendor protocols changed ports once, and both clients hard-coded the old one:
+Samsung on `ws://:8001` (2016 era), LG on `ws://:3000` (pre-2023). On a current
+panel that is a dead connection, and the "crate does not work" reports follow.
 
-Capabilities are per vendor and deliberately incomplete:
+- Tizen tries 8002 → 8001, webOS tries 3001 → 3000, and each client remembers the
+  port that answered (`negotiated_port()`), so only the first session pays the probe
+  and clones share the answer.
+- The fallback is deliberately narrow: `tv_rs_transport::should_try_next_port()` only
+  treats *refused / timed out / no route* as "nothing there". A certificate mismatch
+  is an answer, not an invitation to retry in plaintext — pinning must never degrade
+  silently into no TLS.
+- Connection attempts are bounded at 5 s, and the Tizen handshake at 10 s. The frame
+  budget caught a silent device only after N frames arrived; a panel that accepts the
+  socket and says nothing used to hang the caller.
+- `TvClient::from_discovered_with(tv, TlsPolicy)` makes pinning reachable from the
+  facade. `from_discovered` keeps `Strict`, so nothing changes for existing callers.
+- `TvClient::open_url(url)`: webOS opens it in the built-in browser
+  (`ssap://system.launcher/open` — the missing `SsapUri` variant). Tizen returns
+  `UnsupportedOperation` because Samsung's URL-launcher is a B2B service that has not
+  been verified here, and Roku has no browser. A refusal beats launching an empty
+  browser.
+- `Debug` is now manual for `TizenClient` and `WebosClient`: the pairing token and
+  the `client-key` are bearer credentials and printed as `<redacted>`.
 
-| Vendor | power | wake | key | app | foreground | input | volume |
-|---|---|---|---|---|---|---|---|
-| Tizen | yes | no | yes | yes | no | no | no |
-| webOS | yes | no | no | yes | yes | no | yes |
-| Roku | yes | no | yes | yes | no | no | no |
+Verification: 4 new tests for the ladder (candidate order, remembered port,
+reconfiguration resets it) on both clients, 2 for redaction, 2 for the facade
+(policy plumbing, open_url refusals), 2 for `should_try_next_port`; workspace tests
+(24 binaries), clippy and rustdoc clean.
 
-- `wake` is absent everywhere: a discovered device does not carry its MAC yet, and
-  a wake without one would be a promise the crate cannot keep.
-- `key` is absent on webOS because SSAP has no remote-key endpoint.
-- `volume` is absent on Tizen and Roku because both expose relative keys only, so
-  `set_volume` cannot be honoured.
-
-Backend errors are converted into the routing taxonomy at the trait boundary, with
-the attempted capability supplied by the call site (the backends' "unsupported"
-variants do not carry it). Identity falls back to the host when discovery supplied
-no UDN, so a static-IP install still has a stable key.
-
-Two shape changes to `tv-rs-core` fall out of implementing it for real: `id()` and
-`descriptor()` return owned values, because a handle may be a thin wrapper over a
-protocol client that never stored either.
-
-Verification: 7 new facade tests (capability sets, accessor agreement, identity
-fallback, wake refusal, webOS key refusal, unsupported input, error routing) plus
-key-mapping tests; workspace suite, clippy and rustdoc clean.
+Still open from the same review: the shared `reqwest::Client` in the Tizen DIAL path
+and the Tizen frame-budget accounting.

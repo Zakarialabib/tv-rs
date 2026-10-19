@@ -38,11 +38,15 @@
 
 #[cfg(feature = "ws")]
 pub mod frame;
+#[cfg(feature = "ws")]
+pub mod retry;
 pub mod tls;
 pub mod unsupported;
 
 #[cfg(feature = "ws")]
 pub use frame::{read_until, ReadOutcome, WsStream};
+#[cfg(feature = "ws")]
+pub use retry::should_try_next_port;
 #[cfg(all(feature = "ws", feature = "rustls"))]
 pub use tls::{cert_sink, CertSink};
 #[cfg(feature = "ws")]

@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Transport negotiation.** Tizen and webOS now try both port generations
+  (`wss://:8002` → `ws://:8001`, `wss://:3001` → `ws://:3000`), remember the one
+  that answered per client, and only fall back when the connection was *refused* —
+  a certificate mismatch is an answer, not a reason to try plaintext. Connection
+  attempts are bounded at 5 s and the Tizen handshake at 10 s, so a panel that
+  accepts the socket and goes quiet no longer hangs a caller.
+- **`TvClient::open_url()`** — the signage primitive: webOS puts the URL in its
+  built-in browser (`ssap://system.launcher/open`). Tizen and Roku return
+  `UnsupportedOperation` rather than launching an empty browser.
+- **`TvClient::from_discovered_with(tv, TlsPolicy)`** — the function that makes
+  certificate pinning reachable from the facade; `from_discovered` keeps `Strict`.
 - **`tv-rs-core`: the device model.** Capability traits (`PowerControl`,
   `KeyInput`, `AppLaunch`, `InputSelect`, `VolumeControl`), the erased
   `DeviceHandle`, `CommandId` with its idempotency contract, confidence-tagged
@@ -50,6 +61,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a marker that always reports "no credentials" was noise.
 
 ### Fixed
+
+- **`Debug` no longer prints credentials.** `TizenClient`'s pairing token and
+  `WebosClient`'s `client-key` are redacted: both are bearer credentials, and a log
+  line containing one hands over the screen.
 
 - The facade's `keywords` contained path-like entries with slashes, which
   crates.io rejects.

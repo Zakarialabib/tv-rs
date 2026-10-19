@@ -8,6 +8,9 @@
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use futures_util::SinkExt;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
 use tokio_tungstenite::connect_async_tls_with_config;
 use tokio_tungstenite::tungstenite::Message;
 use tv_rs_transport::{read_until, ReadOutcome, TlsPolicy, WsStream};
@@ -117,6 +120,43 @@ pub fn build_dial_launch_url(host: &str, dial_port: u16, app_id: &str) -> Result
     Ok(url)
 }
 
+/// How long one connection attempt may take before it counts as "not listening".
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// How long the `ms.channel.connect` handshake may take once connected.
+///
+/// The frame reader has a budget in frames; a 2024 panel that accepts the socket and
+/// then says nothing would otherwise hang the caller forever.
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+
+impl TizenClient {
+    /// The ports to try, most likely first.
+    ///
+    /// Once a port has answered, only that port is tried: re-probing costs two
+    /// dead connections per command on a TV that already told us which one it uses.
+    fn port_candidates(&self) -> Vec<u16> {
+        if let Some(port) = *self.negotiated.lock().expect("negotiated lock") {
+            return vec![port];
+        }
+        let other = if self.port == TIZEN_WSS_PORT {
+            TIZEN_WS_PORT
+        } else {
+            TIZEN_WSS_PORT
+        };
+        vec![self.port, other]
+    }
+
+    fn remember_port(&self, port: u16) {
+        *self.negotiated.lock().expect("negotiated lock") = Some(port);
+    }
+
+    /// The port that last answered, if any.
+    #[must_use]
+    pub fn negotiated_port(&self) -> Option<u16> {
+        *self.negotiated.lock().expect("negotiated lock")
+    }
+}
+
 /// Opens a remote channel and performs the `ms.channel.connect` handshake.
 ///
 /// Returns the live stream and the captured pairing token (`None` when the TV
@@ -125,22 +165,54 @@ pub(crate) async fn open_channel(
     client: &TizenClient,
     token: Option<&str>,
 ) -> Result<(WsStream, Option<String>)> {
-    let use_tls = client.port == TIZEN_WSS_PORT;
-    let url = build_ws_url(&client.host, client.port, use_tls, &client.device_name)?;
-    let connector = tv_rs_transport::connector(client.tls.clone(), use_tls)
-        .map_err(|err| TizenError::Tls(err.to_string()))?;
+    let mut last_error: Option<TizenError> = None;
 
-    let (mut stream, _response) =
-        connect_async_tls_with_config(url.as_str(), None, false, Some(connector))
-            .await
-            .map_err(TizenError::Ws)?;
+    for port in client.port_candidates() {
+        let use_tls = port == TIZEN_WSS_PORT;
+        let url = build_ws_url(&client.host, port, use_tls, &client.device_name)?;
+        let connector = tv_rs_transport::connector(client.tls.clone(), use_tls)
+            .map_err(|err| TizenError::Tls(err.to_string()))?;
 
-    let payload = build_channel_connect_payload(token, &client.device_name);
-    let text = serde_json::to_string(&payload)?;
-    stream.send(Message::text(text)).await?;
+        let attempt = tokio::time::timeout(
+            CONNECT_TIMEOUT,
+            connect_async_tls_with_config(url.as_str(), None, false, Some(connector)),
+        )
+        .await;
 
-    let captured = await_handshake_reply(&mut stream, DEFAULT_FRAME_BUDGET).await?;
-    Ok((stream, captured))
+        let mut stream = match attempt {
+            Ok(Ok((stream, _response))) => {
+                client.remember_port(port);
+                stream
+            }
+            // Nothing answered on this port: the other generation is worth a try.
+            Ok(Err(error)) if tv_rs_transport::should_try_next_port(&error) => {
+                last_error = Some(TizenError::Ws(error));
+                continue;
+            }
+            // An answer we do not like (certificate, protocol) is not a port problem.
+            Ok(Err(error)) => return Err(TizenError::Ws(error)),
+            Err(_elapsed) => {
+                last_error = Some(TizenError::Timeout);
+                continue;
+            }
+        };
+
+        let payload = build_channel_connect_payload(token, &client.device_name);
+        let text = serde_json::to_string(&payload)?;
+        stream.send(Message::text(text)).await?;
+
+        let handshake = tokio::time::timeout(
+            HANDSHAKE_TIMEOUT,
+            await_handshake_reply(&mut stream, DEFAULT_FRAME_BUDGET),
+        )
+        .await;
+        return match handshake {
+            Ok(captured) => Ok((stream, captured?)),
+            Err(_elapsed) => Err(TizenError::Timeout),
+        };
+    }
+
+    Err(last_error.unwrap_or(TizenError::Timeout))
 }
 
 /// Reads frames until the connect or unauthorized event arrives, or the budget runs out.
@@ -178,7 +250,7 @@ async fn await_handshake_reply(
 ///
 /// Holds the connection target plus the pairing state, and exposes the DIAL HTTP
 /// endpoints. Use the `with_*` builder methods to customise it.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TizenClient {
     host: String,
     port: u16,
@@ -186,6 +258,26 @@ pub struct TizenClient {
     tls: TlsPolicy,
     device_name: String,
     token: Option<String>,
+    /// Which port actually answered, once one has. Shared across clones: every
+    /// session for the same TV should stop re-probing.
+    negotiated: Arc<Mutex<Option<u16>>>,
+}
+
+impl std::fmt::Debug for TizenClient {
+    /// Renders the client without its pairing token.
+    ///
+    /// The token is a bearer credential: anyone who reads a log line containing it
+    /// can drive the TV until the owner forgets the device on-screen.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TizenClient")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("dial_port", &self.dial_port)
+            .field("tls", &self.tls)
+            .field("device_name", &self.device_name)
+            .field("token", &self.token.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
 }
 
 impl TizenClient {
@@ -199,18 +291,21 @@ impl TizenClient {
             tls: TlsPolicy::default(),
             device_name: TIZEN_APP_ID.to_string(),
             token: None,
+            negotiated: Arc::new(Mutex::new(None)),
         }
     }
 
     /// Sets the WebSocket remote-channel port.
     pub fn with_port(mut self, port: u16) -> Self {
         self.port = port;
+        *self.negotiated.lock().expect("negotiated lock") = None;
         self
     }
 
     /// Switches to the modern TLS remote channel on [`TIZEN_WSS_PORT`].
     pub fn with_wss(mut self) -> Self {
         self.port = TIZEN_WSS_PORT;
+        *self.negotiated.lock().expect("negotiated lock") = None;
         self
     }
 
@@ -506,5 +601,44 @@ mod tests {
             .await
             .expect("mock launch should succeed");
         assert_eq!(response.raw, "");
+    }
+
+    #[test]
+    fn the_ladder_tries_the_other_port_and_then_remembers_the_one_that_worked() {
+        let legacy = TizenClient::new("192.168.1.10");
+        assert_eq!(
+            legacy.port_candidates(),
+            vec![TIZEN_WS_PORT, TIZEN_WSS_PORT]
+        );
+
+        let modern = TizenClient::new("192.168.1.10").with_wss();
+        assert_eq!(
+            modern.port_candidates(),
+            vec![TIZEN_WSS_PORT, TIZEN_WS_PORT]
+        );
+
+        modern.remember_port(TIZEN_WS_PORT);
+        assert_eq!(
+            modern.port_candidates(),
+            vec![TIZEN_WS_PORT],
+            "a remembered port is not re-probed"
+        );
+        assert_eq!(modern.negotiated_port(), Some(TIZEN_WS_PORT));
+
+        let reset = modern.clone();
+        let reset = reset.with_port(TIZEN_WSS_PORT);
+        assert_eq!(
+            reset.negotiated_port(),
+            None,
+            "reconfiguration forgets the port"
+        );
+    }
+
+    #[test]
+    fn the_pairing_token_is_not_printable() {
+        let client = TizenClient::new("192.168.1.10").with_token("s3cr3t-token-value");
+        let rendered = format!("{client:?}");
+        assert!(!rendered.contains("s3cr3t"), "{rendered}");
+        assert!(rendered.contains("<redacted>"), "{rendered}");
     }
 }

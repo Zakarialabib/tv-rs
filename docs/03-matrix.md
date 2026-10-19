@@ -46,8 +46,10 @@ colon/dash/bare-hex, TCP probe → `On`/`Standby`/`Off`/`Unknown`. WoWLAN wake
 reasons are not modelled.
 
 **Transport.** Two mutually exclusive TLS backends (`rustls` default,
-`native-tls` opt-in) enforced by `compile_error!`; one definition of the
-accept-invalid escape hatch; the bounded frame reader both vendor crates use.
+`native-tls` opt-in) enforced by `compile_error!`; certificate pinning
+(`Pinned` / `TrustOnFirstUse`); the bounded frame reader both vendor crates use;
+and `should_try_next_port()`, the rule that lets a client try the other port
+generation when — and only when — nothing answered.
 
 **Tizen.** 8001/8002 channel with token capture; DIAL launch; 22-key enum;
 `SamsungTokenStore` (quarantine + no-clobber upsert); `TizenConnectionPool` (one
@@ -55,7 +57,8 @@ channel per TV, one reopen on a dead socket); `discover_samsung()` via the
 Samsung-specific search target; `resolve_app_id()` presets.
 
 **webOS.** Registration + pairing, `client-key` save/load, `SsapUri` enum,
-volume/mute/launch/power/foreground. Richer URI coverage is additive work.
+volume/mute/launch/power/foreground/**open_url**, port ladder 3001 → 3000 with the
+negotiated port cached. Input switching is additive work.
 
 **Roku.** Device-info/apps/keypress/launch with pure XML parsers; `query_app_id`
 resolves a name to an id; `<power-mode>` is parsed into `RokuPowerMode`

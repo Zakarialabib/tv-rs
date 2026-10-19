@@ -1814,6 +1814,7 @@ dependencies = [
  "tv-rs-power",
  "tv-rs-roku",
  "tv-rs-tizen",
+ "tv-rs-transport",
  "tv-rs-webos",
 ]
 
