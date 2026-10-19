@@ -27,8 +27,6 @@
 //! assert_eq!(TvVendor::Samsung.control_port(), Some(8001));
 //! ```
 
-#![deny(missing_docs)]
-
 pub mod cli;
 pub mod commands;
 pub mod error;

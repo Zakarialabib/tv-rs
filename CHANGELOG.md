@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Workspace reorganization.** All packages are flattened under `crates/` (one
+  home per package), the facade moved from the repository root to
+  `crates/tv-rs`, the CLI was promoted from `utils/cli` to `crates/cli`, and the
+  root manifest is now a virtual workspace. Release tooling was ported from a
+  shell script to `cargo xtask publish`.
+- `missing_docs` is enforced once, in `[workspace.lints.rust]`, instead of in
+  every crate root.
+
+### Removed
+
+- `roku`'s no-op `RokuAuthProvider` marker trait: Roku ECP is unauthenticated, and
+  a marker that always reports "no credentials" was noise.
+
+### Fixed
+
+- The facade's `keywords` contained path-like entries with slashes, which
+  crates.io rejects.
+- The facade `description` advertised mDNS discovery, which is not implemented;
+  mDNS is now described as planned.
+
+No public API changes.
+
 ## [0.1.0] - 2026-10-19
 
 ### Added

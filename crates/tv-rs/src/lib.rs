@@ -39,7 +39,6 @@
 //! raw frames — is reached through the re-exported protocol crates or the typed
 //! accessors on [`TvClient`].
 
-#![deny(missing_docs)]
 // The aggregated error embeds the protocol crates' error enums, which are
 // large by construction. Boxing them would break the #[from] conversions the
 // facade relies on, and error paths are cold.
@@ -53,7 +52,7 @@ pub use client::{discover, discover_with, identify_vendor, TvClient};
 pub use error::{Result, TvError};
 pub use types::{DiscoveredTv, TvVendor};
 
-/// SSDP / mDNS / UPnP discovery: [`discovery::SsdpScanner`].
+/// SSDP discovery and UPnP descriptor parsing: [`discovery::SsdpScanner`] (mDNS is planned).
 pub use tv_rs_discovery as discovery;
 /// Wake-on-LAN and power-state probing: [`power::WolSender`].
 pub use tv_rs_power as power;

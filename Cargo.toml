@@ -1,17 +1,6 @@
-[package]
-name = "tv-rs"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-license.workspace = true
-repository.workspace = true
-description = "Cross-platform TV control and communications: SSDP/mDNS discovery, Wake-on-LAN, Samsung Tizen, LG webOS and Roku ECP, behind one facade."
-keywords = ["tv", "crates/tizen", "crates/webos", "crates/roku", "upnp", "wake-on-lan"]
-categories = ["api-bindings", "network-programming", "multimedia"]
-
 [workspace]
 resolver = "2"
-members = ["core/*", "crates/*", "utils/cli"]
+members = ["crates/*", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -22,8 +11,8 @@ repository = "https://github.com/Zakarialabib/tv-rs"
 
 [workspace.dependencies]
 # --- protocol crates (path + version: `path` is stripped at publish time) ---
-tv-rs-discovery = { path = "core/discovery", version = "0.1.0" }
-tv-rs-power = { path = "core/power", version = "0.1.0" }
+tv-rs-discovery = { path = "crates/discovery", version = "0.1.0" }
+tv-rs-power = { path = "crates/power", version = "0.1.0" }
 tv-rs-roku = { path = "crates/roku", version = "0.1.0" }
 tv-rs-tizen = { path = "crates/tizen", version = "0.1.0" }
 tv-rs-webos = { path = "crates/webos", version = "0.1.0" }
@@ -32,7 +21,9 @@ tv-rs-webos = { path = "crates/webos", version = "0.1.0" }
 # `default-features = false` keeps a TLS stack out of the crates that only need
 # the `Unsupported` error vocabulary; `tizen`/`webos` opt back into the
 # connector and frame reader with `features = ["ws"]`.
-tv-rs-transport = { path = "core/transport", version = "0.1.0", default-features = false }
+tv-rs-transport = { path = "crates/transport", version = "0.1.0", default-features = false }
+# Media server (206 + HLS). Published last: nothing in the workspace depends on it.
+tv-rs-media = { path = "crates/media", version = "0.1.0" }
 
 # --- runtime / async ---
 tokio = { version = "1", features = ["net", "time", "io-util", "fs", "macros", "rt-multi-thread", "sync"] }
@@ -61,30 +52,16 @@ anyhow = "1"
 tracing = "0.1"
 clap = { version = "4", features = ["derive"] }
 
+# --- media server ---
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "query"] }
+tokio-util = { version = "0.7", features = ["io"] }
+bytes = "1"
+
 # --- dev ---
 wiremock = "0.6"
 
-[dependencies]
-# Facade re-exports the protocol crates; it holds no protocol logic of its own.
-tv-rs-discovery.workspace = true
-tv-rs-power.workspace = true
-tv-rs-tizen.workspace = true
-tv-rs-webos.workspace = true
-tv-rs-roku.workspace = true
-
-async-trait.workspace = true
-serde.workspace = true
-thiserror.workspace = true
-tokio.workspace = true
-
-[dev-dependencies]
-tokio.workspace = true
-
-[features]
-# Hardware-in-the-loop tests. Off by default so `cargo test` never touches a
-# physical television. Enable with `cargo test --features hil` and set the
-# TV_RS_HIL_* environment variables documented in tests/hardware_in_the_loop.rs.
-hil = []
+[workspace.lints.rust]
+missing_docs = "deny"
 
 [profile.dev]
 opt-level = 0

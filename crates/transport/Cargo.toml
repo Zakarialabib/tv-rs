@@ -37,3 +37,6 @@ rustls-native-certs = { workspace = true, optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, optional = true }
 tokio-tungstenite = { workspace = true, optional = true }
+
+[lints]
+workspace = true

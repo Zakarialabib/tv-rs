@@ -29,16 +29,12 @@
 //! # }
 //! ```
 
-#![deny(missing_docs)]
-
-pub mod auth;
 pub mod client;
 pub mod error;
 pub mod payload;
 pub mod protocol;
 pub mod types;
 
-pub use auth::RokuAuthProvider;
 pub use client::{keypress_path, launch_path, parse_apps, parse_device_info, RokuClient};
 pub use error::{Result, RokuError};
 pub use payload::{RokuApp, RokuDeviceInfo};

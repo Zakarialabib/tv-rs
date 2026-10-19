@@ -28,7 +28,6 @@
 // construction. Boxing it would break the #[from] conversions callers rely on,
 // and these are cold paths where the extra size costs nothing measurable.
 #![allow(clippy::result_large_err)]
-#![deny(missing_docs)]
 
 pub mod apps;
 pub mod auth;

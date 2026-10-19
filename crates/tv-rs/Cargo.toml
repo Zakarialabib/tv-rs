@@ -1,0 +1,35 @@
+[package]
+name = "tv-rs"
+description = "Cross-platform TV control and communications: SSDP discovery, Wake-on-LAN, Samsung Tizen, LG webOS and Roku ECP, behind one facade."
+keywords = ["tv", "ssdp", "upnp", "wake-on-lan", "smart-tv"]
+categories = ["api-bindings", "network-programming", "multimedia"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Facade re-exports the protocol crates; it holds no protocol logic of its own.
+tv-rs-discovery.workspace = true
+tv-rs-power.workspace = true
+tv-rs-tizen.workspace = true
+tv-rs-webos.workspace = true
+tv-rs-roku.workspace = true
+
+async-trait.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[features]
+# Hardware-in-the-loop tests. Off by default so `cargo test` never touches a
+# physical television. Enable with `cargo test --features hil` and set the
+# TV_RS_HIL_* environment variables documented in tests/hardware_in_the_loop.rs.
+hil = []
+
+[lints]
+workspace = true
