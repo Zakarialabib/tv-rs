@@ -1,6 +1,6 @@
 //! Request payloads emitted by the power protocols.
 
-use crate::types::{MacAddress, MAGIC_PACKET_LEN, MAC_ADDRESS_LEN};
+use crate::types::{MacAddress, MAC_ADDRESS_LEN, MAGIC_PACKET_LEN};
 
 /// Number of leading `0xFF` synchronisation bytes in a magic packet.
 const SYNC_PREFIX_LEN: usize = 6;

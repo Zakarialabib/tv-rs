@@ -58,7 +58,9 @@ impl WolSender {
         let socket = UdpSocket::bind("0.0.0.0:0").await?;
         socket.set_broadcast(true)?;
         let packet = build_magic_packet(mac);
-        socket.send_to(packet.as_bytes(), self.broadcast_addr).await?;
+        socket
+            .send_to(packet.as_bytes(), self.broadcast_addr)
+            .await?;
         Ok(())
     }
 }
@@ -88,9 +90,7 @@ pub async fn poll_power_state(addr: &str) -> Result<PowerState> {
 
     match timeout(POWER_PROBE_TIMEOUT, TcpStream::connect(target)).await {
         Ok(Ok(_stream)) => Ok(PowerState::On),
-        Ok(Err(error)) if error.kind() == ErrorKind::ConnectionRefused => {
-            Ok(PowerState::Standby)
-        }
+        Ok(Err(error)) if error.kind() == ErrorKind::ConnectionRefused => Ok(PowerState::Standby),
         Ok(Err(_other)) => Ok(PowerState::Unknown),
         Err(_elapsed) => Ok(PowerState::Off),
     }

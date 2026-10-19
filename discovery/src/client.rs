@@ -185,11 +185,7 @@ impl SsdpScanner {
                     let raw = String::from_utf8_lossy(&buffer[..len]);
                     let response = parse_msearch_response(&raw, &peer.ip().to_string())?;
 
-                    if let Some(key) = response
-                        .usn
-                        .clone()
-                        .or_else(|| response.location.clone())
-                    {
+                    if let Some(key) = response.usn.clone().or_else(|| response.location.clone()) {
                         if seen.contains(&key) {
                             continue;
                         }
@@ -326,7 +322,10 @@ mod tests {
             response.location.as_deref(),
             Some("http://192.168.1.20:1900/desc.xml")
         );
-        assert_eq!(response.server.as_deref(), Some("WebOS/1.0 UPnP/1.0 LG Electronics"));
+        assert_eq!(
+            response.server.as_deref(),
+            Some("WebOS/1.0 UPnP/1.0 LG Electronics")
+        );
         assert_eq!(response.st.as_deref(), Some("upnp:rootdevice"));
         assert_eq!(response.cache_control.as_deref(), Some("max-age=1800"));
         assert_eq!(response.source, "192.168.1.20");
@@ -336,8 +335,14 @@ mod tests {
     fn parse_device_descriptor_reads_all_fields() {
         let descriptor = parse_device_descriptor(DESCRIPTOR_XML).unwrap();
 
-        assert_eq!(descriptor.friendly_name.as_deref(), Some("[TV] Living Room TV"));
-        assert_eq!(descriptor.manufacturer.as_deref(), Some("Samsung Electronics"));
+        assert_eq!(
+            descriptor.friendly_name.as_deref(),
+            Some("[TV] Living Room TV")
+        );
+        assert_eq!(
+            descriptor.manufacturer.as_deref(),
+            Some("Samsung Electronics")
+        );
         assert_eq!(descriptor.model_name.as_deref(), Some("UE55TU8000"));
         assert_eq!(descriptor.model_number.as_deref(), Some("UE55TU8000XXC"));
         assert_eq!(

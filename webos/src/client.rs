@@ -5,8 +5,8 @@ use std::path::Path;
 use futures_util::SinkExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::connect_async_tls_with_config;
+use tokio_tungstenite::tungstenite::Message;
 use tv_rs_transport::{read_until, ReadOutcome, TlsPolicy, WsStream};
 
 use crate::error::{Result, WebosError};
@@ -85,7 +85,9 @@ pub async fn save_client_key(path: impl AsRef<Path>, client_key: &str) -> Result
 /// Loads a persisted `client-key`, returning `Ok(None)` when the file is absent.
 pub async fn load_client_key(path: impl AsRef<Path>) -> Result<Option<String>> {
     match tokio::fs::read_to_string(path).await {
-        Ok(raw) => Ok(Some(serde_json::from_str::<SsapClientKeyFile>(&raw)?.client_key)),
+        Ok(raw) => Ok(Some(
+            serde_json::from_str::<SsapClientKeyFile>(&raw)?.client_key,
+        )),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error.into()),
     }
@@ -288,8 +290,9 @@ impl WebosClient {
 
     /// Builds the transport connector honouring the configured [`TlsPolicy`].
     fn connector(&self) -> Result<tokio_tungstenite::Connector> {
-        tv_rs_transport::connector(self.tls, self.port == WEBOS_WSS_PORT)
-            .map_err(|error| WebosError::Protocol(format!("failed to build TLS connector: {error}")))
+        tv_rs_transport::connector(self.tls, self.port == WEBOS_WSS_PORT).map_err(|error| {
+            WebosError::Protocol(format!("failed to build TLS connector: {error}"))
+        })
     }
 }
 
@@ -449,7 +452,10 @@ mod tests {
         assert_eq!(value["type"], "register");
         assert_eq!(value["payload"]["pairingType"], "PROMPT");
         assert_eq!(value["payload"]["manifest"]["manifestVersion"], 1);
-        assert_eq!(value["payload"]["manifest"]["signed"], serde_json::Value::Null);
+        assert_eq!(
+            value["payload"]["manifest"]["signed"],
+            serde_json::Value::Null
+        );
         let permissions = value["payload"]["manifest"]["permissions"]
             .as_array()
             .expect("permissions array");
@@ -467,10 +473,9 @@ mod tests {
 
     #[test]
     fn parse_register_response_error_has_no_client_key() {
-        let response = parse_register_response(
-            r#"{"type":"error","error":{"code":401,"message":"denied"}}"#,
-        )
-        .expect("valid register error");
+        let response =
+            parse_register_response(r#"{"type":"error","error":{"code":401,"message":"denied"}}"#)
+                .expect("valid register error");
         assert_eq!(response.kind.as_deref(), Some("error"));
         assert_eq!(extract_client_key(&response), None);
     }
@@ -503,15 +508,19 @@ mod tests {
             r#"{"id":"3","type":"response","payload":{"volume":15,"muted":false}}"#,
         )
         .expect("valid response");
-        assert_eq!(response.payload, Some(json!({ "volume": 15, "muted": false })));
+        assert_eq!(
+            response.payload,
+            Some(json!({ "volume": 15, "muted": false }))
+        );
         assert!(response.error.is_none());
     }
 
     #[test]
     fn parse_ssap_response_reads_error() {
-        let response =
-            parse_ssap_response(r#"{"id":"4","type":"error","error":{"code":500,"message":"boom"}}"#)
-                .expect("valid error response");
+        let response = parse_ssap_response(
+            r#"{"id":"4","type":"error","error":{"code":500,"message":"boom"}}"#,
+        )
+        .expect("valid error response");
         let error = response.error.expect("error body present");
         assert_eq!(error.code, 500);
         assert_eq!(error.message, "boom");

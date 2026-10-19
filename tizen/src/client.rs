@@ -8,8 +8,8 @@
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use futures_util::SinkExt;
-use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::connect_async_tls_with_config;
+use tokio_tungstenite::tungstenite::Message;
 use tv_rs_transport::{read_until, ReadOutcome, TlsPolicy, WsStream};
 use url::Url;
 
@@ -21,7 +21,7 @@ use crate::payload::{
 };
 use crate::types::{
     TizenRemoteKey, TIZEN_APP_ID, TIZEN_CMD_CLICK, TIZEN_DIAL_DESC_PATH, TIZEN_DIAL_LAUNCH_PREFIX,
-    TIZEN_DIAL_PORT, TIZEN_REMOTE_TYPE, TIZEN_REMOTE_WS_PATH, TIZEN_WS_PORT, TIZEN_WSS_PORT,
+    TIZEN_DIAL_PORT, TIZEN_REMOTE_TYPE, TIZEN_REMOTE_WS_PATH, TIZEN_WSS_PORT, TIZEN_WS_PORT,
 };
 
 /// Default number of inbound frames inspected while awaiting a handshake reply or
@@ -356,7 +356,9 @@ impl TizenSession {
     pub async fn recv_json(&mut self) -> Result<Option<serde_json::Value>> {
         let outcome = read_until(&mut self.stream, &mut self.frame_budget, |message| {
             if message.is_text() {
-                return Ok(Some(serde_json::from_str::<serde_json::Value>(&message.into_text()?)?));
+                return Ok(Some(serde_json::from_str::<serde_json::Value>(
+                    &message.into_text()?,
+                )?));
             }
             if message.is_ping() || message.is_pong() {
                 return Ok(None);
@@ -405,7 +407,8 @@ mod tests {
         let plain = build_ws_url("192.168.1.10", TIZEN_WS_PORT, false, "tv-rs")
             .expect("plain ws url should build");
         assert!(
-            plain.starts_with("ws://192.168.1.10:8001/api/v2/channels/samsung.remote.control?name="),
+            plain
+                .starts_with("ws://192.168.1.10:8001/api/v2/channels/samsung.remote.control?name="),
             "unexpected plain url: {plain}"
         );
 

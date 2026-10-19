@@ -13,8 +13,11 @@ use crate::types::SsapUri;
 #[async_trait]
 pub trait SsapController: Send + Sync {
     /// Sends `uri` with an optional payload and returns the response payload.
-    async fn request(&mut self, uri: SsapUri, payload: Option<serde_json::Value>)
-        -> Result<serde_json::Value>;
+    async fn request(
+        &mut self,
+        uri: SsapUri,
+        payload: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value>;
 
     /// Launches an installed application by id.
     async fn launch_app(&mut self, app_id: &str) -> Result<()>;

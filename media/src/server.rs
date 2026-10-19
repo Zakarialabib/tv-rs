@@ -250,6 +250,9 @@ mod tests {
             content_type_for(Path::new("a.m3u8")),
             "application/vnd.apple.mpegurl"
         );
-        assert_eq!(content_type_for(Path::new("a.bin")), "application/octet-stream");
+        assert_eq!(
+            content_type_for(Path::new("a.bin")),
+            "application/octet-stream"
+        );
     }
 }

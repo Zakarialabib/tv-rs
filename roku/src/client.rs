@@ -265,7 +265,10 @@ mod tests {
     fn parse_device_info_returns_xml_error_on_malformed_input() {
         let err = parse_device_info("<device-info><vendor-name>Roku</device-info>")
             .expect_err("mismatched tags must not parse");
-        assert!(matches!(err, RokuError::Xml(_)), "expected Xml error, got {err:?}");
+        assert!(
+            matches!(err, RokuError::Xml(_)),
+            "expected Xml error, got {err:?}"
+        );
     }
 
     #[test]

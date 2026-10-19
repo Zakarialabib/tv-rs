@@ -108,7 +108,9 @@ async fn run_key(args: KeyArgs) -> Result<(), CliError> {
             })?;
 
             let client = TizenClient::new(args.ip.as_str());
-            let mut session = TizenSession::connect(&client).await.map_err(TvError::from)?;
+            let mut session = TizenSession::connect(&client)
+                .await
+                .map_err(TvError::from)?;
             session.send_key(key).await.map_err(TvError::from)?;
 
             println!("Sent the samsung key '{}' to {}.", args.key, args.ip);

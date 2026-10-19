@@ -183,7 +183,10 @@ mod tests {
 
     #[test]
     fn start_beyond_the_end_is_unsatisfiable() {
-        assert_eq!(parse_range("bytes=1000-", LEN), Err(RangeError::Unsatisfiable));
+        assert_eq!(
+            parse_range("bytes=1000-", LEN),
+            Err(RangeError::Unsatisfiable)
+        );
         assert_eq!(
             parse_range("bytes=2000-3000", LEN),
             Err(RangeError::Unsatisfiable)
@@ -198,7 +201,14 @@ mod tests {
 
     #[test]
     fn malformed_headers_are_rejected() {
-        for header in ["items=0-", "bytes=", "bytes=-", "bytes=a-b", "bytes=10-1", "bytes=0-1,3-4"] {
+        for header in [
+            "items=0-",
+            "bytes=",
+            "bytes=-",
+            "bytes=a-b",
+            "bytes=10-1",
+            "bytes=0-1,3-4",
+        ] {
             assert!(
                 matches!(parse_range(header, LEN), Err(RangeError::Malformed(_))),
                 "{header} should be malformed"

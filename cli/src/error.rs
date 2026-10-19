@@ -34,7 +34,9 @@ pub enum CliError {
     },
 
     /// The broadcast address argument was not a valid `IP:PORT` pair.
-    #[error("invalid broadcast address '{input}': expected an IP:PORT pair such as 192.168.1.255:9")]
+    #[error(
+        "invalid broadcast address '{input}': expected an IP:PORT pair such as 192.168.1.255:9"
+    )]
     BroadcastAddress {
         /// The raw argument the user supplied.
         input: String,

@@ -90,11 +90,14 @@ async fn range_request_returns_206_with_content_range() {
     std::fs::write(dir.join("clip.mp4"), &payload).expect("write media");
 
     let addr = spawn_server(MediaServerConfig::new(&dir)).await;
-    let (status, headers, body) = request(addr, "GET /media/clip.mp4", "Range: bytes=100-199\r\n").await;
+    let (status, headers, body) =
+        request(addr, "GET /media/clip.mp4", "Range: bytes=100-199\r\n").await;
 
     assert!(status.contains("206"), "unexpected status line: {status}");
     assert!(
-        headers.to_lowercase().contains("content-range: bytes 100-199/1000"),
+        headers
+            .to_lowercase()
+            .contains("content-range: bytes 100-199/1000"),
         "missing or wrong Content-Range: {headers}"
     );
     assert_eq!(body.len(), 100);
@@ -110,7 +113,8 @@ async fn open_ended_range_returns_the_tail() {
     std::fs::write(dir.join("clip.mp4"), &payload).expect("write media");
 
     let addr = spawn_server(MediaServerConfig::new(&dir)).await;
-    let (status, headers, body) = request(addr, "GET /media/clip.mp4", "Range: bytes=900-\r\n").await;
+    let (status, headers, body) =
+        request(addr, "GET /media/clip.mp4", "Range: bytes=900-\r\n").await;
 
     assert!(status.contains("206"), "unexpected status line: {status}");
     assert!(headers
@@ -127,10 +131,13 @@ async fn unsatisfiable_range_returns_416() {
     std::fs::write(dir.join("clip.mp4"), vec![0u8; 100]).expect("write media");
 
     let addr = spawn_server(MediaServerConfig::new(&dir)).await;
-    let (status, headers, _body) = request(addr, "GET /media/clip.mp4", "Range: bytes=500-\r\n").await;
+    let (status, headers, _body) =
+        request(addr, "GET /media/clip.mp4", "Range: bytes=500-\r\n").await;
 
     assert!(status.contains("416"), "unexpected status line: {status}");
-    assert!(headers.to_lowercase().contains("content-range: bytes */100"));
+    assert!(headers
+        .to_lowercase()
+        .contains("content-range: bytes */100"));
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -171,7 +178,10 @@ async fn hls_playlist_lists_ts_segments_in_order() {
     let first = text.find("seg0.ts").expect("seg0 listed");
     let second = text.find("seg1.ts").expect("seg1 listed");
     let third = text.find("seg2.ts").expect("seg2 listed");
-    assert!(first < second && second < third, "segments out of order:\n{text}");
+    assert!(
+        first < second && second < third,
+        "segments out of order:\n{text}"
+    );
     assert!(text.contains("#EXT-X-ENDLIST"));
 
     let _ = std::fs::remove_dir_all(&dir);
