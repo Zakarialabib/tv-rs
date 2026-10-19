@@ -199,6 +199,7 @@ the page that explains it. The short version:
 | [`docs/03-matrix.md`](docs/03-matrix.md) | what is done, what is deferred, and the verified test counts |
 | [`docs/architecture.md`](docs/architecture.md) | the three layers, the dependency rule, and where a new file belongs |
 | [`docs/04-rust-package-standard.md`](docs/04-rust-package-standard.md) | the engineering standard this workspace follows |
+| [`docs/05-roadmap.md`](docs/05-roadmap.md) | what to add next, with the evidence and the cost |
 | [`docs/adr/001-crate-publication.md`](docs/adr/001-crate-publication.md) | why eight crates and how a release works |
 | [`docs/02-external-refs.md`](docs/02-external-refs.md) | protocol references and prior art |
 

@@ -100,3 +100,113 @@ impl RokuKey {
         }
     }
 }
+
+/// The `<power-mode>` values a Roku reports in `/query/device-info`.
+///
+/// Roku documents four values. `Headless` means the device is awake but no app is
+/// drawing (typically after `PowerOff` on a streaming stick that cannot really be
+/// switched off); `DisplayOff` means the panel is off while the device keeps
+/// running — neither maps cleanly to "off", so they are preserved rather than
+/// flattened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum RokuPowerMode {
+    /// The device is on and drawing an app.
+    PowerOn,
+    /// Awake, but no app is drawing.
+    Headless,
+    /// Awake and ready, nothing playing.
+    Ready,
+    /// The panel is off while the device stays running.
+    DisplayOff,
+    /// The firmware reported something this crate does not model.
+    #[default]
+    Unknown,
+}
+
+impl RokuPowerMode {
+    /// Parses the `<power-mode>` text. Unrecognised values become
+    /// [`RokuPowerMode::Unknown`] rather than an error: a new firmware string must
+    /// not break a probe.
+    #[must_use]
+    pub fn from_text(text: &str) -> Self {
+        match text.trim() {
+            "PowerOn" => Self::PowerOn,
+            "Headless" => Self::Headless,
+            "Ready" => Self::Ready,
+            "DisplayOff" => Self::DisplayOff,
+            _ => Self::Unknown,
+        }
+    }
+
+    /// Returns the exact ECP spelling.
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::PowerOn => "PowerOn",
+            Self::Headless => "Headless",
+            Self::Ready => "Ready",
+            Self::DisplayOff => "DisplayOff",
+            Self::Unknown => "Unknown",
+        }
+    }
+
+    /// Whether the device is drawing or able to draw an app.
+    #[must_use]
+    pub fn is_awake(&self) -> bool {
+        matches!(self, Self::PowerOn | Self::Headless | Self::Ready)
+    }
+}
+
+#[cfg(test)]
+mod power_mode_tests {
+    use super::RokuPowerMode;
+
+    #[test]
+    fn parses_the_four_documented_values() {
+        assert_eq!(RokuPowerMode::from_text("PowerOn"), RokuPowerMode::PowerOn);
+        assert_eq!(
+            RokuPowerMode::from_text("Headless"),
+            RokuPowerMode::Headless
+        );
+        assert_eq!(RokuPowerMode::from_text("Ready"), RokuPowerMode::Ready);
+        assert_eq!(
+            RokuPowerMode::from_text("DisplayOff"),
+            RokuPowerMode::DisplayOff
+        );
+    }
+
+    #[test]
+    fn unknown_and_padded_values_do_not_break_a_probe() {
+        assert_eq!(
+            RokuPowerMode::from_text("  PowerOn\n"),
+            RokuPowerMode::PowerOn
+        );
+        assert_eq!(
+            RokuPowerMode::from_text("some 2027 mode"),
+            RokuPowerMode::Unknown
+        );
+        assert_eq!(RokuPowerMode::default(), RokuPowerMode::Unknown);
+    }
+
+    #[test]
+    fn round_trips_the_ecp_spelling() {
+        for mode in [
+            RokuPowerMode::PowerOn,
+            RokuPowerMode::Headless,
+            RokuPowerMode::Ready,
+            RokuPowerMode::DisplayOff,
+            RokuPowerMode::Unknown,
+        ] {
+            assert_eq!(RokuPowerMode::from_text(mode.as_str()), mode);
+        }
+    }
+
+    #[test]
+    fn awake_covers_headless_and_ready_but_not_display_off() {
+        assert!(RokuPowerMode::PowerOn.is_awake());
+        assert!(RokuPowerMode::Headless.is_awake());
+        assert!(RokuPowerMode::Ready.is_awake());
+        assert!(!RokuPowerMode::DisplayOff.is_awake());
+        assert!(!RokuPowerMode::Unknown.is_awake());
+    }
+}

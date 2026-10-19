@@ -16,6 +16,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `TlsPolicy::AcceptInvalid`. Rustls only — a `native-tls` build returns
   `TlsError::PinningUnavailable`.
 
+- **Power state across the facade.** `TvClient::power_state()` answers "is this TV
+  on?" without reaching for a vendor crate: Roku is queried through
+  `/query/device-info` (`RokuPowerMode`, with `Headless`/`Ready`/`DisplayOff`
+  reported as `Standby`, not `Off`), Tizen and webOS fall back to the shared TCP
+  probe against their control port.
+
 ### Changed
 
 - **Workspace reorganization.** All packages are flattened under `crates/` (one

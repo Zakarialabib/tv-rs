@@ -210,6 +210,21 @@ impl RokuClient {
     pub async fn power_on(&self) -> Result<()> {
         self.send_keypress(RokuKey::PowerOn).await
     }
+
+    /// Asks the device what its power state is.
+    ///
+    /// This is a query, not a probe: `GET /query/device-info` answers while the
+    /// device is awake, and fails when it is genuinely off. A device whose
+    /// firmware omits `<power-mode>` yields [`crate::RokuPowerMode::Unknown`], which is a
+    /// successful answer to "what does it say?" and not an error.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::RokuError`] when the HTTP request fails or the body is not a
+    /// `<device-info>` document.
+    pub async fn power_state(&self) -> Result<crate::types::RokuPowerMode> {
+        Ok(self.query_device_info().await?.power_state())
+    }
 }
 
 #[cfg(test)]

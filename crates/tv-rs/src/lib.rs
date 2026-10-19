@@ -56,6 +56,7 @@ pub use types::{DiscoveredTv, TvVendor};
 pub use tv_rs_discovery as discovery;
 /// Wake-on-LAN and power-state probing: [`power::WolSender`].
 pub use tv_rs_power as power;
+pub use tv_rs_power::PowerState;
 /// Roku OS ECP REST client: [`roku::RokuClient`].
 pub use tv_rs_roku as roku;
 /// Samsung Tizen remote channel and DIAL: [`tizen::TizenClient`].

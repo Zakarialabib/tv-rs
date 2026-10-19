@@ -28,7 +28,8 @@ in CI (Linux and Windows).
 
 **Facade.** `discover()` / `discover_with(&SsdpScanner)`; `identify_vendor()`
 over `SERVER`/`ST`/`USN` plus descriptor fields; `TvClient` with `power_off()`,
-`launch_app()` and typed accessors. Covers only operations every vendor has;
+`power_state()`, `launch_app()` and typed accessors. `power_state()` asks Roku
+outright and falls back to the TCP probe for Tizen/webOS. Covers only operations every vendor has;
 anything else goes through the accessor.
 
 **Discovery.** Interface/bind overrides, timeout, USN/LOCATION dedup, descriptor
@@ -52,7 +53,9 @@ Samsung-specific search target; `resolve_app_id()` presets.
 volume/mute/launch/power/foreground. Richer URI coverage is additive work.
 
 **Roku.** Device-info/apps/keypress/launch with pure XML parsers; `query_app_id`
-resolves a name to an id. `roku:ecp` SSDP discovery is covered by the facade's
+resolves a name to an id; `<power-mode>` is parsed into `RokuPowerMode`
+(`PowerOn`/`Headless`/`Ready`/`DisplayOff`/`Unknown`), with the awake states mapped
+to `Standby` rather than `Off` so a working device never reads as dead. `roku:ecp` SSDP discovery is covered by the facade's
 scan, not a dedicated path.
 
 **Media.** Pure `parse_range` (open-ended, explicit, suffix, clamping, `416`);
@@ -96,7 +99,5 @@ nothing pretends to work.
 | Task | Why | Size |
 |---|---|---|
 | mDNS listener | AirPlay/Cast devices are invisible to `discover()` | small |
-| `poll_power_state` in the facade | today the probe is only reachable via `tv-rs-power` | small |
-| Roku `<power-mode>` parsing | gives the facade a real power state for Roku | small |
 | More `SsapUri` variants | input/source switching is the most requested webOS gap | small |
 | Real-device verification pass | the only way to close limitation 1 | needs hardware |
