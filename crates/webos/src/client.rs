@@ -5,6 +5,9 @@ use std::path::Path;
 use futures_util::SinkExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
 use tokio_tungstenite::connect_async_tls_with_config;
 use tokio_tungstenite::tungstenite::Message;
 use tv_rs_transport::{read_until, ReadOutcome, TlsPolicy, WsStream};
@@ -21,6 +24,9 @@ const REGISTER_REQUEST_ID: &str = "1";
 
 /// Default number of frames read while waiting for a matching response.
 const DEFAULT_FRAME_BUDGET: usize = 32;
+
+/// How long one connection attempt may take before it counts as "not listening".
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Builds an SSAP `register` request with the [`WEBOS_PAIRING_TYPE_PROMPT`] pairing type.
 #[must_use]
@@ -97,7 +103,7 @@ pub async fn load_client_key(path: impl AsRef<Path>) -> Result<Option<String>> {
 ///
 /// Use the `with_*` builder methods to change defaults, then call
 /// [`WebosClient::connect`] (or [`WebosClient::pair`] on first use).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone)]
 pub struct WebosClient {
     host: String,
     port: u16,
@@ -105,6 +111,43 @@ pub struct WebosClient {
     client_key: Option<String>,
     manifest: SsapManifest,
     device_name: String,
+    /// Which port actually answered, once one has. Shared across clones.
+    negotiated: Arc<Mutex<Option<u16>>>,
+}
+
+impl PartialEq for WebosClient {
+    /// Compares configuration, not the negotiated port: two clients configured the
+    /// same way are the same client, even if one has connected and the other has
+    /// not yet.
+    fn eq(&self, other: &Self) -> bool {
+        self.host == other.host
+            && self.port == other.port
+            && self.tls == other.tls
+            && self.client_key == other.client_key
+            && self.manifest == other.manifest
+            && self.device_name == other.device_name
+    }
+}
+
+impl std::fmt::Debug for WebosClient {
+    /// Renders the client without its `client-key`.
+    ///
+    /// The key is a bearer credential for the TV; a log that prints it hands over
+    /// control of the screen.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebosClient")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("tls", &self.tls)
+            .field(
+                "client_key",
+                &self.client_key.as_ref().map(|_| "<redacted>"),
+            )
+            .field("manifest", &self.manifest)
+            .field("device_name", &self.device_name)
+            .field("negotiated_port", &self.negotiated_port())
+            .finish()
+    }
 }
 
 impl WebosClient {
@@ -118,6 +161,7 @@ impl WebosClient {
             client_key: None,
             manifest: SsapManifest::control(),
             device_name: "tv-rs".to_string(),
+            negotiated: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -125,6 +169,7 @@ impl WebosClient {
     #[must_use]
     pub fn with_port(mut self, port: u16) -> Self {
         self.port = port;
+        self.forget_port();
         self
     }
 
@@ -132,6 +177,7 @@ impl WebosClient {
     #[must_use]
     pub fn with_wss(mut self) -> Self {
         self.port = WEBOS_WSS_PORT;
+        self.forget_port();
         self
     }
 
@@ -193,6 +239,42 @@ impl WebosClient {
         &self.device_name
     }
 
+    /// The ports to try, most likely first.
+    ///
+    /// Once a port has answered, only that port is tried: re-probing costs two dead
+    /// connections per command on a TV that already told us which one it uses.
+    fn port_candidates(&self) -> Vec<u16> {
+        if let Some(port) = *self.negotiated.lock().expect("negotiated lock") {
+            return vec![port];
+        }
+        let other = if self.port == WEBOS_WSS_PORT {
+            WEBOS_WS_PORT
+        } else {
+            WEBOS_WSS_PORT
+        };
+        vec![self.port, other]
+    }
+
+    fn remember_port(&self, port: u16) {
+        *self.negotiated.lock().expect("negotiated lock") = Some(port);
+    }
+
+    fn forget_port(&self) {
+        *self.negotiated.lock().expect("negotiated lock") = None;
+    }
+
+    /// The port that last answered, if any.
+    #[must_use]
+    pub fn negotiated_port(&self) -> Option<u16> {
+        *self.negotiated.lock().expect("negotiated lock")
+    }
+
+    fn ws_url_for(&self, port: u16) -> Result<String> {
+        let scheme = if port == WEBOS_WSS_PORT { "wss" } else { "ws" };
+        let url = url::Url::parse(&format!("{scheme}://{}:{port}/", self.host))?;
+        Ok(url.to_string())
+    }
+
     /// Builds the `ws://` or `wss://` WebSocket URL for this client.
     ///
     /// webOS serves SSAP on the root path, so the URL always ends in `/`. The
@@ -213,11 +295,47 @@ impl WebosClient {
     /// does not prompt again; the key observed from the TV is exposed through
     /// [`WebosSession::client_key`].
     pub async fn connect(&self) -> Result<WebosSession> {
-        let url = self.ws_url()?;
-        let connector = self.connector()?;
-        let (mut stream, _response) =
-            connect_async_tls_with_config(url.as_str(), None, false, Some(connector)).await?;
+        let mut last_error: Option<WebosError> = None;
 
+        for port in self.port_candidates() {
+            let url = self.ws_url_for(port)?;
+            let connector = tv_rs_transport::connector(self.tls.clone(), port == WEBOS_WSS_PORT)
+                .map_err(|error| {
+                    WebosError::Protocol(format!("failed to build TLS connector: {error}"))
+                })?;
+
+            let attempt = tokio::time::timeout(
+                CONNECT_TIMEOUT,
+                connect_async_tls_with_config(url.as_str(), None, false, Some(connector)),
+            )
+            .await;
+
+            let stream = match attempt {
+                Ok(Ok((stream, _response))) => {
+                    self.remember_port(port);
+                    stream
+                }
+                // Nothing answered here: the other generation is worth a try.
+                Ok(Err(error)) if tv_rs_transport::should_try_next_port(&error) => {
+                    last_error = Some(WebosError::Ws(error));
+                    continue;
+                }
+                // A certificate or protocol answer is not a port problem.
+                Ok(Err(error)) => return Err(WebosError::Ws(error)),
+                Err(_elapsed) => {
+                    last_error = Some(WebosError::Timeout);
+                    continue;
+                }
+            };
+
+            return self.register(stream).await;
+        }
+
+        Err(last_error.unwrap_or(WebosError::Timeout))
+    }
+
+    /// Sends the SSAP registration and waits for the `registered` reply.
+    async fn register(&self, mut stream: WsStream) -> Result<WebosSession> {
         let mut register = serde_json::to_value(build_register_request(
             REGISTER_REQUEST_ID,
             self.manifest.clone(),
@@ -285,13 +403,6 @@ impl WebosClient {
         Ok(WebosPairing {
             client_key: session.client_key().map(str::to_string),
             device_name: self.device_name.clone(),
-        })
-    }
-
-    /// Builds the transport connector honouring the configured [`TlsPolicy`].
-    fn connector(&self) -> Result<tokio_tungstenite::Connector> {
-        tv_rs_transport::connector(self.tls.clone(), self.port == WEBOS_WSS_PORT).map_err(|error| {
-            WebosError::Protocol(format!("failed to build TLS connector: {error}"))
         })
     }
 }
@@ -375,6 +486,20 @@ impl WebosSession {
         Ok(())
     }
 
+    /// Opens a URL in the TV's built-in browser.
+    ///
+    /// The URL must be reachable *from the television*, which is not the same
+    /// thing as reachable from the machine calling this: a `localhost` address
+    /// here points at the TV itself.
+    pub async fn open_url(&mut self, url: &str) -> Result<()> {
+        self.request(
+            SsapUri::SystemLauncherOpen,
+            Some(serde_json::json!({ "target": url })),
+        )
+        .await?;
+        Ok(())
+    }
+
     /// Reads the current output volume.
     pub async fn get_volume(&mut self) -> Result<u8> {
         let payload = self.request(SsapUri::AudioGetVolume, None).await?;
@@ -442,6 +567,7 @@ mod tests {
     use crate::payload::SsapManifest;
     use crate::types::SsapUri;
     use crate::TlsPolicy;
+    use crate::{WEBOS_WSS_PORT, WEBOS_WS_PORT};
 
     #[test]
     fn build_register_request_serializes_expected_fields() {
@@ -551,5 +677,35 @@ mod tests {
         assert_eq!(client.tls_policy(), TlsPolicy::Strict);
         assert_eq!(client.client_key(), None);
         assert_eq!(client.host(), "192.168.1.20");
+    }
+
+    #[test]
+    fn the_ladder_tries_the_other_port_and_then_remembers_the_one_that_worked() {
+        let legacy = WebosClient::new("192.168.1.20");
+        assert_eq!(
+            legacy.port_candidates(),
+            vec![WEBOS_WS_PORT, WEBOS_WSS_PORT]
+        );
+
+        let modern = WebosClient::new("192.168.1.20").with_wss();
+        assert_eq!(
+            modern.port_candidates(),
+            vec![WEBOS_WSS_PORT, WEBOS_WS_PORT]
+        );
+
+        modern.remember_port(WEBOS_WSS_PORT);
+        assert_eq!(modern.port_candidates(), vec![WEBOS_WSS_PORT]);
+
+        let reset = modern.with_port(WEBOS_WS_PORT);
+        assert_eq!(reset.negotiated_port(), None);
+    }
+
+    #[test]
+    fn the_client_key_is_not_printable() {
+        let client =
+            WebosClient::new("192.168.1.20").with_client_key("140cce792ae045920e14da4daa414582");
+        let rendered = format!("{client:?}");
+        assert!(!rendered.contains("140cce79"), "{rendered}");
+        assert!(rendered.contains("<redacted>"), "{rendered}");
     }
 }

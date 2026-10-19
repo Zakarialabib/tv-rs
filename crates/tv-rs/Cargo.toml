@@ -14,6 +14,7 @@ repository.workspace = true
 tv-rs-core.workspace = true
 tv-rs-discovery.workspace = true
 tv-rs-power.workspace = true
+tv-rs-transport.workspace = true
 tv-rs-tizen.workspace = true
 tv-rs-webos.workspace = true
 tv-rs-roku.workspace = true

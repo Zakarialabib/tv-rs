@@ -11,6 +11,7 @@ use tv_rs_discovery::{SsdpDeviceDescriptor, SsdpMsearchResponse, SsdpScanner};
 use tv_rs_power::PowerState;
 use tv_rs_roku::{RokuClient, RokuPowerMode};
 use tv_rs_tizen::{TizenClient, TizenRemoteKey, TizenSession};
+use tv_rs_transport::TlsPolicy;
 use tv_rs_webos::WebosClient;
 
 /// Classify a discovered device by its SSDP reply and UPnP descriptor.
@@ -136,6 +137,68 @@ impl TvClient {
             TvVendor::Unknown => Err(TvError::UnsupportedVendor {
                 ip: tv.ip.clone(),
                 reason: "device did not advertise a known vendor signature".to_string(),
+            }),
+        }
+    }
+
+    /// Builds a control client with an explicit TLS policy.
+    ///
+    /// This is the function that makes certificate pinning reachable from the
+    /// facade: [`TvClient::from_discovered`] keeps the strict default, and a caller
+    /// that has recorded a pin (after a `TlsPolicy::TrustOnFirstUse` pass) hands it
+    /// in here.
+    ///
+    /// Roku ignores the policy — ECP is plain HTTP on the LAN.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TvError::UnsupportedVendor`] for [`TvVendor::Unknown`].
+    pub fn from_discovered_with(tv: &DiscoveredTv, tls: TlsPolicy) -> Result<Self> {
+        match tv.vendor {
+            TvVendor::Samsung => Ok(Self::Tizen(
+                TizenClient::new(tv.ip.clone()).with_tls_policy(tls),
+            )),
+            TvVendor::Lg => Ok(Self::Webos(
+                WebosClient::new(tv.ip.clone()).with_tls_policy(tls),
+            )),
+            TvVendor::Roku => Ok(Self::Roku(RokuClient::new(tv.ip.clone()))),
+            TvVendor::Unknown => Err(TvError::UnsupportedVendor {
+                ip: tv.ip.clone(),
+                reason: "device did not advertise a known vendor signature".to_string(),
+            }),
+        }
+    }
+
+    /// Shows a URL on the screen.
+    ///
+    /// This is the signage primitive: "put this page on this panel" without
+    /// installing an application.
+    ///
+    /// * **webOS** — `ssap://system.launcher/open`, the built-in browser.
+    /// * **Tizen** — not implemented: Samsung's URL-launcher service is a B2B
+    ///   feature whose API differs from the consumer remote channel, and it has not
+    ///   been verified here. Returns [`TvError::UnsupportedOperation`] rather than a
+    ///   silent app launch, because launching a browser with no URL is worse than
+    ///   saying no.
+    /// * **Roku** — no browser at all.
+    ///
+    /// # Errors
+    ///
+    /// Returns the originating protocol crate's error, wrapped in [`TvError`].
+    pub async fn open_url(&self, url: &str) -> Result<()> {
+        match self {
+            Self::Webos(client) => {
+                let mut session = client.connect().await?;
+                session.open_url(url).await?;
+                Ok(())
+            }
+            Self::Tizen(_) => Err(TvError::UnsupportedOperation {
+                vendor: "samsung",
+                operation: "open_url",
+            }),
+            Self::Roku(_) => Err(TvError::UnsupportedOperation {
+                vendor: "roku",
+                operation: "open_url",
             }),
         }
     }

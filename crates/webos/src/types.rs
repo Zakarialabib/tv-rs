@@ -56,6 +56,12 @@ pub enum SsapUri {
     MediaPlay,
     /// Stop media playback.
     MediaStop,
+    /// Open a URL in the TV's browser.
+    ///
+    /// This is the only content channel webOS offers without deploying an app:
+    /// `system.launcher/open` with a `target` URL puts the built-in browser on
+    /// screen. Everything a signage operator needs to show starts here.
+    SystemLauncherOpen,
 }
 
 impl SsapUri {
@@ -77,6 +83,7 @@ impl SsapUri {
             Self::MediaPause => "ssap://media.controls/pause",
             Self::MediaPlay => "ssap://media.controls/play",
             Self::MediaStop => "ssap://media.controls/stop",
+            Self::SystemLauncherOpen => "ssap://system.launcher/open",
         }
     }
 }
