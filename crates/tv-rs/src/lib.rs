@@ -46,6 +46,7 @@
 
 mod client;
 mod error;
+mod handle;
 mod types;
 
 pub use client::{discover, discover_with, identify_vendor, TvClient};
@@ -53,6 +54,7 @@ pub use error::{Result, TvError};
 pub use types::{DiscoveredTv, TvVendor};
 
 /// SSDP discovery and UPnP descriptor parsing: [`discovery::SsdpScanner`] (mDNS is planned).
+pub use tv_rs_core as core;
 pub use tv_rs_discovery as discovery;
 /// Wake-on-LAN and power-state probing: [`power::WolSender`].
 pub use tv_rs_power as power;

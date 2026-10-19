@@ -1,0 +1,33 @@
+feat(facade): make TvClient a DeviceHandle with honest capabilities
+
+Phase 1b. The enum stays — it is the right type for one TV with a known vendor —
+but it now also implements the erased traits, so a fleet can hold it as
+`Arc<dyn DeviceHandle>` and a caller can ask what the device can do before sending
+anything.
+
+Capabilities are per vendor and deliberately incomplete:
+
+| Vendor | power | wake | key | app | foreground | input | volume |
+|---|---|---|---|---|---|---|---|
+| Tizen | yes | no | yes | yes | no | no | no |
+| webOS | yes | no | no | yes | yes | no | yes |
+| Roku | yes | no | yes | yes | no | no | no |
+
+- `wake` is absent everywhere: a discovered device does not carry its MAC yet, and
+  a wake without one would be a promise the crate cannot keep.
+- `key` is absent on webOS because SSAP has no remote-key endpoint.
+- `volume` is absent on Tizen and Roku because both expose relative keys only, so
+  `set_volume` cannot be honoured.
+
+Backend errors are converted into the routing taxonomy at the trait boundary, with
+the attempted capability supplied by the call site (the backends' "unsupported"
+variants do not carry it). Identity falls back to the host when discovery supplied
+no UDN, so a static-IP install still has a stable key.
+
+Two shape changes to `tv-rs-core` fall out of implementing it for real: `id()` and
+`descriptor()` return owned values, because a handle may be a thin wrapper over a
+protocol client that never stored either.
+
+Verification: 7 new facade tests (capability sets, accessor agreement, identity
+fallback, wake refusal, webOS key refusal, unsupported input, error routing) plus
+key-mapping tests; workspace suite, clippy and rustdoc clean.

@@ -14,6 +14,9 @@ failure behind a panic. These pages are the long version of that.
 | 4 | [`02-external-refs.md`](02-external-refs.md) | Protocol references, prior art, and the crates this workspace learned from. |
 | 5 | [`04-rust-package-standard.md`](04-rust-package-standard.md) | The engineering standard the whole workspace follows — reusable outside this repo. |
 | 6 | [`05-roadmap.md`](05-roadmap.md) | Proposals: what to add next, each with the evidence behind it and what it costs. |
+| 7 | [`spec/00-device-model.md`](spec/00-device-model.md) | **The v2 specification**: capability traits, `DeviceHandle`, confidence-tagged state, the error taxonomy, the agent, and the phases. |
+| 8 | [`spec/01-reconciliation.md`](spec/01-reconciliation.md) | Phase 0 audit: every existing public item mapped to keep / move / merge / remove. |
+| — | [`hil-results.md`](hil-results.md) | What has actually run against a physical TV. Today: nothing. |
 | — | [`adr/`](adr/) | [001 — crate publication](adr/001-crate-publication.md), [002 — workspace layout](adr/002-workspace-layout.md). |
 
 ## Conventions used here

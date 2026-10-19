@@ -1,0 +1,519 @@
+//! `DeviceHandle` for the facade's [`TvClient`].
+//!
+//! The enum stays the natural type for "one TV, vendor known". This module gives
+//! it the second identity a fleet needs: the erased traits from `tv-rs-core`, so a
+//! caller can hold `Arc<dyn DeviceHandle>` without knowing which backend is behind
+//! it.
+//!
+//! # Capability honesty
+//!
+//! [`TvClient`] advertises only what it can actually do today, per vendor:
+//!
+//! | Vendor | power | wake | key | app | foreground | input | volume |
+//! |---|---|---|---|---|---|---|---|
+//! | Tizen | ✓ | — | ✓ | ✓ | — | — | — |
+//! | webOS | ✓ | — | — | ✓ | ✓ | — | ✓ |
+//! | Roku | ✓ | — | ✓ | ✓ | — | — | — |
+//!
+//! `wake` is absent because a discovered device does not carry its MAC yet, and a
+//! wake without one is a lie. `key` is absent on webOS because SSAP has no remote
+//! key endpoint — it wants a pointer-input socket. `volume` is absent on Tizen and
+//! Roku because both expose relative keys, not an absolute level, so `set_volume`
+//! cannot be honoured.
+
+use async_trait::async_trait;
+
+use tv_rs_core::{
+    AppLaunch, AppRef, Capability, CapabilitySet, DeviceDescriptor, DeviceHandle, DeviceId,
+    DeviceOs, Input, InputSelect, Key, KeyInput, PowerControl, PowerState, TransportError,
+    TvError as CoreError, VolumeControl,
+};
+use tv_rs_roku::RokuKey;
+use tv_rs_tizen::{TizenRemoteKey, TizenSession};
+
+use crate::client::TvClient;
+use crate::error::TvError;
+use crate::types::TvVendor;
+
+impl TvClient {
+    /// The capabilities this backend actually implements.
+    #[must_use]
+    pub fn core_capabilities(&self) -> CapabilitySet {
+        let mut set = CapabilitySet::empty().with(Capability::PowerState);
+        match self {
+            Self::Tizen(_) => {
+                set.insert(Capability::Key);
+                set.insert(Capability::AppLaunch);
+            }
+            Self::Webos(_) => {
+                set.insert(Capability::AppLaunch);
+                set.insert(Capability::Foreground);
+                set.insert(Capability::Volume);
+            }
+            Self::Roku(_) => {
+                set.insert(Capability::Key);
+                set.insert(Capability::AppLaunch);
+            }
+        }
+        set
+    }
+}
+
+impl DeviceHandle for TvClient {
+    fn id(&self) -> DeviceId {
+        // Discovery normally supplies a UDN; a client built from an address alone
+        // gets the host, which is still a stable key for a static-IP install.
+        DeviceId::new(host_of(self.address())).unwrap_or_else(|_| DeviceId::anonymous())
+    }
+
+    fn descriptor(&self) -> DeviceDescriptor {
+        DeviceDescriptor::new(self.id(), device_os(self.vendor()), host_of(self.address()))
+    }
+
+    fn capabilities(&self) -> CapabilitySet {
+        self.core_capabilities()
+    }
+
+    fn as_power(&self) -> Option<&dyn PowerControl> {
+        Some(self)
+    }
+
+    fn as_key(&self) -> Option<&dyn KeyInput> {
+        self.core_capabilities()
+            .contains(Capability::Key)
+            .then_some(self as &dyn KeyInput)
+    }
+
+    fn as_app(&self) -> Option<&dyn AppLaunch> {
+        Some(self)
+    }
+
+    fn as_input(&self) -> Option<&dyn InputSelect> {
+        None
+    }
+
+    fn as_volume(&self) -> Option<&dyn VolumeControl> {
+        self.core_capabilities()
+            .contains(Capability::Volume)
+            .then_some(self as &dyn VolumeControl)
+    }
+}
+
+#[async_trait]
+impl PowerControl for TvClient {
+    async fn power_state(&self) -> Result<PowerState, CoreError> {
+        // Fully qualified: the inherent method is the implementation, and calling
+        // `self.power_state()` here would recurse into this trait method.
+        let state = TvClient::power_state(self)
+            .await
+            .map_err(|error| to_core(&error, Capability::PowerState))?;
+        Ok(core_power_state(state))
+    }
+
+    async fn wake(&self) -> Result<(), CoreError> {
+        Err(CoreError::Unsupported(Capability::Wake))
+    }
+
+    async fn sleep(&self) -> Result<(), CoreError> {
+        TvClient::power_off(self)
+            .await
+            .map_err(|error| to_core(&error, Capability::PowerState))
+    }
+}
+
+#[async_trait]
+impl KeyInput for TvClient {
+    async fn key_press(&self, key: Key, _cmd: tv_rs_core::CommandId) -> Result<(), CoreError> {
+        match self {
+            Self::Tizen(client) => {
+                let key = tizen_key(key)?;
+                let mut session = TizenSession::connect(client)
+                    .await
+                    .map_err(|error| to_core(&TvError::from(error), Capability::Key))?;
+                session
+                    .send_key(key)
+                    .await
+                    .map_err(|error| to_core(&TvError::from(error), Capability::Key))
+            }
+            Self::Roku(client) => {
+                let key = roku_key(key)?;
+                client
+                    .send_keypress(key)
+                    .await
+                    .map_err(|error| to_core(&TvError::from(error), Capability::Key))
+            }
+            Self::Webos(_) => Err(CoreError::Unsupported(Capability::Key)),
+        }
+    }
+}
+
+#[async_trait]
+impl AppLaunch for TvClient {
+    async fn launch(&self, app: AppRef, _cmd: tv_rs_core::CommandId) -> Result<(), CoreError> {
+        TvClient::launch_app(self, &app.id)
+            .await
+            .map_err(|error| to_core(&error, Capability::AppLaunch))
+    }
+
+    async fn foreground(&self) -> Result<Option<AppRef>, CoreError> {
+        match self {
+            Self::Webos(client) => {
+                let mut session = client
+                    .connect()
+                    .await
+                    .map_err(|error| to_core(&TvError::from(error), Capability::Foreground))?;
+                let app_id = session
+                    .foreground_app()
+                    .await
+                    .map_err(|error| to_core(&TvError::from(error), Capability::Foreground))?;
+                Ok(app_id.map(AppRef::new))
+            }
+            _ => Err(CoreError::Unsupported(Capability::Foreground)),
+        }
+    }
+}
+
+#[async_trait]
+impl InputSelect for TvClient {
+    async fn active_input(&self) -> Result<Option<Input>, CoreError> {
+        Err(CoreError::Unsupported(Capability::InputSelect))
+    }
+
+    async fn select_input(
+        &self,
+        _input: Input,
+        _cmd: tv_rs_core::CommandId,
+    ) -> Result<(), CoreError> {
+        Err(CoreError::Unsupported(Capability::InputSelect))
+    }
+}
+
+#[async_trait]
+impl VolumeControl for TvClient {
+    async fn volume(&self) -> Result<Option<u8>, CoreError> {
+        match self {
+            Self::Webos(client) => {
+                let mut session = client
+                    .connect()
+                    .await
+                    .map_err(|error| to_core(&TvError::from(error), Capability::Volume))?;
+                session
+                    .get_volume()
+                    .await
+                    .map(Some)
+                    .map_err(|error| to_core(&TvError::from(error), Capability::Volume))
+            }
+            _ => Err(CoreError::Unsupported(Capability::Volume)),
+        }
+    }
+
+    async fn set_volume(&self, level: u8, _cmd: tv_rs_core::CommandId) -> Result<(), CoreError> {
+        match self {
+            Self::Webos(client) => {
+                let mut session = client
+                    .connect()
+                    .await
+                    .map_err(|error| to_core(&TvError::from(error), Capability::Volume))?;
+                session
+                    .set_volume(level)
+                    .await
+                    .map_err(|error| to_core(&TvError::from(error), Capability::Volume))
+            }
+            _ => Err(CoreError::Unsupported(Capability::Volume)),
+        }
+    }
+
+    async fn set_mute(&self, muted: bool, _cmd: tv_rs_core::CommandId) -> Result<(), CoreError> {
+        match self {
+            Self::Webos(client) => {
+                let mut session = client
+                    .connect()
+                    .await
+                    .map_err(|error| to_core(&TvError::from(error), Capability::Volume))?;
+                session
+                    .set_mute(muted)
+                    .await
+                    .map_err(|error| to_core(&TvError::from(error), Capability::Volume))
+            }
+            _ => Err(CoreError::Unsupported(Capability::Volume)),
+        }
+    }
+}
+
+/// Extracts the bare host from whatever an address-like field holds.
+///
+/// The three backends store different shapes (`http://10.0.0.4:8060`, `10.0.0.4`),
+/// and an identity that changes with the scheme is not an identity.
+fn host_of(address: &str) -> &str {
+    let without_scheme = address
+        .strip_prefix("http://")
+        .or_else(|| address.strip_prefix("https://"))
+        .or_else(|| address.strip_prefix("ws://"))
+        .or_else(|| address.strip_prefix("wss://"))
+        .unwrap_or(address);
+    match without_scheme.rsplit_once(':') {
+        Some((host, port)) if port.parse::<u16>().is_ok() => host,
+        _ => without_scheme,
+    }
+}
+
+/// Converts the power crate's vocabulary into the core's.
+///
+/// The two enums are identical today; the conversion exists so the core owns the
+/// type and a backend can never widen it by accident.
+fn core_power_state(state: tv_rs_power::PowerState) -> PowerState {
+    match state {
+        tv_rs_power::PowerState::On => PowerState::On,
+        tv_rs_power::PowerState::Standby => PowerState::Standby,
+        tv_rs_power::PowerState::Off => PowerState::Off,
+        tv_rs_power::PowerState::Unknown => PowerState::Unknown,
+    }
+}
+
+fn device_os(vendor: TvVendor) -> DeviceOs {
+    match vendor {
+        TvVendor::Samsung => DeviceOs::Tizen,
+        TvVendor::Lg => DeviceOs::WebOs,
+        TvVendor::Roku => DeviceOs::Roku,
+        TvVendor::Unknown => DeviceOs::Unknown,
+    }
+}
+
+/// Maps a core key onto the Tizen remote-key vocabulary.
+///
+/// Keys with no Tizen equivalent are reported as `Unsupported` rather than being
+/// approximated by a different key: pressing "menu" when the caller asked for
+/// "info" is worse than a refusal.
+fn tizen_key(key: Key) -> Result<TizenRemoteKey, CoreError> {
+    Ok(match key {
+        Key::Up => TizenRemoteKey::Up,
+        Key::Down => TizenRemoteKey::Down,
+        Key::Left => TizenRemoteKey::Left,
+        Key::Right => TizenRemoteKey::Right,
+        Key::Select | Key::Enter => TizenRemoteKey::Enter,
+        Key::Back => TizenRemoteKey::Return,
+        Key::Home => TizenRemoteKey::Home,
+        Key::Menu => TizenRemoteKey::Menu,
+        Key::Play => TizenRemoteKey::Play,
+        Key::Pause => TizenRemoteKey::Pause,
+        Key::Stop => TizenRemoteKey::Stop,
+        Key::Rewind => TizenRemoteKey::Rewind,
+        Key::FastForward => TizenRemoteKey::FastForward,
+        Key::ChannelUp => TizenRemoteKey::ChannelUp,
+        Key::ChannelDown => TizenRemoteKey::ChannelDown,
+        Key::VolumeUp => TizenRemoteKey::VolumeUp,
+        Key::VolumeDown => TizenRemoteKey::VolumeDown,
+        Key::Mute => TizenRemoteKey::Mute,
+        Key::Power => TizenRemoteKey::Power,
+        Key::PowerOff => TizenRemoteKey::PowerOff,
+        _ => return Err(CoreError::Unsupported(Capability::Key)),
+    })
+}
+
+/// Maps a core key onto the Roku ECP key vocabulary.
+fn roku_key(key: Key) -> Result<RokuKey, CoreError> {
+    Ok(match key {
+        Key::Up => RokuKey::Up,
+        Key::Down => RokuKey::Down,
+        Key::Left => RokuKey::Left,
+        Key::Right => RokuKey::Right,
+        Key::Select | Key::Enter => RokuKey::Select,
+        Key::Back => RokuKey::Back,
+        Key::Home => RokuKey::Home,
+        Key::Play => RokuKey::Play,
+        Key::Rewind => RokuKey::Rev,
+        Key::FastForward => RokuKey::Fwd,
+        Key::Info => RokuKey::Info,
+        Key::Search => RokuKey::Search,
+        Key::Backspace => RokuKey::Backspace,
+        Key::ChannelUp => RokuKey::ChannelUp,
+        Key::ChannelDown => RokuKey::ChannelDown,
+        Key::VolumeUp => RokuKey::VolumeUp,
+        Key::VolumeDown => RokuKey::VolumeDown,
+        Key::Mute => RokuKey::VolumeMute,
+        Key::Power => RokuKey::PowerOn,
+        Key::PowerOff => RokuKey::PowerOff,
+        _ => return Err(CoreError::Unsupported(Capability::Key)),
+    })
+}
+
+/// Converts a facade error into the routing taxonomy.
+///
+/// `capability` names what was being attempted, because the backends' "unsupported"
+/// variants do not carry it.
+fn to_core(error: &TvError, capability: Capability) -> CoreError {
+    use tv_rs_core::{AuthError, ProtocolError};
+
+    let protocol = |detail: String| CoreError::Protocol(ProtocolError::Malformed(detail));
+    let unreachable = |detail: String| CoreError::Transport(TransportError::Unreachable(detail));
+
+    match error {
+        TvError::UnsupportedVendor { .. } | TvError::UnsupportedOperation { .. } => {
+            CoreError::Unsupported(capability)
+        }
+        TvError::Tizen(inner) => match inner {
+            tv_rs_tizen::TizenError::Unsupported(_) => CoreError::Unsupported(capability),
+            tv_rs_tizen::TizenError::Unauthorized => CoreError::Auth(AuthError::PairingRequired),
+            tv_rs_tizen::TizenError::Timeout => CoreError::Transport(TransportError::Timeout),
+            tv_rs_tizen::TizenError::Tls(detail) => {
+                CoreError::Transport(TransportError::Tls(detail.clone()))
+            }
+            tv_rs_tizen::TizenError::Protocol(detail) => protocol(detail.clone()),
+            tv_rs_tizen::TizenError::Json(_) | tv_rs_tizen::TizenError::Xml(_) => {
+                protocol(inner.to_string())
+            }
+            _ => unreachable(inner.to_string()),
+        },
+        TvError::Webos(inner) => match inner {
+            tv_rs_webos::WebosError::Unsupported(_) => CoreError::Unsupported(capability),
+            tv_rs_webos::WebosError::Timeout => CoreError::Transport(TransportError::Timeout),
+            tv_rs_webos::WebosError::Protocol(detail) => protocol(detail.clone()),
+            tv_rs_webos::WebosError::Ssap { .. } => protocol(inner.to_string()),
+            _ => unreachable(inner.to_string()),
+        },
+        TvError::Roku(inner) => match inner {
+            tv_rs_roku::RokuError::Unsupported(_) => CoreError::Unsupported(capability),
+            tv_rs_roku::RokuError::Xml(detail) => protocol(detail.clone()),
+            _ => unreachable(inner.to_string()),
+        },
+        _ => unreachable(error.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tv_rs_roku::RokuClient;
+    use tv_rs_tizen::TizenClient;
+    use tv_rs_webos::WebosClient;
+
+    fn tizen() -> TvClient {
+        TvClient::Tizen(TizenClient::new("10.0.0.2"))
+    }
+
+    fn webos() -> TvClient {
+        TvClient::Webos(WebosClient::new("10.0.0.3"))
+    }
+
+    fn roku() -> TvClient {
+        TvClient::Roku(RokuClient::new("10.0.0.4"))
+    }
+
+    #[test]
+    fn capability_sets_match_the_implementations() {
+        for (client, expected) in [
+            (
+                tizen(),
+                vec![
+                    Capability::PowerState,
+                    Capability::Key,
+                    Capability::AppLaunch,
+                ],
+            ),
+            (
+                webos(),
+                vec![
+                    Capability::PowerState,
+                    Capability::AppLaunch,
+                    Capability::Foreground,
+                    Capability::Volume,
+                ],
+            ),
+            (
+                roku(),
+                vec![
+                    Capability::PowerState,
+                    Capability::Key,
+                    Capability::AppLaunch,
+                ],
+            ),
+        ] {
+            assert_eq!(client.capabilities().iter().collect::<Vec<_>>(), expected);
+        }
+    }
+
+    #[test]
+    fn accessors_agree_with_the_advertised_set() {
+        for client in [tizen(), webos(), roku()] {
+            let set = client.capabilities();
+            assert!(
+                !set.contains(Capability::Wake),
+                "no backend can wake without a known MAC"
+            );
+            assert_eq!(set.contains(Capability::Key), client.as_key().is_some());
+            assert!(client.as_app().is_some());
+            assert_eq!(
+                set.contains(Capability::Volume),
+                client.as_volume().is_some()
+            );
+            assert!(
+                client.as_input().is_none(),
+                "no backend implements input yet"
+            );
+        }
+    }
+
+    #[test]
+    fn identity_falls_back_to_the_address() {
+        let client = roku();
+        assert_eq!(client.id().as_str(), "10.0.0.4");
+        assert_eq!(client.descriptor().os, DeviceOs::Roku);
+        assert_eq!(client.descriptor().address, "10.0.0.4");
+    }
+
+    #[tokio::test]
+    async fn wake_is_refused_rather_than_faked() {
+        let client = tizen();
+        let error = PowerControl::wake(&client).await.expect_err("no MAC known");
+        assert!(matches!(error, CoreError::Unsupported(Capability::Wake)));
+    }
+
+    #[tokio::test]
+    async fn webos_refuses_keys_without_touching_the_network() {
+        let client = webos();
+        let error = KeyInput::key_press(&client, Key::Home, tv_rs_core::CommandId::new())
+            .await
+            .expect_err("webOS has no key endpoint");
+        assert!(matches!(error, CoreError::Unsupported(Capability::Key)));
+    }
+
+    #[tokio::test]
+    async fn input_selection_is_unsupported_everywhere() {
+        let client = roku();
+        assert!(matches!(
+            InputSelect::select_input(&client, Input::Hdmi(1), tv_rs_core::CommandId::new())
+                .await
+                .expect_err("not implemented"),
+            CoreError::Unsupported(Capability::InputSelect)
+        ));
+    }
+
+    #[test]
+    fn key_mappings_cover_the_common_set_and_refuse_the_rest() {
+        assert_eq!(tizen_key(Key::Select).unwrap(), TizenRemoteKey::Enter);
+        assert_eq!(roku_key(Key::Mute).unwrap(), RokuKey::VolumeMute);
+        assert!(tizen_key(Key::Digit(1)).is_err());
+        assert!(roku_key(Key::Pause).is_err());
+    }
+
+    #[test]
+    fn errors_route_to_actions_not_vendors() {
+        let restricted = TvError::UnsupportedOperation {
+            vendor: "roku",
+            operation: "input_select",
+        };
+        assert!(matches!(
+            to_core(&restricted, Capability::InputSelect),
+            CoreError::Unsupported(Capability::InputSelect)
+        ));
+
+        let pairing = to_core(
+            &TvError::Tizen(tv_rs_tizen::TizenError::Unauthorized),
+            Capability::Key,
+        );
+        assert!(matches!(
+            pairing,
+            CoreError::Auth(tv_rs_core::AuthError::PairingRequired)
+        ));
+    }
+}

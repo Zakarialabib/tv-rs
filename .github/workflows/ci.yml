@@ -32,6 +32,29 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
+  core:
+    name: core (tokio-free + mock)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      # The device model must stay embeddable by consumers that never link tokio.
+      # This is the compile-time guarantee the spec makes, so CI has to hold it.
+      - name: Core has no tokio in its graph
+        run: |
+          cargo tree -p tv-rs-core --no-default-features > /tmp/core-tree.txt
+          if grep -qE '(^| )tokio v' /tmp/core-tree.txt; then
+            echo "::error::tv-rs-core must not depend on tokio"
+            exit 1
+          fi
+      - run: cargo test -p tv-rs-core --features mock-backend
+      - run: cargo clippy -p tv-rs-core --all-targets --features mock-backend
+        env:
+          RUSTFLAGS: -D warnings
+
   test:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

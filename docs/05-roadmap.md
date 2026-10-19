@@ -54,6 +54,9 @@ Why it earns its keep:
   paste its output;
 - it costs almost nothing: every probe already exists in the crates.
 
+> P3 and P5 below are specified in detail in
+> [`spec/00-device-model.md`](spec/00-device-model.md).
+
 ## P3 — Fleet operations (medium)
 
 The per-device API is right for a library; every consumer immediately writes the

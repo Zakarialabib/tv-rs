@@ -8,6 +8,7 @@ What exists, what is deferred, and how it is tested. Measured on 2026-10-19 with
 | Crate | Status | Tests | What it does |
 |---|---|---|---|
 | `tv-rs` (facade) | done | 7 + 1 doc | `discover()`, `identify_vendor()`, `TvClient` dispatch, `TvError` |
+| `tv-rs-core` | **new (Phase 1a)** | 30 with `mock-backend`, 20 default | capability traits, `DeviceHandle`, `CommandId`, confidence-tagged `ObservedState`, routing `TvError`, scriptable mock backend |
 | `tv-rs-discovery` | done | 6 + 1 doc | SSDP `M-SEARCH`, response parsing, UPnP descriptor, descriptor fetch |
 | `tv-rs-power` | done | 9 + 1 doc | magic packet, `MacAddress` parsing, `poll_power_state` |
 | `tv-rs-transport` | done | 4 + 2 doc | `TlsPolicy`, rustls/native-tls connector, budgeted frame reader, `Unsupported` |
@@ -29,7 +30,11 @@ in CI (Linux and Windows).
 **Facade.** `discover()` / `discover_with(&SsdpScanner)`; `identify_vendor()`
 over `SERVER`/`ST`/`USN` plus descriptor fields; `TvClient` with `power_off()`,
 `power_state()`, `launch_app()` and typed accessors. `power_state()` asks Roku
-outright and falls back to the TCP probe for Tizen/webOS. Covers only operations every vendor has;
+outright and falls back to the TCP probe for Tizen/webOS. `TvClient` also
+implements the `tv-rs-core` `DeviceHandle` traits, advertising per vendor only
+what works: Tizen has power/key/app, webOS power/app/foreground/volume, Roku
+power/key/app — and none advertise wake (no MAC) or input selection (not
+implemented). Covers only operations every vendor has;
 anything else goes through the accessor.
 
 **Discovery.** Interface/bind overrides, timeout, USN/LOCATION dedup, descriptor

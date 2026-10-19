@@ -11,6 +11,7 @@ repository = "https://github.com/Zakarialabib/tv-rs"
 
 [workspace.dependencies]
 # --- protocol crates (path + version: `path` is stripped at publish time) ---
+tv-rs-core = { path = "crates/core", version = "0.1.0" }
 tv-rs-discovery = { path = "crates/discovery", version = "0.1.0" }
 tv-rs-power = { path = "crates/power", version = "0.1.0" }
 tv-rs-roku = { path = "crates/roku", version = "0.1.0" }
@@ -27,6 +28,7 @@ tv-rs-media = { path = "crates/media", version = "0.1.0" }
 
 # --- runtime / async ---
 tokio = { version = "1", features = ["net", "time", "io-util", "fs", "macros", "rt-multi-thread", "sync"] }
+futures = "0.3"
 futures-util = "0.3"
 async-trait = "0.1"
 
@@ -49,6 +51,7 @@ base64 = "0.23"
 
 # --- errors / logging / cli ---
 thiserror = "2"
+uuid = { version = "1", features = ["v4"] }
 anyhow = "1"
 tracing = "0.1"
 clap = { version = "4", features = ["derive"] }
