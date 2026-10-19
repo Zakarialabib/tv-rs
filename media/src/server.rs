@@ -46,8 +46,10 @@ impl MediaServerConfig {
 /// Builds the axum router for `config`.
 pub fn router(config: MediaServerConfig) -> Router {
     Router::new()
-        .route("/media/*path", get(serve_media))
-        .route("/hls/*dir", get(serve_playlist))
+        // axum 0.8 moved wildcard captures to `{*name}`; the 0.7 `*name` form
+        // now panics when the router is built.
+        .route("/media/{*path}", get(serve_media))
+        .route("/hls/{*dir}", get(serve_playlist))
         .with_state(config)
 }
 
