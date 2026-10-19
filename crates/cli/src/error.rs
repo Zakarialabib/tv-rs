@@ -27,6 +27,10 @@ pub enum CliError {
     #[error("{0}")]
     Facade(Box<tv_rs::TvError>),
 
+    /// The reconciliation agent could not be built or run.
+    #[error("{0}")]
+    Agent(String),
+
     /// The MAC address argument could not be parsed.
     #[error("invalid MAC address '{input}': {source}")]
     MacAddress {

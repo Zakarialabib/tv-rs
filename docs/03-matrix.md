@@ -18,7 +18,7 @@ What exists, what is deferred, and how it is tested. Measured on 2026-10-19 with
 | `tv-rs-media` | done | 17 + 6 + 2 doc | range parsing, `206`/`416` serving, HLS playlists |
 | `tv-rs-agent` | **new (Phase 4a)** | 23 + 3 fleet + 1 doc | desired-state providers (file / HTTP / MQTT), pure decision function, healing ladder, JSONL audit log, `tick()`/`run()` loop with quarantine |
 | `tv-rs-cec` | **new (Phase 5a)** | 6 (default) / 7 with `client` | CEC over a `cec-client` subprocess: power on, standby, active source; no `unsafe`, no libcec link |
-| `tv-rs-cli` | done (`publish = false`) | 14 + 1 doc | `discover`, `wake`, `power-off`, `key`, `launch` |
+| `tv-rs-cli` | done (`publish = false`) | 16 + 1 doc | `discover`, `wake`, `power-off`, `key`, `launch`, `status` (power + capabilities table), `ensure` (one reconciliation pass) |
 | `tests/hardware_in_the_loop.rs` | opt-in | 7 (`--features hil`) | real devices, skipped when `TV_RS_HIL_*` is unset |
 | **Total (default features)** | | **121 + 15 doc** | 136 tests |
 

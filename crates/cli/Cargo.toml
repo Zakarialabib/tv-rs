@@ -14,6 +14,8 @@ path = "src/main.rs"
 
 [dependencies]
 tv-rs = { path = "../tv-rs" }
+tv-rs-core = { path = "../core" }
+tv-rs-agent = { path = "../agent" }
 clap.workspace = true
 tokio.workspace = true
 thiserror.workspace = true

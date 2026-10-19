@@ -2046,6 +2046,8 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tv-rs",
+ "tv-rs-agent",
+ "tv-rs-core",
 ]
 
 [[package]]

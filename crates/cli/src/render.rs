@@ -172,3 +172,110 @@ mod tests {
         assert!(rendered.contains('-'));
     }
 }
+
+/// One row of the `status` table.
+#[derive(Debug, Clone)]
+pub struct StatusRow {
+    /// Vendor label (`samsung`, `lg`, `roku`, `unknown`).
+    pub vendor: String,
+    /// Human label: name, model, else address.
+    pub label: String,
+    /// Network address.
+    pub address: String,
+    /// Power state, or the probe failure.
+    pub power: String,
+    /// Advertised capabilities, comma separated.
+    pub capabilities: String,
+}
+
+/// Renders the `status` table.
+///
+/// Capabilities are printed because they are the honest answer to "why is that
+/// button disabled" — the crate refuses what it cannot do, and this column says
+/// which refusals to expect.
+#[must_use]
+pub fn render_status_table(rows: &[StatusRow]) -> String {
+    let mut out = String::new();
+    out.push_str(&format!(
+        "{:<8} {:<24} {:<16} {:<24} {}\n",
+        "VENDOR", "LABEL", "ADDRESS", "POWER", "CAPABILITIES"
+    ));
+    for row in rows {
+        out.push_str(&format!(
+            "{:<8} {:<24} {:<16} {:<24} {}\n",
+            row.vendor, row.label, row.address, row.power, row.capabilities
+        ));
+    }
+    out
+}
+
+/// Renders one reconciliation pass.
+#[must_use]
+pub fn render_outcomes(outcomes: &[tv_rs_agent::Outcome]) -> String {
+    let mut out = String::new();
+    out.push_str(&format!("{:<20} {:<14} {}\n", "DEVICE", "RESULT", "ACTION"));
+    for outcome in outcomes {
+        let action = outcome
+            .action
+            .as_ref()
+            .map(|decision| format!("{decision:?}"))
+            .unwrap_or_else(|| "-".to_string());
+        let detail = outcome
+            .error
+            .as_deref()
+            .map(|error| format!(" — {error}"))
+            .unwrap_or_default();
+        out.push_str(&format!(
+            "{:<20} {:<14} {}{}\n",
+            outcome.device, outcome.result, action, detail
+        ));
+    }
+    out
+}
+
+#[cfg(test)]
+mod status_tests {
+    use super::*;
+
+    #[test]
+    fn the_status_table_has_a_header_and_one_line_per_device() {
+        let rows = vec![
+            StatusRow {
+                vendor: "roku".to_string(),
+                label: "Living Room".to_string(),
+                address: "10.0.0.5".to_string(),
+                power: "On".to_string(),
+                capabilities: "power_state,key,app_launch".to_string(),
+            },
+            StatusRow {
+                vendor: "lg".to_string(),
+                label: "Lobby".to_string(),
+                address: "10.0.0.6".to_string(),
+                power: "probe failed: timed out".to_string(),
+                capabilities: "power_state,app_launch,volume".to_string(),
+            },
+        ];
+
+        let rendered = render_status_table(&rows);
+        assert_eq!(rendered.lines().count(), 3, "{rendered}");
+        assert!(rendered.contains("CAPABILITIES"), "{rendered}");
+        assert!(rendered.contains("probe failed"), "{rendered}");
+    }
+
+    #[test]
+    fn a_skipped_outcome_renders_a_dash_rather_than_an_empty_column() {
+        let outcomes = vec![tv_rs_agent::Outcome {
+            device: "tv-1".to_string(),
+            action: None,
+            result: "skipped",
+            error: None,
+        }];
+        let rendered = render_outcomes(&outcomes);
+        assert!(rendered.contains("skipped"), "{rendered}");
+        let row = rendered.lines().nth(1).expect("a data row");
+        assert!(
+            row.trim_end().ends_with('-'),
+            "a skipped device has no action, rendered as a dash: {row:?}"
+        );
+    }
+}
