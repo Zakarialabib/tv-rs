@@ -14,12 +14,13 @@ async-trait.workspace = true
 base64.workspace = true
 futures-util.workspace = true
 reqwest.workspace = true
+roxmltree.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
-tv-rs-transport = { workspace = true, features = ["ws"] }
+tv-rs-transport = { workspace = true, features = ["ws", "rustls"] }
 url.workspace = true
 
 [dev-dependencies]

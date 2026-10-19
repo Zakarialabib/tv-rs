@@ -30,18 +30,26 @@
 #![allow(clippy::result_large_err)]
 #![deny(missing_docs)]
 
+pub mod apps;
 pub mod auth;
 pub mod client;
+pub mod discovery;
 pub mod error;
 pub mod payload;
 pub mod protocol;
+pub mod token_store;
 pub mod types;
 
+pub use apps::{resolve_app_id, NETFLIX_APP_ID, PRIME_VIDEO_APP_ID, YOUTUBE_APP_ID};
 pub use auth::TizenAuthProvider;
 pub use client::{
     build_channel_connect_payload, build_dial_launch_url, build_remote_command_payload,
     build_ws_url, encode_remote_name, extract_token, is_unauthorized,
     parse_channel_connect_response, TizenClient, TizenSession,
+};
+pub use discovery::{
+    discover as discover_samsung, parse_description, DescriptionIdentity, SamsungTv,
+    SAMSUNG_REMOTE_ST,
 };
 pub use error::{Result, TizenError};
 pub use payload::{
@@ -50,6 +58,7 @@ pub use payload::{
     TizenRemoteCommand, TizenRemoteCommandParams,
 };
 pub use protocol::{DialLauncher, WebSocketHandshake};
+pub use token_store::{load_token, save_token, PairedTv, SamsungTokenStore};
 pub use tv_rs_transport::TlsPolicy;
 pub use types::{
     TizenRemoteKey, TIZEN_APP_ID, TIZEN_CMD_CLICK, TIZEN_DIAL_DESC_PATH, TIZEN_DIAL_LAUNCH_PREFIX,

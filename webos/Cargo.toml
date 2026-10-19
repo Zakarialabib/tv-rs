@@ -17,7 +17,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
-tv-rs-transport = { workspace = true, features = ["ws"] }
+tv-rs-transport = { workspace = true, features = ["ws", "rustls"] }
 url.workspace = true
 
 [dev-dependencies]

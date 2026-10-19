@@ -4,8 +4,8 @@
 //!
 //! | feature | connector | when to choose it |
 //! | --- | --- | --- |
-//! | `rustls` (default) | [`tokio_tungstenite::Connector::Rustls`] | portable, no system TLS, no OpenSSL |
-//! | `native-tls` | [`tokio_tungstenite::Connector::NativeTls`] | hosts that must use the platform trust store |
+//! | `rustls` (default) | `Connector::Rustls` | portable, no system TLS, no OpenSSL |
+//! | `native-tls` | `Connector::NativeTls` | hosts that must use the platform trust store |
 //!
 //! Both honour [`TlsPolicy`], and every `danger_accept_invalid_*` equivalent is
 //! reachable only from this module.
@@ -107,7 +107,7 @@ pub fn connector(policy: TlsPolicy, tls: bool) -> Result<Connector, TlsError> {
 /// Builds a rustls client config for `policy`.
 ///
 /// `Strict` verifies against the platform trust store. `AcceptInvalid` installs
-/// [`AcceptAnyTvCert`], which is the rustls equivalent of
+/// an accept-any-cert verifier, which is the rustls equivalent of
 /// `danger_accept_invalid_certs` and exists only for TVs that present a
 /// self-signed certificate.
 #[cfg(all(feature = "ws", feature = "rustls"))]

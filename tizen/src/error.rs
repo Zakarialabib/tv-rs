@@ -25,6 +25,14 @@ pub enum TizenError {
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
 
+    /// Local I/O failure, e.g. writing the pairing-token store.
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+
+    /// A UPnP description document could not be parsed.
+    #[error("xml error: {0}")]
+    Xml(#[from] roxmltree::Error),
+
     /// URL construction or parse error.
     #[error("url error: {0}")]
     Url(#[from] url::ParseError),
