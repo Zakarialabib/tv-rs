@@ -46,8 +46,12 @@ roxmltree = "0.21"
 
 # --- transport ---
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-tokio-tungstenite = { version = "0.30", features = ["native-tls"] }
+# TLS features come from `tv-rs-transport` (rustls by default, native-tls opt-in),
+# so this stays feature-free and the workspace cannot enable two backends at once.
+tokio-tungstenite = { version = "0.30" }
 native-tls = "0.2"
+rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
+rustls-native-certs = "0.8"
 url = "2"
 base64 = "0.23"
 
