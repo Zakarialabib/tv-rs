@@ -95,7 +95,7 @@ impl Quirks {
                     .filter(|value| !value.is_empty())
             };
             let required = |key: &'static str| -> Result<String, QuirkError> {
-                string(key).ok_or_else(|| QuirkError::MissingField {
+                string(key).ok_or(QuirkError::MissingField {
                     row: index,
                     field: key,
                 })
