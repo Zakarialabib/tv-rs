@@ -1,0 +1,28 @@
+[package]
+name = "tv-rs-core"
+description = "The device model shared by every tv-rs backend: capability traits, an erased device handle, command ids, confidence-tagged observed state and the routing error taxonomy."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["smart-tv", "device", "capability", "fleet", "no-tokio"]
+categories = ["api-bindings", "hardware-support"]
+
+[features]
+default = []
+
+# The scriptable backend used by every phase's tests. Pulls no runtime: the mock
+# answers immediately, so a caller's executor (tokio, smol, futures) is irrelevant.
+mock-backend = []
+
+[dependencies]
+async-trait.workspace = true
+thiserror.workspace = true
+uuid = { workspace = true, features = ["v4"] }
+
+[dev-dependencies]
+futures = { workspace = true }
+
+[lints]
+workspace = true

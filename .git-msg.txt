@@ -1,0 +1,29 @@
+feat(core): add the device model crate the spec describes
+
+Phase 1a of docs/spec/00-device-model.md: vocabulary and contracts only, no
+protocol, no runtime.
+
+- Capability traits (PowerControl, KeyInput, AppLaunch, InputSelect,
+  VolumeControl), all dyn-compatible, and the erased DeviceHandle a fleet holds as
+  `Arc<dyn DeviceHandle>`
+- CommandId plus the contract that backends do not deduplicate: the window is a
+  deployment property, so it belongs to the layer that owns retries
+- Confidence / ObservedField / ObservedState, with constructors that make the
+  claim explicit: only a device read (or a state-changing ack) is High, a 200 is
+  Inferred, and a toggle is never High
+- the six-variant TvError taxonomy plus Remedy, so a caller branches on what to do
+  instead of on which crate failed
+- capability and device vocabulary: Capability, CapabilitySet, Key, Input, AppRef,
+  DeviceId, DeviceOs, DeviceDescriptor, PowerState
+- a scriptable MockBackend (`mock-backend`) that reproduces pre-send failure, lost
+  ack, malformed reply, mid-session auth expiry and mid-command power-off, and
+  records physical actions so tests assert what happened rather than what returned
+
+The crate is tokio-free in every configuration (std::time::Instant, no runtime
+dependency); CI now proves it with `cargo tree --no-default-features` and runs the
+mock-feature tests and clippy separately.
+
+Not in this change, and next in the spec's migration order: the backend crates
+converting their errors into this taxonomy and the facade implementing
+DeviceHandle. The trait shape is exactly what those need, and it is cheaper to
+settle it against the mock first.

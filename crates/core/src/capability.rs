@@ -1,0 +1,447 @@
+//! Capability vocabulary and the erased device handle.
+
+use std::fmt;
+
+use async_trait::async_trait;
+
+use crate::command::CommandId;
+use crate::descriptor::{DeviceDescriptor, DeviceId, PowerState};
+use crate::error::TvError;
+
+/// One thing a device can be asked to do.
+///
+/// Capabilities are coarse on purpose: a UI greys out a control, and a fleet
+/// report counts devices, neither of which needs per-key granularity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Capability {
+    /// Read the power state.
+    PowerState,
+    /// Wake the device from standby (Wake-on-LAN or vendor equivalent).
+    Wake,
+    /// Send a remote key.
+    Key,
+    /// Launch an application.
+    AppLaunch,
+    /// Ask which application is in front.
+    Foreground,
+    /// Read and change the active input.
+    InputSelect,
+    /// Read and change volume / mute.
+    Volume,
+}
+
+impl Capability {
+    /// A stable snake_case label for logs and diagnostics.
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::PowerState => "power_state",
+            Self::Wake => "wake",
+            Self::Key => "key",
+            Self::AppLaunch => "app_launch",
+            Self::Foreground => "foreground",
+            Self::InputSelect => "input_select",
+            Self::Volume => "volume",
+        }
+    }
+}
+
+/// The set of capabilities a device advertises.
+///
+/// Deliberately not a bitflags crate: seven capabilities fit in a `u16`, and a
+/// hand-written set keeps the dependency list of the core honest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CapabilitySet(u16);
+
+impl CapabilitySet {
+    /// An empty set.
+    #[must_use]
+    pub fn empty() -> Self {
+        Self(0)
+    }
+
+    /// A set containing exactly `capability`.
+    #[must_use]
+    pub fn of(capability: Capability) -> Self {
+        Self(1 << capability_index(capability))
+    }
+
+    /// Adds a capability.
+    pub fn insert(&mut self, capability: Capability) {
+        self.0 |= 1 << capability_index(capability);
+    }
+
+    /// Builder form of [`CapabilitySet::insert`].
+    #[must_use]
+    pub fn with(mut self, capability: Capability) -> Self {
+        self.insert(capability);
+        self
+    }
+
+    /// Whether the set contains `capability`.
+    #[must_use]
+    pub fn contains(&self, capability: Capability) -> bool {
+        self.0 & (1 << capability_index(capability)) != 0
+    }
+
+    /// Whether the set is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0 == 0
+    }
+
+    /// Iterates the capabilities present, in declaration order.
+    pub fn iter(&self) -> impl Iterator<Item = Capability> + '_ {
+        ALL_CAPABILITIES
+            .iter()
+            .copied()
+            .filter(|capability| self.contains(*capability))
+    }
+}
+
+const ALL_CAPABILITIES: [Capability; 7] = [
+    Capability::PowerState,
+    Capability::Wake,
+    Capability::Key,
+    Capability::AppLaunch,
+    Capability::Foreground,
+    Capability::InputSelect,
+    Capability::Volume,
+];
+
+const fn capability_index(capability: Capability) -> u16 {
+    match capability {
+        Capability::PowerState => 0,
+        Capability::Wake => 1,
+        Capability::Key => 2,
+        Capability::AppLaunch => 3,
+        Capability::Foreground => 4,
+        Capability::InputSelect => 5,
+        Capability::Volume => 6,
+    }
+}
+
+/// A remote key, in vendor-neutral vocabulary.
+///
+/// The set is the intersection of what automation actually needs: navigation to
+/// escape a modal, playback control, volume, and power. A vendor key that has no
+/// equivalent here is reachable through the backend's own client.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Key {
+    /// Up.
+    Up,
+    /// Down.
+    Down,
+    /// Left.
+    Left,
+    /// Right.
+    Right,
+    /// Confirm / OK.
+    Select,
+    /// Back / return.
+    Back,
+    /// Home screen.
+    Home,
+    /// Menu / settings overlay.
+    Menu,
+    /// Play or resume.
+    Play,
+    /// Pause.
+    Pause,
+    /// Stop.
+    Stop,
+    /// Rewind / scan backwards.
+    Rewind,
+    /// Fast-forward.
+    FastForward,
+    /// Previous track / chapter.
+    Previous,
+    /// Next track / chapter.
+    Next,
+    /// Playback information.
+    Info,
+    /// Channel up.
+    ChannelUp,
+    /// Channel down.
+    ChannelDown,
+    /// Volume up.
+    VolumeUp,
+    /// Volume down.
+    VolumeDown,
+    /// Volume mute toggle.
+    Mute,
+    /// Power toggle.
+    Power,
+    /// Power off.
+    PowerOff,
+    /// Open the search screen.
+    Search,
+    /// Submit text input.
+    Enter,
+    /// Delete the previous character.
+    Backspace,
+    /// Numeric key, 0–9.
+    Digit(u8),
+}
+
+impl Key {
+    /// A stable snake_case label for logs.
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Up => "up",
+            Self::Down => "down",
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::Select => "select",
+            Self::Back => "back",
+            Self::Home => "home",
+            Self::Menu => "menu",
+            Self::Play => "play",
+            Self::Pause => "pause",
+            Self::Stop => "stop",
+            Self::Rewind => "rewind",
+            Self::FastForward => "fast_forward",
+            Self::Previous => "previous",
+            Self::Next => "next",
+            Self::Info => "info",
+            Self::ChannelUp => "channel_up",
+            Self::ChannelDown => "channel_down",
+            Self::VolumeUp => "volume_up",
+            Self::VolumeDown => "volume_down",
+            Self::Mute => "mute",
+            Self::Power => "power",
+            Self::PowerOff => "power_off",
+            Self::Search => "search",
+            Self::Enter => "enter",
+            Self::Backspace => "backspace",
+            Self::Digit(_) => "digit",
+        }
+    }
+
+    /// Builds a numeric key.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TvError::Unsupported`] for digits outside 0–9: a remote has ten,
+    /// and silently clamping would send a different key than the caller asked for.
+    pub fn digit(value: u8) -> Result<Self, TvError> {
+        if value > 9 {
+            return Err(TvError::Unsupported(Capability::Key));
+        }
+        Ok(Self::Digit(value))
+    }
+}
+
+/// An input a device can be switched to.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Input {
+    /// HDMI port, 1-based as printed on the panel.
+    Hdmi(u8),
+    /// The tuner.
+    Tv,
+    /// USB port, 1-based.
+    Usb(u8),
+    /// A vendor-specific input this crate does not model.
+    Other(String),
+}
+
+impl Input {
+    /// A stable label for logs and UI.
+    #[must_use]
+    pub fn as_str(&self) -> String {
+        match self {
+            Self::Hdmi(port) => format!("hdmi{port}"),
+            Self::Tv => "tv".to_string(),
+            Self::Usb(port) => format!("usb{port}"),
+            Self::Other(name) => name.clone(),
+        }
+    }
+}
+
+impl fmt::Display for Input {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.as_str())
+    }
+}
+
+/// A reference to an application: id plus, when known, its display name.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AppRef {
+    /// Vendor-specific application id.
+    pub id: String,
+    /// Human-readable name, when the caller knows it.
+    pub name: Option<String>,
+}
+
+impl AppRef {
+    /// Builds a reference from an id alone.
+    #[must_use]
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            name: None,
+        }
+    }
+
+    /// Attaches a display name.
+    #[must_use]
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+}
+
+impl fmt::Display for AppRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name.as_deref().unwrap_or(&self.id))
+    }
+}
+
+/// Power and wake.
+#[async_trait]
+pub trait PowerControl: Send + Sync {
+    /// Reads the current power state. Unobservable devices return
+    /// [`PowerState::Unknown`] rather than an error.
+    async fn power_state(&self) -> Result<PowerState, TvError>;
+
+    /// Wakes the device. Devices that cannot be woken return
+    /// [`TvError::Unsupported`] — never a silent success.
+    async fn wake(&self) -> Result<(), TvError>;
+
+    /// Puts the device into standby (or off, where standby does not exist).
+    async fn sleep(&self) -> Result<(), TvError>;
+}
+
+/// Remote keys.
+#[async_trait]
+pub trait KeyInput: Send + Sync {
+    /// Sends one key press.
+    ///
+    /// Two deliveries of the same `cmd` must have the effect of one — see
+    /// [`CommandId`].
+    async fn key_press(&self, key: Key, cmd: CommandId) -> Result<(), TvError>;
+}
+
+/// Application launch and foreground detection.
+#[async_trait]
+pub trait AppLaunch: Send + Sync {
+    /// Launches an application.
+    ///
+    /// Success means *the device accepted the request*, not *the app is in front*:
+    /// call [`AppLaunch::foreground`] to verify.
+    async fn launch(&self, app: AppRef, cmd: CommandId) -> Result<(), TvError>;
+
+    /// Reports the foreground application, when the platform can say.
+    async fn foreground(&self) -> Result<Option<AppRef>, TvError>;
+}
+
+/// Input selection.
+#[async_trait]
+pub trait InputSelect: Send + Sync {
+    /// Reports the active input, when the platform can say.
+    async fn active_input(&self) -> Result<Option<Input>, TvError>;
+
+    /// Switches to an input.
+    async fn select_input(&self, input: Input, cmd: CommandId) -> Result<(), TvError>;
+}
+
+/// Volume and mute.
+#[async_trait]
+pub trait VolumeControl: Send + Sync {
+    /// Reads the volume, when the platform can say.
+    async fn volume(&self) -> Result<Option<u8>, TvError>;
+
+    /// Sets the volume, 0–100.
+    ///
+    /// Platforms that only expose relative keys map "up one step" onto this call
+    /// and report [`crate::Confidence::Inferred`]; they do not claim the level was
+    /// set.
+    async fn set_volume(&self, level: u8, cmd: CommandId) -> Result<(), TvError>;
+
+    /// Mutes or unmutes.
+    async fn set_mute(&self, muted: bool, cmd: CommandId) -> Result<(), TvError>;
+}
+
+/// An erased television.
+///
+/// The fleet reason this trait exists: `Vec<Arc<dyn DeviceHandle>>` compiles, and a
+/// caller learns what a device can do *before* it sends anything.
+pub trait DeviceHandle: Send + Sync {
+    /// Stable identifier.
+    fn id(&self) -> &DeviceId;
+
+    /// Everything known before a command is sent.
+    fn descriptor(&self) -> &DeviceDescriptor;
+
+    /// The capabilities this device advertises.
+    fn capabilities(&self) -> CapabilitySet;
+
+    /// Power control, or `None` when the device cannot do it.
+    fn as_power(&self) -> Option<&dyn PowerControl>;
+
+    /// Key input, or `None`.
+    fn as_key(&self) -> Option<&dyn KeyInput>;
+
+    /// Application control, or `None`.
+    fn as_app(&self) -> Option<&dyn AppLaunch>;
+
+    /// Input selection, or `None`.
+    fn as_input(&self) -> Option<&dyn InputSelect>;
+
+    /// Volume, or `None`.
+    fn as_volume(&self) -> Option<&dyn VolumeControl>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capability_sets_contain_what_was_added() {
+        let set = CapabilitySet::empty()
+            .with(Capability::PowerState)
+            .with(Capability::Key);
+        assert!(set.contains(Capability::PowerState));
+        assert!(set.contains(Capability::Key));
+        assert!(!set.contains(Capability::Volume));
+        assert_eq!(
+            set.iter().collect::<Vec<_>>(),
+            vec![Capability::PowerState, Capability::Key]
+        );
+    }
+
+    #[test]
+    fn capability_flags_do_not_collide() {
+        let mut seen = std::collections::HashSet::new();
+        for capability in ALL_CAPABILITIES {
+            assert!(
+                seen.insert(1u16 << capability_index(capability)),
+                "duplicate bit for {capability}"
+            );
+            assert!(CapabilitySet::of(capability).contains(capability));
+        }
+        assert_eq!(seen.len(), ALL_CAPABILITIES.len());
+    }
+
+    #[test]
+    fn digits_are_checked() {
+        assert!(Key::digit(7).is_ok());
+        assert!(Key::digit(10).is_err());
+    }
+
+    #[test]
+    fn inputs_render_stably() {
+        assert_eq!(Input::Hdmi(2).as_str(), "hdmi2");
+        assert_eq!(Input::Usb(1).to_string(), "usb1");
+        assert_eq!(Input::Tv.to_string(), "tv");
+        assert_eq!(Input::Other("AV".into()).to_string(), "AV");
+    }
+
+    #[test]
+    fn app_refs_prefer_the_name() {
+        let app = AppRef::new("3201512006786").with_name("Prime Video");
+        assert_eq!(app.to_string(), "Prime Video");
+        assert_eq!(AppRef::new("guess").to_string(), "guess");
+    }
+}

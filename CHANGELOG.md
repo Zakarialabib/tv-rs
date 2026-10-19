@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`tv-rs-core`: the device model.** Capability traits (`PowerControl`,
+  `KeyInput`, `AppLaunch`, `InputSelect`, `VolumeControl`), the erased
+  `DeviceHandle`, `CommandId` with its idempotency contract, confidence-tagged
+  `ObservedField`/`ObservedState`, the six-variant routing `TvError`, and a
+  scriptable mock backend (`mock-backend`) that reproduces pre-send failures,
+  lost acks, malformed replies, mid-session auth expiry and mid-command power-off.
+  The crate has no tokio in its dependency graph in any configuration; CI enforces
+  that.
 - **Certificate pinning for self-signed TV certificates.** `tv-rs-transport`
   gains `CertFingerprint` (SHA-256, hex round-trip), `TlsPolicy::Pinned` and
   `TlsPolicy::TrustOnFirstUse` with a `CertSink`. The default policy stays

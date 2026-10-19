@@ -8,6 +8,7 @@ What exists, what is deferred, and how it is tested. Measured on 2026-10-19 with
 | Crate | Status | Tests | What it does |
 |---|---|---|---|
 | `tv-rs` (facade) | done | 7 + 1 doc | `discover()`, `identify_vendor()`, `TvClient` dispatch, `TvError` |
+| `tv-rs-core` | **new (Phase 1a)** | 30 with `mock-backend`, 20 default | capability traits, `DeviceHandle`, `CommandId`, confidence-tagged `ObservedState`, routing `TvError`, scriptable mock backend |
 | `tv-rs-discovery` | done | 6 + 1 doc | SSDP `M-SEARCH`, response parsing, UPnP descriptor, descriptor fetch |
 | `tv-rs-power` | done | 9 + 1 doc | magic packet, `MacAddress` parsing, `poll_power_state` |
 | `tv-rs-transport` | done | 4 + 2 doc | `TlsPolicy`, rustls/native-tls connector, budgeted frame reader, `Unsupported` |
