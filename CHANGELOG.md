@@ -6,7 +6,39 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Quirks are consumed, not just loaded.** `tv-rs-core` decodes a row's `action` into
+  a typed `QuirkAction` (`StartAtPort`, `ExpectAuthRequired`, `TrustDeviceInfoFlags`,
+  `PromptUser`, `Other`), and with the facade's `quirks` feature a matching row pins
+  the port at client construction: a `QN90*` Tizen panel is built on 8002 only, a
+  webOS 23 panel on 3001 only, so the dead generation is never probed. A test asserts
+  that every action shipped in `quirks/default.toml` decodes to known vocabulary — a
+  typo in the table would otherwise be a comment nothing reads.
+- **`power_observation()`**: the facade now returns the power state *and* its
+  confidence. Roku is `High` (it reports the mode); Tizen and webOS are `Inferred`,
+  because an answering control port does not prove a picture is on. `power_state()`
+  is a projection of it, so the two cannot disagree. `tv-rs-cli status` prints a
+  `CONFIDENCE` column.
+- **`INTEGRATION.md`**: the adoption guide — discovery, TLS pin-on-first-use, quirks,
+  a fleet, media, CEC, and the pre-ship checklist.
+- **`crates/tizen/README.md`** marks Tizen experimental and says exactly why: mocks
+  prove the parsers, not that Samsung sends those frames.
+- **24-hour fleet simulation** (`twenty_four_simulated_hours_with_three_blips`): 50
+  devices, three panels that drop into standby on their own, two that never pair, one
+  whose power is never observable. Every healthy device converges every hour, each
+  blip costs exactly one wake, and no device exceeds one action per hour.
+- **`MockBackend::force_power`** so a test can make a television change state without
+  a command, which is the case a fleet actually has to survive.
+- **Versioning policy** in `CONTRIBUTING.md`, including what counts as breaking at
+  `0.x` and the 90-day freeze on removing error variants.
+
+### Changed
+
+- `#![forbid(unsafe_code)]` now covers every crate in the workspace, including
+  `tv-rs-cec`.
+- `tv-rs` re-exports `tv-rs-transport`, so `TlsPolicy` and `cert_sink` are reachable
+  from the facade that already needs them.
 
 ## [0.1.0] - 2026-10-20
 

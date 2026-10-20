@@ -36,5 +36,10 @@ hil = []
 # Runs the shared device-model conformance suite against the facade's clients.
 conformance = ["tv-rs-core/conformance"]
 
+# Consults `quirks/default.toml` when building a client, so a panel whose firmware
+# is known to have dropped a port starts on the surviving one instead of paying a
+# refused connection per command.
+quirks = ["tv-rs-core/quirks"]
+
 [lints]
 workspace = true

@@ -42,6 +42,7 @@
 // The aggregated error embeds the protocol crates' error enums, which are
 // large by construction. Boxing them would break the #[from] conversions the
 // facade relies on, and error paths are cold.
+#![forbid(unsafe_code)]
 #![allow(clippy::result_large_err)]
 
 mod client;
@@ -63,5 +64,7 @@ pub use tv_rs_power::PowerState;
 pub use tv_rs_roku as roku;
 /// Samsung Tizen remote channel and DIAL: [`tizen::TizenClient`].
 pub use tv_rs_tizen as tizen;
+/// TLS policy and pinning, shared by every vendor channel: [`transport::TlsPolicy`].
+pub use tv_rs_transport as transport;
 /// LG webOS SSAP WebSocket client: [`webos::WebosClient`].
 pub use tv_rs_webos as webos;

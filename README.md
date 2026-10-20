@@ -56,6 +56,8 @@ The rules the code follows:
 | **LG webOS** | SSAP over WebSocket (3000/3001, negotiated), pairing, `client-key` persistence, volume/mute/launch/power/foreground, `open_url` in the built-in browser |
 | **Roku** | unauthenticated ECP REST (8060): device info, apps, key presses, launch, power mode |
 | **Capabilities** | per-vendor capability sets + `DeviceHandle` traits, so a fleet holds `Arc<dyn DeviceHandle>` with no generics |
+| **Confidence** | `power_observation()` reports the state *and* how it was learned — read (`High`) or probed (`Inferred`) |
+| **Quirks** | firmware/model defects as TOML; with the `quirks` feature a matching row removes a dead port from the ladder |
 | **Reconcile** | desired state from a file, an HTTP manifest or MQTT; one pure decision function; healing ladder; JSONL audit log |
 | **HDMI-CEC** | power on / standby / active source over the cable, for panels the network cannot reach (optional) |
 | **Serve media** | HTTP `206 Partial Content` for seeking, plus HLS playlists — the two things TV players insist on |
@@ -172,7 +174,8 @@ on `TvClient`, and through the capability traits when you do not know the vendor
 | `tv-rs-agent` | `http` | no | `HttpPollProvider` (pulls `reqwest`) |
 | | `mqtt` | no | `MqttSubscribeProvider` (pulls `rumqttc`) |
 | `tv-rs-cec` | `client` | no | shell out to `cec-client` |
-| `tv-rs` | `hil` | no | compile the hardware-in-the-loop tests |
+| `tv-rs` | `quirks` | no | consult `quirks/default.toml` when building a client |
+| | `hil` | no | compile the hardware-in-the-loop tests |
 | | `conformance` | no | run the shared suite against the facade's clients |
 
 ## CLI
@@ -206,6 +209,14 @@ cargo test -p tv-rs --features hil --test hardware_in_the_loop
 `hw-test` discovers, probes power and capabilities, and appends to
 [`docs/hil-results.md`](docs/hil-results.md). It reports "no televisions answered"
 and exits 0 rather than inventing a pass.
+
+`tv-rs-agent` also carries the Phase 4 exit criterion as a test: 50 devices, 24
+simulated hours, three blips, two devices that never pair, one whose power is never
+observable — every healthy device converges every hour, each blip costs exactly one
+wake, and no device exceeds one action per hour.
+
+`#![forbid(unsafe_code)]` is on every crate. Dependencies are audited by
+`cargo-deny`; the MSRV is checked by building it.
 
 Gates CI enforces, and you should run before pushing:
 
@@ -254,6 +265,7 @@ the page that explains it.
 |---|---|
 | [`docs/01-playbook.md`](docs/01-playbook.md) | the protocol facts: ports, handshakes, what each vendor exposes |
 | [`docs/architecture.md`](docs/architecture.md) | the three layers, the dependency rule, where a new file belongs |
+| [`INTEGRATION.md`](INTEGRATION.md) | **put it in an application**: discovery, pinning, quirks, a fleet, media, CEC |
 | [`docs/spec/00-device-model.md`](docs/spec/00-device-model.md) | the device-model specification: capabilities, confidence, agent |
 | [`docs/spec/01-reconciliation.md`](docs/spec/01-reconciliation.md) | the Phase 0 audit: every symbol's destination |
 | [`docs/03-matrix.md`](docs/03-matrix.md) | what is done, what is deferred, verified test counts |

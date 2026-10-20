@@ -27,6 +27,7 @@
 //! assert_eq!(TvVendor::Samsung.control_port(), Some(8001));
 //! ```
 
+#![forbid(unsafe_code)]
 pub mod cli;
 pub mod commands;
 pub mod error;

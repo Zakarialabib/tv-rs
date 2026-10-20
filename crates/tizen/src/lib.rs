@@ -27,6 +27,7 @@
 // The public error enums embed `tokio_tungstenite`'s error, which is large by
 // construction. Boxing it would break the #[from] conversions callers rely on,
 // and these are cold paths where the extra size costs nothing measurable.
+#![forbid(unsafe_code)]
 #![allow(clippy::result_large_err)]
 
 pub mod apps;

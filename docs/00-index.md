@@ -1,6 +1,6 @@
 # Documentation
 
-Eight crates, one facade, one idea: speak each TV's own protocol and never hide a
+Twelve crates, one facade, one idea: speak each TV's own protocol and never hide a
 failure behind a panic. These pages are the long version of that.
 
 ## Read in this order
@@ -10,7 +10,8 @@ failure behind a panic. These pages are the long version of that.
 | 0 | [`glossary.md`](glossary.md) | **The map.** Every term, and the page or file that explains it. Start here if you only have five minutes. |
 | 1 | [`01-playbook.md`](01-playbook.md) | The protocol facts: ports, handshakes, discovery, media, and what each vendor exposes. |
 | 2 | [`architecture.md`](architecture.md) | The three layers, the dependency rule, the module inventory per crate, the auth rule, and the playbook → crate map. |
-| 3 | [`03-matrix.md`](03-matrix.md) | State: what is implemented, what is deferred, verified test counts, remaining gaps. |
+| — | [`../INTEGRATION.md`](../INTEGRATION.md) | **Putting it in an application**: discovery, TLS pinning, quirks, a fleet, media, CEC, and the pre-ship checklist. |
+| 4 | [`03-matrix.md`](03-matrix.md) | State: what is implemented, what is deferred, verified test counts, remaining gaps. |
 | 4 | [`02-external-refs.md`](02-external-refs.md) | Protocol references, prior art, and the crates this workspace learned from. |
 | 5 | [`04-rust-package-standard.md`](04-rust-package-standard.md) | The engineering standard the whole workspace follows — reusable outside this repo. |
 | 6 | [`05-roadmap.md`](05-roadmap.md) | Proposals: what to add next, each with the evidence behind it and what it costs. |

@@ -27,6 +27,16 @@ issue = "ws_8001_disabled"
 action = "start_at_8002"
 note = "2020+ Neo QLED firmwares do not listen on 8001; probing it costs a timeout per command."
 
+# Discovery gives the model from the UPnP descriptor but not the firmware, so the
+# rule has to be reachable without one. This row sits below the firmware-scoped row
+# above: specific first, general second.
+[[quirk]]
+vendor = "samsung"
+model_prefix = "QN9"
+issue = "ws_8001_disabled"
+action = "start_at_8002"
+note = "Neo QLED (2020+) firmware dropped the plaintext channel; the model name is enough to know it."
+
 [[quirk]]
 vendor = "samsung"
 firmware_prefix = "T-KT"

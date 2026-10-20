@@ -113,6 +113,8 @@ pub struct WebosClient {
     device_name: String,
     /// Which port actually answered, once one has. Shared across clones.
     negotiated: Arc<Mutex<Option<u16>>>,
+    /// A port the caller knows is the only one this panel listens on.
+    pinned: Option<u16>,
 }
 
 impl PartialEq for WebosClient {
@@ -162,6 +164,7 @@ impl WebosClient {
             manifest: SsapManifest::control(),
             device_name: "tv-rs".to_string(),
             negotiated: Arc::new(Mutex::new(None)),
+            pinned: None,
         }
     }
 
@@ -171,6 +174,25 @@ impl WebosClient {
         self.port = port;
         self.forget_port();
         self
+    }
+
+    /// Uses `port` and **only** `port`.
+    ///
+    /// For a panel whose generation is already known (the quirks table: webOS 23 and
+    /// later drop the plaintext port), the other port is a guaranteed timeout, so it
+    /// leaves the ladder rather than becoming a slow failure.
+    #[must_use]
+    pub fn pinned_port(mut self, port: u16) -> Self {
+        self.port = port;
+        self.pinned = Some(port);
+        *self.negotiated.lock().expect("negotiated lock") = None;
+        self
+    }
+
+    /// The port this client is pinned to, if any.
+    #[must_use]
+    pub fn pinned_port_number(&self) -> Option<u16> {
+        self.pinned
     }
 
     /// Switches to the modern TLS port `3001`.
@@ -245,6 +267,9 @@ impl WebosClient {
     /// connections per command on a TV that already told us which one it uses.
     fn port_candidates(&self) -> Vec<u16> {
         if let Some(port) = *self.negotiated.lock().expect("negotiated lock") {
+            return vec![port];
+        }
+        if let Some(port) = self.pinned {
             return vec![port];
         }
         let other = if self.port == WEBOS_WSS_PORT {
@@ -568,6 +593,18 @@ mod tests {
     use crate::types::SsapUri;
     use crate::TlsPolicy;
     use crate::{WEBOS_WSS_PORT, WEBOS_WS_PORT};
+
+    #[test]
+    fn a_pinned_port_is_the_only_candidate() {
+        let client = WebosClient::new("192.168.1.20")
+            .with_wss()
+            .pinned_port(3001);
+        assert_eq!(client.pinned_port_number(), Some(3001));
+        assert_eq!(client.port_candidates(), vec![3001], "no fallback to 3000");
+
+        let ladder = WebosClient::new("192.168.1.20").with_wss();
+        assert_eq!(ladder.port_candidates(), vec![3001, 3000]);
+    }
 
     #[test]
     fn build_register_request_serializes_expected_fields() {

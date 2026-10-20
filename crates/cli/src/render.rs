@@ -184,6 +184,8 @@ pub struct StatusRow {
     pub address: String,
     /// Power state, or the probe failure.
     pub power: String,
+    /// How sure the power column is (`high`, `inferred`, `unknown`).
+    pub confidence: String,
     /// Advertised capabilities, comma separated.
     pub capabilities: String,
 }
@@ -193,17 +195,22 @@ pub struct StatusRow {
 /// Capabilities are printed because they are the honest answer to "why is that
 /// button disabled" — the crate refuses what it cannot do, and this column says
 /// which refusals to expect.
+///
+/// The `CONFIDENCE` column is the answer to a different question: "is `OFF` a fact or
+/// a guess?" Roku reports its power mode (`high`); Tizen and webOS are inferred from
+/// a TCP probe (`inferred`), because an open control port does not prove a picture is
+/// on the screen.
 #[must_use]
 pub fn render_status_table(rows: &[StatusRow]) -> String {
     let mut out = String::new();
     out.push_str(&format!(
-        "{:<8} {:<24} {:<16} {:<24} {}\n",
-        "VENDOR", "LABEL", "ADDRESS", "POWER", "CAPABILITIES"
+        "{:<8} {:<24} {:<16} {:<22} {:<10} {}\n",
+        "VENDOR", "LABEL", "ADDRESS", "POWER", "CONFIDENCE", "CAPABILITIES"
     ));
     for row in rows {
         out.push_str(&format!(
-            "{:<8} {:<24} {:<16} {:<24} {}\n",
-            row.vendor, row.label, row.address, row.power, row.capabilities
+            "{:<8} {:<24} {:<16} {:<22} {:<10} {}\n",
+            row.vendor, row.label, row.address, row.power, row.confidence, row.capabilities
         ));
     }
     out
@@ -245,6 +252,7 @@ mod status_tests {
                 label: "Living Room".to_string(),
                 address: "10.0.0.5".to_string(),
                 power: "On".to_string(),
+                confidence: "inferred".to_string(),
                 capabilities: "power_state,key,app_launch".to_string(),
             },
             StatusRow {
@@ -252,6 +260,7 @@ mod status_tests {
                 label: "Lobby".to_string(),
                 address: "10.0.0.6".to_string(),
                 power: "probe failed: timed out".to_string(),
+                confidence: "inferred".to_string(),
                 capabilities: "power_state,app_launch,volume".to_string(),
             },
         ];
