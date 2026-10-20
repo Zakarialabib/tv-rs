@@ -42,6 +42,7 @@ pub mod http_provider;
 pub mod mqtt_provider;
 pub mod reconciler;
 pub mod runner;
+pub mod telemetry;
 
 pub use audit::{AuditEntry, AuditLog};
 pub use desired::{
@@ -54,3 +55,4 @@ pub use http_provider::HttpPollProvider;
 pub use mqtt_provider::MqttSubscribeProvider;
 pub use reconciler::{decide, Decision};
 pub use runner::{Outcome, ReconcilePolicy, Reconciler};
+pub use telemetry::{assess_telemetry, TelemetryPolicy, TelemetryVerdict};

@@ -14,6 +14,7 @@ use crate::audit::{AuditEntry, AuditLog};
 use crate::desired::DesiredStateProvider;
 use crate::healer::{HealerAction, HealerLadder};
 use crate::reconciler::{decide, Decision};
+use crate::telemetry::{assess_telemetry, TelemetryPolicy, TelemetryVerdict};
 
 /// How hard the loop pushes.
 #[derive(Debug, Clone)]
@@ -22,6 +23,8 @@ pub struct ReconcilePolicy {
     pub tick: Duration,
     /// Whether to stop a device after a repeated failure.
     pub max_failures: u32,
+    /// Telemetry thresholds, or `None` to skip telemetry checks entirely.
+    pub telemetry: Option<TelemetryPolicy>,
 }
 
 impl Default for ReconcilePolicy {
@@ -29,6 +32,7 @@ impl Default for ReconcilePolicy {
         Self {
             tick: Duration::from_secs(60),
             max_failures: 3,
+            telemetry: Some(TelemetryPolicy::default()),
         }
     }
 }
@@ -40,7 +44,7 @@ pub struct Outcome {
     pub device: String,
     /// The action that was attempted, or `None` when the provider had no opinion.
     pub action: Option<Decision>,
-    /// `ok`, `skipped`, `failed` or `quarantined`.
+    /// `ok`, `skipped`, `deferred`, `failed` or `quarantined`.
     pub result: &'static str,
     /// The error, when something failed.
     pub error: Option<String>,
@@ -138,6 +142,20 @@ impl Reconciler {
         }
     }
 
+    /// Reads and assesses telemetry when both the policy and the device support it.
+    ///
+    /// A telemetry read failure is deliberately ignored: diagnostics must not turn a
+    /// healthy screen into a failed reconciliation. The normal power probe still
+    /// runs and will surface a genuinely unreachable device.
+    async fn telemetry_verdict(&self, handle: &dyn DeviceHandle) -> Option<TelemetryVerdict> {
+        let policy = self.policy.telemetry.as_ref()?;
+        let provider = handle.as_telemetry()?;
+        match provider.telemetry().await {
+            Ok(telemetry) => Some(assess_telemetry(&telemetry, policy)),
+            Err(_) => None,
+        }
+    }
+
     async fn reconcile_one(&mut self, handle: &dyn DeviceHandle) -> Outcome {
         let id = handle.id();
         let key = id.as_str().to_string();
@@ -164,6 +182,44 @@ impl Reconciler {
                 };
             }
         };
+
+        if let Some(verdict) = self.telemetry_verdict(handle).await {
+            match verdict {
+                TelemetryVerdict::Healthy => {}
+                TelemetryVerdict::Wait(reason) => {
+                    self.record(
+                        &key,
+                        &describe(&desired),
+                        "telemetry_wait",
+                        "deferred",
+                        "unknown",
+                    )
+                    .await;
+                    return Outcome {
+                        device: key,
+                        action: None,
+                        result: "deferred",
+                        error: Some(reason.to_string()),
+                    };
+                }
+                TelemetryVerdict::Quarantine(reason) => {
+                    self.record(
+                        &key,
+                        &describe(&desired),
+                        "telemetry_quarantine",
+                        "quarantined",
+                        "unknown",
+                    )
+                    .await;
+                    return Outcome {
+                        device: key,
+                        action: None,
+                        result: "quarantined",
+                        error: Some(reason.to_string()),
+                    };
+                }
+            }
+        }
 
         let observed = observe(handle).await;
         let decision = decide(&desired, &observed, handle.capabilities());
@@ -284,7 +340,7 @@ mod tests {
     use tv_rs_core::capability::CapabilitySet;
     use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs};
     use tv_rs_core::mock::{Failure, MockBackend};
-    use tv_rs_core::Capability;
+    use tv_rs_core::{Capability, Telemetry};
 
     use super::*;
     use crate::desired::StaticFileProvider;
@@ -353,6 +409,7 @@ mod tests {
             ReconcilePolicy {
                 tick: Duration::from_millis(1),
                 max_failures: 3,
+                telemetry: None,
             },
         );
 
@@ -400,5 +457,132 @@ mod tests {
 
         tokio::fs::remove_dir_all(dir).await.unwrap();
         tokio::fs::remove_dir_all(audit_dir).await.unwrap();
+    }
+
+    fn telemetry_at(celsius: i16) -> Telemetry {
+        Telemetry {
+            temperature_celsius: ObservedField::from_read(celsius),
+            ..Telemetry::nothing_observed()
+        }
+    }
+
+    #[tokio::test]
+    async fn a_hot_panel_is_deferred_without_a_command() {
+        let (provider, dir) = provider_for(r#"{"tv-hot":{"power":"on","app":"netflix"}}"#).await;
+        let mock =
+            Arc::new(MockBackend::new(descriptor("tv-hot")).with_telemetry(telemetry_at(70)));
+        let mut reconciler = Reconciler::new(vec![mock.clone()], provider);
+
+        let outcomes = reconciler.tick().await;
+        assert_eq!(outcomes[0].result, "deferred", "{outcomes:?}");
+        assert_eq!(outcomes[0].error.as_deref(), Some("temperature is high"));
+        assert!(
+            mock.actions().is_empty(),
+            "a hot panel must not receive a launch or a power command"
+        );
+
+        let outcomes = reconciler.tick().await;
+        assert_eq!(outcomes[0].result, "deferred");
+        assert!(mock.actions().is_empty());
+
+        tokio::fs::remove_dir_all(dir).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_critical_panel_is_quarantined_immediately() {
+        let (provider, dir) =
+            provider_for(r#"{"tv-critical":{"power":"on","app":"netflix"}}"#).await;
+        let mock =
+            Arc::new(MockBackend::new(descriptor("tv-critical")).with_telemetry(telemetry_at(85)));
+        let mut reconciler = Reconciler::new(vec![mock.clone()], provider);
+
+        let outcomes = reconciler.tick().await;
+        assert_eq!(outcomes[0].result, "quarantined", "{outcomes:?}");
+        assert_eq!(
+            outcomes[0].error.as_deref(),
+            Some("temperature is critical")
+        );
+        assert_eq!(reconciler.quarantined(), ["tv-critical".to_string()]);
+        assert!(mock.actions().is_empty());
+
+        let outcomes = reconciler.tick().await;
+        assert_eq!(outcomes[0].result, "quarantined");
+        assert!(mock.actions().is_empty());
+
+        tokio::fs::remove_dir_all(dir).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_telemetry_read_failure_does_not_block_reconciliation() {
+        let (provider, dir) = provider_for(r#"{"tv-diag":{"power":"on","app":"netflix"}}"#).await;
+        let mock = Arc::new(MockBackend::new(descriptor("tv-diag")));
+        mock.fail_next_telemetry(Failure::TimeoutBeforeSend);
+        let mut reconciler = Reconciler::new(vec![mock.clone()], provider);
+
+        let outcomes = reconciler.tick().await;
+        assert_eq!(outcomes[0].result, "ok", "{outcomes:?}");
+        assert!(mock.actions().iter().any(|action| matches!(
+            action,
+            tv_rs_core::mock::Action::Launch(app) if app == "netflix"
+        )));
+
+        tokio::fs::remove_dir_all(dir).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn telemetry_verdicts_are_audited_without_device_actions() {
+        let (provider, dir) = provider_for(
+            r#"{"tv-hot":{"power":"on","app":"netflix"},"tv-critical":{"power":"on","app":"netflix"}}"#,
+        )
+        .await;
+        let hot = Arc::new(MockBackend::new(descriptor("tv-hot")).with_telemetry(telemetry_at(70)));
+        let critical =
+            Arc::new(MockBackend::new(descriptor("tv-critical")).with_telemetry(telemetry_at(85)));
+
+        let audit_dir = unique_dir("tv-rs-telemetry-audit");
+        tokio::fs::create_dir_all(&audit_dir).await.unwrap();
+        let log = AuditLog::new(audit_dir.join("audit.jsonl"));
+        let mut reconciler =
+            Reconciler::new(vec![hot.clone(), critical.clone()], provider).with_audit(log.clone());
+
+        let outcomes = reconciler.tick().await;
+        assert_eq!(outcomes.len(), 2);
+        assert!(hot.actions().is_empty());
+        assert!(critical.actions().is_empty());
+
+        let text = tokio::fs::read_to_string(log.path()).await.unwrap();
+        assert_eq!(text.lines().count(), 2, "{text}");
+        assert!(text.contains("\"telemetry_wait\""), "{text}");
+        assert!(text.contains("\"telemetry_quarantine\""), "{text}");
+        assert!(text.contains("\"deferred\""), "{text}");
+        assert!(text.contains("\"quarantined\""), "{text}");
+
+        tokio::fs::remove_dir_all(dir).await.unwrap();
+        tokio::fs::remove_dir_all(audit_dir).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn telemetry_can_be_disabled_by_policy() {
+        let (provider, dir) = provider_for(r#"{"tv-off":{"power":"on","app":"netflix"}}"#).await;
+        let mock =
+            Arc::new(MockBackend::new(descriptor("tv-off")).with_telemetry(telemetry_at(90)));
+        let mut reconciler = Reconciler::with_policy(
+            vec![mock.clone()],
+            provider,
+            ReconcilePolicy {
+                tick: Duration::from_millis(1),
+                max_failures: 3,
+                telemetry: None,
+            },
+        );
+
+        let outcomes = reconciler.tick().await;
+        assert_eq!(outcomes[0].result, "ok", "{outcomes:?}");
+        assert!(mock.actions().iter().any(|action| matches!(
+            action,
+            tv_rs_core::mock::Action::Launch(app) if app == "netflix"
+        )));
+
+        tokio::fs::remove_dir_all(dir).await.unwrap();
     }
 }

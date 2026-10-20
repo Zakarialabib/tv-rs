@@ -55,7 +55,7 @@ impl HealerLadder {
             // Retrying a missing credential is how a fleet gets rate-limited.
             Remedy::Reprovision => HealerAction::Reprovision,
             // A capability that does not exist will not start existing.
-            Remedy::Disable => {
+            Remedy::Disable | Remedy::Quarantine => {
                 self.failures.insert(device.clone(), self.max_attempts);
                 HealerAction::Quarantine
             }
