@@ -1,7 +1,63 @@
 # TV-RS Adoption & Domain Consolidation Spec
 
-**Status:** **U0 baseline COMPLETE 2026-10-20** — dependency resolved, inventory
-recorded, roadmap linked. U1 (Tizen replacement) is next.
+**Status:** **U0 COMPLETE · U1 DESIGN DECIDED 2026-10-20** — dependency resolved,
+inventory recorded, roadmap linked. U1's architecture is settled (below); implementation
+is the next pull.
+
+### U1 architecture decisions (the interesting part)
+
+The app's `plugin-samsung-remote` is 1,582 LOC across 8 files. After U1 it is a **thin
+IPC adapter**: `commands.rs` (7 commands) + `models.rs` (DTOs) + `error.rs` +
+`lifecycle.rs` + `lib.rs`, plus one new `adapter.rs` that is the *only* place tv-rs
+types are mapped to the app's IPC surface. Three protocol files are deleted outright:
+
+| Deleted | LOC | Replaced by |
+| ------- | --- | ----------- |
+| `remote.rs` | 570 | `tv_rs_tizen::{TizenClient, TizenSession, TizenConnectionPool}` |
+| `tokens.rs` | 214 | `tv_rs_tizen::SamsungTokenStore` (drop-in) |
+| `discovery.rs` | 274 | `tv_rs_tizen::discover_samsung` |
+
+**Decision 1 — TLS: TOFU replaces accept-any. The security debt is real and it is
+the point of U1.** The app ships a live `rustls::client::danger::ServerCertVerifier`
+(`AcceptAnyTvCert`, `remote.rs:181`) plus `danger_client_config()`. Both are deleted.
+The secure path uses `TlsPolicy::TrustOnFirstUse(cert_sink())`: the first certificate
+is recorded, any later mismatch is rejected — TOFU with pinning, exactly the spec's
+"TOFU first, then pinned" requirement.
+
+Note: `tv-rs-transport` *also* contains an `AcceptAnyTvCert`, but it is **private**
+(`struct`, not `pub`) and reachable only through `TlsPolicy::AcceptInvalid` — a gated
+escape hatch, not a default. U1 simply never constructs it. The app-side verifier is
+the one that had to go; the upstream one stays unused and unreachable.
+
+**Decision 2 — arbitrary keys stay, with no upstream change.** The app's UI accepts
+any `KEY_*` string (`validate_key` pattern-checks rather than whitelisting). tv-rs
+exposes a closed 21-variant `TizenRemoteKey` enum. Rather than restrict the UI or fork
+upstream, the adapter sends the app's existing `key_payload()` frame through
+`TizenSession::send_raw()`. `send_raw` exists precisely for this, so open decision #4
+resolves to **"no upstream change"** and the UI keeps its flexibility.
+
+**Decision 3 — the app's hand-rolled plain→secure fallback is already upstream.**
+`remote.rs::open_channel` tries `ws://8001` then `wss://8002`. tv-rs's
+`open_channel` iterates `client.port_candidates()` with the same ordering and, via
+`should_try_next_port`, only falls through on *transport* refusal — a certificate or
+protocol verdict is final. So the fallback is not re-implemented in the adapter; it
+is inherited, and the adapter gets the stricter "auth answer is final" semantics for
+free.
+
+**Decision 4 — error mapping happens once, in `adapter.rs`.** `commands.rs` stays
+free of protocol knowledge: each command validates input, calls one tv-rs function,
+and maps the result. `TizenError` → `SamsungError` lives in one function.
+
+**Behaviour parity verified before deleting anything:** the app's `TokenStore::upsert`
+refuses to clobber a stored token with an empty one. `tv_rs_tizen::SamsungTokenStore::
+upsert` (token_store.rs:99-103) carries the identical guard
+(`if !token.is_empty() || entry.token.is_empty()`), and both stores quarantine a
+corrupt file to `.corrupt`. The swap is behaviour-preserving, not just API-compatible.
+
+**Open risk — the pairing wait window.** The app waits ≤30 s for the human to accept
+the on-TV prompt (`PAIR_WAIT`). `TizenSession::connect` uses tv-rs's own
+`HANDSHAKE_TIMEOUT`; the adapter must confirm pairing still allows a human-sized
+window, or the pairing flow regresses.
 
 > **U0 premise correction (2026-10-20).** This spec assumed `tv-rs` was unpublished
 > and needed a git-SHA pin. It is **published on crates.io at 0.1.0** — the facade and
@@ -10,9 +66,9 @@ recorded, roadmap linked. U1 (Tizen replacement) is next.
 > exposes the surface U1–U4 need: `discover`, `discover_with`, `identify_vendor`,
 > `TvClient`, `TvError`/`Result`, `DiscoveredTv`, `TvVendor`, plus re-exports of
 > `core`/`discovery`/`power`/`roku`/`tizen`/`webos`.
-**Scope:** desktop TV/display lane; `tv-rs` as the source of truth for the TV domain.
-**Roadmap companion:** [`ROADMAP-DESKTOP.md`](./ROADMAP-DESKTOP.md) §12 (verified `tv-rs` state) and §13 (what is coming).
-**Reference implementation:** `tv-rs` GitHub `fedbf07`, MIT, MSRV `1.89`; app MSRV `1.94`.
+> **Scope:** desktop TV/display lane; `tv-rs` as the source of truth for the TV domain.
+> **Roadmap companion:** [`ROADMAP-DESKTOP.md`](../../../Simple-Signage/docs/specs/ROADMAP-DESKTOP.md) §12 (verified `tv-rs` state) and §13 (what is coming).
+> **Reference implementation:** `tv-rs` GitHub `fedbf07`, MIT, MSRV `1.89`; app MSRV `1.94`.
 
 ---
 
@@ -37,6 +93,13 @@ This creates three failures:
 The goal is not "use `tv-rs` for a few commands". The goal is:
 
 > **`tv-rs` owns the TV domain. The app owns signage orchestration, persistence and UI.**
+
+> **Crate-first principle.** `tv-rs` should be the best pure-Rust TV-domain library
+> for our scenarios, not a mirror of app internals. Every workstream must improve
+> the crate's API, tests and docs as it moves code, and must replace or enhance
+> the old app path rather than wrap it forever. Signage is the first adopter, not
+> the crate's design center: no Tauri, `sqlx`, app DTOs or signage policy in
+> `tv-rs`.
 
 ---
 
@@ -69,7 +132,8 @@ The Signage media library, content catalog, thumbnails, HTTP server, ContentDire
 2. The app contains no `AcceptAnyTvCert`, no second Tizen token store and no second SSDP scanner; the app keeps exactly one media library and one media server.
 3. The app's vendor-specific branches are limited to display/UI mapping, not protocol behavior.
 4. `tv-rs` crates have no dependency on this app, Tauri or `sqlx`.
-5. The app still passes its contract, type and cargo gates after each extraction.
+5. `tv-rs` is adoptable by a non-Tauri Rust host: public API documented, examples/tests run without app code, and no signage-only semantics in the crate.
+6. The app still passes its contract, type and cargo gates after each extraction.
 
 ---
 
@@ -131,7 +195,7 @@ No `tv-rs` crate may depend on an app crate. The app may depend on `tv-rs`; neve
 | `tv-rs-power`                    | published `0.1.0` | Wake-on-LAN + TCP power/health probe                                               |
 | `tv-rs-transport`                | published `0.1.0` | TLS policy, pinning, frame reader                                                  |
 | `tv-rs-tizen` / `webos` / `roku` | published `0.1.0` | vendor backends, pairing, sessions                                                 |
-| `tv-rs` facade                   | not published     | stable `discover` / `TvClient` / `DeviceHandle` surface; pin git rev               |
+| `tv-rs` facade                   | published `0.1.0` | stable `discover` / `TvClient` / `DeviceHandle` surface; semver dependency         |
 | `tv-rs-local`                    | **new**           | local EDID/connector probe, adapted from `plugin-display/hardware/probe.rs`        |
 | `tv-rs-media`                    | not adopted       | **No media library in tv-rs.** Signage keeps the media server and content          |
 | `tv-rs-dlna`                     | **new**           | DLNA transport: renderer discovery, AVTransport, GENA; no content store            |
@@ -153,7 +217,7 @@ These are review gates, not suggestions.
 7. **Thin IPC.** Tauri commands validate input, call one adapter, map errors and return DTOs. No protocol code in `commands.rs`.
 8. **No app types in `tv-rs`.** No `AppResult`, `DisplayLinkStatus`, `MediaItem`, `DatabaseManager`, `AppHandle` or `serde` shapes copied from the app.
 9. **Feature-gated platform code.** `tv-rs-local` isolates Windows/Linux platform `unsafe`; `tv-rs-core` keeps `forbid(unsafe_code)`.
-10. **Pin, then publish.** Git revision + full SHA while unpublished; semver and crates.io after the facade/media release. No floating branch.
+10. **Dependency policy.** Use the published `tv-rs = "0.1.0"` semver dependency; no git pin, fork or local path. Publish `tv-rs-local` and `tv-rs-dlna` when they exist. No floating branch.
 11. **Every extraction deletes the old path.** A move is not complete while both implementations are reachable.
 12. **CI checks the boundary.** Add a grep/check that rejects the retired symbols and app-only dependencies in `tv-rs`.
 
@@ -163,13 +227,13 @@ These are review gates, not suggestions.
 
 ### U0 - Baseline, dependency and inventory
 
-**Current:** no `tv-rs` dependency in the desktop lane; `tv-rs-adoption.md` was missing; roadmap carried duplicate historical §12 blocks.
+**Current:** `tv-rs = "0.1.0"` is already a dependency of `plugin-samsung-remote`; the spec and `ROADMAP-DESKTOP.md` §12/§13 are the current plan.
 
 **Target:**
 
-- Pin the full `tv-rs` git SHA in the lane-owned `src-tauri/Cargo.toml`.
+- Keep the published `tv-rs = "0.1.0"` semver dependency in the lane-owned manifest; no git pin or path override.
 - Record `cargo tree`, license, MSRV and duplicate `tokio-tungstenite` lines.
-- Publish this spec and make `ROADMAP-DESKTOP.md` §12/§13 the only current plan.
+- Keep this spec linked from `ROADMAP-DESKTOP.md` §12/§13.
 - Inventory every protocol symbol in the app before deleting anything.
 
 **Acceptance (all green 2026-10-20):**
@@ -181,31 +245,30 @@ These are review gates, not suggestions.
 - [x] `cargo tree -d` records **two** `tokio-tungstenite` versions: `0.24.0` (the app's
       MCP client) and `0.30.0` (`tv-rs-transport`). Both are rustls-only — no TLS-stack
       duplication, just two WS majors to watch.
-- [x] No app code depends on a local `C:\laragon\www\tv-rs` path (grep for `path =`
-      + `tv-rs` across every manifest returns nothing).
+- [x] No app code depends on a local `C:\laragon\www\tv-rs` path (grep for `path =` + `tv-rs` across every manifest returns nothing).
 - [x] The spec is linked from `ROADMAP-DESKTOP.md` §12.
 
 **Baseline recorded:**
 
-| Fact | Value |
-| ---- | ----- |
-| Dependency | `tv-rs = "0.1.0"` (crates.io) in `plugin-samsung-remote/Cargo.toml` |
-| Upstream | `https://github.com/Zakarialabib/tv-rs.git`; spec SHA `fedbf07d0fafd9a927a155e98cfc44f4572329b2` (note: `origin/main` is 2 commits ahead at `030600d`) |
-| License | MIT (workspace) — compatible with the app's `MIT OR Apache-2.0` |
-| MSRV | `1.89` (app is `1.94` — no conflict) |
-| TLS | rustls only; `native-tls` absent |
-| Duplicate WS | `tokio-tungstenite` 0.24.0 (app) + 0.30.0 (tv-rs-transport) |
+| Fact         | Value                                                                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Dependency   | `tv-rs = "0.1.0"` (crates.io) in `plugin-samsung-remote/Cargo.toml`                                                                                    |
+| Upstream     | `https://github.com/Zakarialabib/tv-rs.git`; spec SHA `fedbf07d0fafd9a927a155e98cfc44f4572329b2` (note: `origin/main` is 2 commits ahead at `030600d`) |
+| License      | MIT (workspace) — compatible with the app's `MIT OR Apache-2.0`                                                                                        |
+| MSRV         | `1.89` (app is `1.94` — no conflict)                                                                                                                   |
+| TLS          | rustls only; `native-tls` absent                                                                                                                       |
+| Duplicate WS | `tokio-tungstenite` 0.24.0 (app) + 0.30.0 (tv-rs-transport)                                                                                            |
 
 **Protocol-symbol inventory (delete targets for U1–U5):**
 
-| Symbol | Location | Workstream |
-| ------ | -------- | ---------- |
-| `AcceptAnyTvCert`, `danger_client_config` | `plugin-samsung-remote/src/remote.rs:181,233,241,262,563` | U1 |
-| `parse_ssdp_reply` | `plugin-samsung-remote/src/discovery.rs:89` (callers :57,194,204,212) | U1 |
-| `TokenStore`, `ConnectionManager` | `plugin-samsung-remote/src/{tokens,remote}.rs` | U1 |
-| `AVTransport` / `GENA` control point | `plugin-dlna/src/{discovery,soap,gena,gena_client,gena_parse,metadata,models}.rs` | U3 |
-| Local EDID/WMI/DRM probe | `plugin-display/src/hardware/probe.rs` (7 tests) | U2 |
-| TCP/HTTP reachability probe | `src-tauri/src/network/health.rs` | U4 |
+| Symbol                                    | Location                                                                          | Workstream |
+| ----------------------------------------- | --------------------------------------------------------------------------------- | ---------- |
+| `AcceptAnyTvCert`, `danger_client_config` | `plugin-samsung-remote/src/remote.rs:181,233,241,262,563`                         | U1         |
+| `parse_ssdp_reply`                        | `plugin-samsung-remote/src/discovery.rs:89` (callers :57,194,204,212)             | U1         |
+| `TokenStore`, `ConnectionManager`         | `plugin-samsung-remote/src/{tokens,remote}.rs`                                    | U1         |
+| `AVTransport` / `GENA` control point      | `plugin-dlna/src/{discovery,soap,gena,gena_client,gena_parse,metadata,models}.rs` | U3         |
+| Local EDID/WMI/DRM probe                  | `plugin-display/src/hardware/probe.rs` (7 tests)                                  | U2         |
+| TCP/HTTP reachability probe               | `src-tauri/src/network/health.rs`                                                 | U4         |
 
 **App-owned, never moving:** `dlna_media_server.rs`, `plugin-dlna/src/advertise.rs`,
 `plugin-dlna/src/manager.rs`, all `MediaItem`/content code,
@@ -306,8 +369,6 @@ pub fn probe_displays() -> Vec<ProbeInfo>;
 
 **Current source:** `plugin-dlna/src/{discovery,soap,gena,gena_client,gena_parse,metadata,models}.rs`.
 
-**Target:** new `tv-rs-dlna` crate, feature `control-point`.
-
 **Target:** new `tv-rs-dlna` crate, feature `transport`.
 
 **Proposed API:**
@@ -396,7 +457,9 @@ pub async fn subscribe(renderer: &Renderer, callback: &str) -> Result<Subscripti
 - [ ] `cargo tree` shows one TLS stack and no duplicate Tizen transport.
 - [ ] `dlna_media_server.rs` and `advertise.rs` still own the app media server; no `MediaLibrary` type appears in `tv-rs`.
 - [ ] Contract checker, typecheck, targeted tests and cargo check are green.
-- [ ] `tv-rs` crates are published at a compatible version, or the git SHA remains pinned with a documented release ticket.
+- [ ] `tv-rs` crates are published at a compatible semver; no git or path dependency remains.
+- [ ] `tv-rs` has standalone docs/examples and tests that run without Signage; no moved module is a raw copy.
+- [ ] The app keeps only adapters/projections for TV behavior.
 
 ---
 
@@ -493,7 +556,7 @@ pub async fn subscribe(renderer: &Renderer, callback: &str) -> Result<Subscripti
 6. **Credential abstraction.** Keep vendor-specific stores, or add a generic `PairingStore` trait in `tv-rs-core`. Start vendor-specific; generalize only if both Tizen and webOS need the same shape.
 7. **mDNS scope.** The current app mDNS is `_signagemaster._tcp`, not Cast/AirPlay. Only upstream a generic browser when D7 starts.
 8. **Agent adoption.** Do not adopt `tv-rs-agent` in this program. Revisit after U5 if the app wants fleet reconciliation.
-9. **Publication cadence.** Publish `tv-rs-local` and `tv-rs-dlna` separately; pin git until the facade release is available. Do not publish a media library crate.
+9. **Publication cadence.** Publish `tv-rs-local` and `tv-rs-dlna` separately when they exist. The facade is already on crates.io at `0.1.0`; use semver, not a git pin. Do not publish a media library crate.
 
 ---
 
