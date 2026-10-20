@@ -15,7 +15,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   webOS 23 panel on 3001 only, so the dead generation is never probed. A test asserts
   that every action shipped in `quirks/default.toml` decodes to known vocabulary — a
   typo in the table would otherwise be a comment nothing reads.
-- **`power_observation()`**: the facade now returns the power state *and* its
+- **`power_observation()`**: the facade now returns the power state _and_ its
   confidence. Roku is `High` (it reports the mode); Tizen and webOS are `Inferred`,
   because an answering control port does not prove a picture is on. `power_state()`
   is a projection of it, so the two cannot disagree. `tv-rs-cli status` prints a
@@ -39,6 +39,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `tv-rs-cec`.
 - `tv-rs` re-exports `tv-rs-transport`, so `TlsPolicy` and `cert_sink` are reachable
   from the facade that already needs them.
+
+## [0.2.0] - 2026-10-20
+
+`tv-rs-tizen` only. The new `TizenError::InvalidKey` variant is a breaking change
+under the 0.x policy, so this is a minor bump rather than `0.1.1`.
+
+### Added
+
+- **`TizenRemote`**: the stateful Samsung service for fleet callers. It owns the
+  token store, the connection pool and per-host TLS trust, and exposes pairing,
+  raw/typed keys, app launch, `disconnect`, `forget_paired` and `shutdown`.
+- **Pairing flow** (`TizenClient::pair`): 30-second on-screen window, token and TV
+  name from the handshake, accepting both `name` and `deviceName` firmware spellings.
+- **Raw key codes** (`send_key_code`): any validated Samsung `KEY_*` code, plus
+  `TizenRemoteKey::from_code`, so model-specific keys no longer need a closed enum.
+- **Channel launching**: `ed.apps.launch` with `NativeLaunch`/`DeepLink`, and the
+  legacy `ms.channel.launch` path for pre-`ed.apps.launch` panels.
+- **Launch fallback**: channel → DIAL → legacy, with DIAL first when the TV is not
+  paired.
+
+### Changed
+
+- The connection pool drains the remote channel's read half in the background, so a
+  silent TV cannot fill its receive buffer and make the next key press look dead.
+
+### Fixed
+
+- `ms.error` during the handshake maps to `Unauthorized` instead of an untyped
+  protocol error.
 
 ## [0.1.0] - 2026-10-20
 
@@ -74,7 +103,7 @@ First published release: eleven crates on crates.io, all at `0.1.0`.
   precedence — pinned by a test.
 - **Transport negotiation.** Tizen and webOS now try both port generations
   (`wss://:8002` → `ws://:8001`, `wss://:3001` → `ws://:3000`), remember the one
-  that answered per client, and only fall back when the connection was *refused* —
+  that answered per client, and only fall back when the connection was _refused_ —
   a certificate mismatch is an answer, not a reason to try plaintext. Connection
   attempts are bounded at 5 s and the Tizen handshake at 10 s, so a panel that
   accepts the socket and goes quiet no longer hangs a caller.
