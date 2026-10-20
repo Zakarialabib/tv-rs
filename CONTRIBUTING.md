@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Rust 1.75 or newer (`rust-version` in `Cargo.toml`).
+- Rust 1.89 or newer (`rust-version` in `Cargo.toml`; CI builds that exact version).
 - `rustfmt` and `clippy` components installed — CI fails without them, and a
   host that lacks them silently produces a passing-looking local run.
 
@@ -12,8 +12,8 @@ rustup component add rustfmt clippy
 
 ## Gates
 
-Every pull request must pass the same five checks the branch protection
-requires:
+Branch protection requires five checks — rustfmt, clippy, tests on Linux, tests on
+Windows, rustdoc. Run the same four commands before pushing:
 
 ```bash
 cargo fmt --all --check
@@ -21,6 +21,19 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 ```
+
+CI runs four more jobs that are not branch protection but are still red builds you
+will be asked to fix:
+
+| Job | What it catches that a local `--workspace` run does not |
+|---|---|
+| `msrv (1.89.0)` | a `rust-version` nobody builds against, and code that needs a newer compiler |
+| `cargo-deny` | advisories, unknown sources, wildcard deps, licences outside `deny.toml` |
+| `per-crate features` | a crate that only compiles because a sibling turned a feature on |
+| `core (tokio-free + mock)` | tokio sneaking into `tv-rs-core`'s graph |
+
+The last one is the reason the `--workspace` runs are not enough: feature unification
+hides exactly the break that job exists to find.
 
 Hardware tests are opt-in and must never run in CI:
 

@@ -101,7 +101,11 @@ Every crate root carries, in this order:
 
 1. A `//!` block giving the scope, the essential protocol/domain facts a reader
    needs, and **at least one runnable example**.
-2. `#![deny(missing_docs)]`.
+2. `#![forbid(unsafe_code)]` — the workspace has no `unsafe` in it, and saying so at
+   the root is what keeps it that way.
+3. `#![deny(missing_docs)]` is not written per crate: it is declared once in
+   `[workspace.lints.rust]` and inherited through `[lints] workspace = true`, so a
+   new crate cannot forget it.
 
 Consequences to accept deliberately:
 
