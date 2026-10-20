@@ -9,6 +9,12 @@
 Find the televisions on your LAN and drive them from Rust — discovery, power,
 remote control, fleet reconciliation and media serving, behind one small facade.
 
+> **What is on crates.io right now:** `0.1.0`. `power_observation()`, the facade's
+> `quirks` feature, `tv-rs-cec`/`tv-rs-media`'s current APIs and everything in
+> [`INTEGRATION.md`](INTEGRATION.md) describe `main` and land in the next release —
+> check [docs.rs](https://docs.rs/tv-rs) for what a published version actually has
+> before copying an example from here.
+
 ```rust
 use tv_rs::discover;
 
@@ -56,8 +62,8 @@ The rules the code follows:
 | **LG webOS** | SSAP over WebSocket (3000/3001, negotiated), pairing, `client-key` persistence, volume/mute/launch/power/foreground, `open_url` in the built-in browser |
 | **Roku** | unauthenticated ECP REST (8060): device info, apps, key presses, launch, power mode |
 | **Capabilities** | per-vendor capability sets + `DeviceHandle` traits, so a fleet holds `Arc<dyn DeviceHandle>` with no generics |
-| **Confidence** | `power_observation()` reports the state *and* how it was learned — read (`High`) or probed (`Inferred`) |
-| **Quirks** | firmware/model defects as TOML; with the `quirks` feature a matching row removes a dead port from the ladder |
+| **Confidence** | `power_observation()` reports the state *and* how it was learned — read (`High`) or probed (`Inferred`) — **on `main`, not in 0.1.0** |
+| **Quirks** | firmware/model defects as TOML; with the `quirks` feature a matching row removes a dead port from the ladder — **feature is on `main`, not in 0.1.0** |
 | **Reconcile** | desired state from a file, an HTTP manifest or MQTT; one pure decision function; healing ladder; JSONL audit log |
 | **HDMI-CEC** | power on / standby / active source over the cable, for panels the network cannot reach (optional) |
 | **Serve media** | HTTP `206 Partial Content` for seeking, plus HLS playlists — the two things TV players insist on |
