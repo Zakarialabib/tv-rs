@@ -324,23 +324,30 @@ Readable by a technician without a Rust toolchain. This is a product requirement
 | **0b. Correctness slice** *(landed)* | port negotiation with caching, `open_url()`, pinning reachable from `from_discovered_with`, credential redaction in `Debug`, bounded connect/handshake timeouts | a client built from discovery reaches a modern panel without downgrading TLS |
 | **1. Core + mock** | `tv-rs-core` types, traits, taxonomy, mock backend **(landed)**; `TvClient` implements `DeviceHandle` **(landed)** | `cargo test -p tv-rs-core --features mock-backend` green; every transition in §4.4 exercised |
 | **2. Dual-protocol conformance** | shared suite in `tv-rs-core::conformance`, run against the mock **and** the facade's three clients **(landed)**; real-device run **blocked — no hardware reachable** | conformance passes on mocks (done); hardware report pending |
-| **3. Tizen isolation** | quirks table + loader **(landed)**; port ladder **(landed)**; applying rows inside the backends *(next)* | conformance passes against a mock simulating both port generations; no hardware needed |
-| **4. Agent** | provider seam (`StaticFileProvider`), pure `decide()` reconciler, `HealerLadder`, JSONL audit log, 50-device simulation **(landed)**; `tick()`/`run()` loop with cancellation, quarantine and audit wiring **(landed)**; `StaticFileProvider`, `HttpPollProvider`, `MqttSubscribeProvider` **(landed)** | 50-device mock fleet, 24 simulated hours, 3 blips, 2 devices that never pair, 1 permanently `Unknown`: converges the healthy, quarantines the rest, zero panics, bounded task count |
+| **3. Tizen isolation** | quirks table + loader **(landed)**; port ladder **(landed)**; rows applied at client construction **(landed)**: a matching row pins the port, so the dead generation is never probed | conformance passes against a mock simulating both port generations; no hardware needed |
+| **4. Agent** | provider seam (`StaticFileProvider`), pure `decide()` reconciler, `HealerLadder`, JSONL audit log **(landed)**; `tick()`/`run()` loop with cancellation, quarantine and audit wiring **(landed)**; `StaticFileProvider`, `HttpPollProvider`, `MqttSubscribeProvider` **(landed)**; 24-hour simulation with three blips **(landed, `twenty_four_simulated_hours_with_three_blips`)** | 50-device mock fleet, 24 simulated hours, 3 blips, 2 devices that never pair, 1 permanently `Unknown`: converges the healthy, quarantines the rest, zero panics, bounded task count |
 | **5. Fleet + HIL + CEC** | `cargo xtask hw-test` **(landed)**, `tv-rs-cec` **(landed, `client` feature)**; CLI `status`/`ensure` **(landed)** | the harness reports honestly when no device answers (verified on this host); CEC compiles without its feature |
-| **6. Hardening** | MSRV job, `cargo deny`, docs (`INTEGRATION`, `QUIRKS`, `SECURITY`), SemVer policy | published crates; error taxonomy unchanged for 90 days before `1.0` |
+| **6. Hardening** | MSRV job, `cargo deny`, docs (`INTEGRATION`, `QUIRKS`, `SECURITY`), SemVer policy, `forbid(unsafe_code)` **(all landed)** | published crates **(done — 11 crates at 0.1.0)**; error taxonomy unchanged for 90 days before `1.0` (clock starts at `0.1.0`, 2026-10-20) |
 
 ## 8. Definition of done for v0.1
 
-1. `tv-rs-core` builds with `--no-default-features`, no tokio in the graph, docs complete.
-2. Roku + webOS pass conformance on mocks **and** on one real device each, with the
-   HIL result committed as a report (not as a CI gate).
-3. Tizen passes conformance on mocks and is marked **experimental** in its README.
-4. The agent survives the 50-device/24-hour simulation.
-5. `tv-rs-cli status` renders the confidence table; the audit log is readable by a
-   non-Rust user.
-6. `NON_GOALS.md`, `SECURITY.md`, `INTEGRATION.md` exist and are linked from the README.
-7. `#![forbid(unsafe_code)]` on every crate except `tv-rs-cec`.
-8. The error taxonomy is covered by an exhaustiveness test.
+Status as of `0.1.0` (published 2026-10-20). "Met" means a gate in CI or a test that
+would fail if the claim stopped being true.
+
+| # | Item | Status | Where it is checked |
+|---|---|---|---|
+| 1 | `tv-rs-core` builds `--no-default-features`, no tokio in the graph, docs complete | **met** | CI `core (tokio-free + mock)` and `per-crate features` jobs |
+| 2 | Roku + webOS pass conformance on mocks **and** on one real device each, with the HIL result committed as a report | **mock half met, hardware half blocked** | `conformance` feature passes on the facade's three clients; `docs/hil-results.md` is empty because no panel answered SSDP |
+| 3 | Tizen passes conformance on mocks and is marked **experimental** in its README | **met** | `crates/tizen/README.md` opens with "Status: experimental"; conformance passes |
+| 4 | The agent survives the 50-device/24-hour simulation | **met** | `crates/agent/tests/fleet.rs::twenty_four_simulated_hours_with_three_blips` |
+| 5 | `tv-rs-cli status` renders the confidence table; the audit log is readable by a non-Rust user | **met** | `status` prints `CONFIDENCE` (`high`/`inferred`); the audit log is JSONL with `ts`, `device`, `decision`, `result` |
+| 6 | `NON_GOALS.md`, `SECURITY.md`, `INTEGRATION.md` exist and are linked from the README | **met** | all three at the repository root, each linked from `README.md` |
+| 7 | `#![forbid(unsafe_code)]` on every crate except `tv-rs-cec` | **met** (stronger: including `tv-rs-cec`) | every `src/lib.rs` |
+| 8 | The error taxonomy is covered by an exhaustiveness test | **met** | `crates/core/src/error.rs::remedy_matches_the_exhaustive_match` |
+
+The only unmet item is the one that cannot be met from this repository: real hardware.
+`cargo xtask hw-test --write-doc` fills `docs/hil-results.md` the moment a television
+answers, and the two conformance runs it enables are the remaining gate.
 
 ## 9. Risk register
 

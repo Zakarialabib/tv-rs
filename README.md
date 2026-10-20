@@ -9,6 +9,12 @@
 Find the televisions on your LAN and drive them from Rust — discovery, power,
 remote control, fleet reconciliation and media serving, behind one small facade.
 
+> **What is on crates.io right now:** `0.1.0`. `power_observation()`, the facade's
+> `quirks` feature, `tv-rs-cec`/`tv-rs-media`'s current APIs and everything in
+> [`INTEGRATION.md`](INTEGRATION.md) describe `main` and land in the next release —
+> check [docs.rs](https://docs.rs/tv-rs) for what a published version actually has
+> before copying an example from here.
+
 ```rust
 use tv_rs::discover;
 
@@ -48,19 +54,19 @@ The rules the code follows:
 
 ## What it does
 
-|                   |                                                                                                                                                         |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Discover**      | SSDP `M-SEARCH` on UDP 1900, UPnP descriptor parsing, vendor identification                                                                             |
-| **Wake**          | Wake-on-LAN magic packet, plus a TCP probe that tells `On` / `Standby` / `Off` apart                                                                    |
-| **Samsung Tizen** | remote WebSocket channel (8001 plain, 8002 TLS, negotiated automatically), DIAL launch (8080), pairing-token store, per-TV connection pool              |
-| **LG webOS**      | SSAP over WebSocket (3000/3001, negotiated), pairing, `client-key` persistence, volume/mute/launch/power/foreground, `open_url` in the built-in browser |
-| **Roku**          | unauthenticated ECP REST (8060): device info, apps, key presses, launch, power mode                                                                     |
-| **Capabilities**  | per-vendor capability sets + `DeviceHandle` traits, so a fleet holds `Arc<dyn DeviceHandle>` with no generics                                           |
-| **Reconcile**     | desired state from a file, an HTTP manifest or MQTT; one pure decision function; healing ladder; JSONL audit log                                        |
-| **HDMI-CEC**      | power on / standby / active source over the cable, for panels the network cannot reach (optional)                                                       |
-| **DLNA renderer control** | push a URI to a renderer with AVTransport, subscribe to its GENA events, and advertise a server you host — no media library behind it |
-| **Local display** | EDID identity, connector, physical size and TV likelihood for the screen the player is on — no network required (`tv-rs-local`)                         |
-| **Serve media**   | HTTP `206 Partial Content` for seeking, plus HLS playlists — the two things TV players insist on                                                        |
+| | |
+|---|---|
+| **Discover** | SSDP `M-SEARCH` on UDP 1900, UPnP descriptor parsing, vendor identification |
+| **Wake** | Wake-on-LAN magic packet, plus a TCP probe that tells `On` / `Standby` / `Off` apart |
+| **Samsung Tizen** | remote WebSocket channel (8001 plain, 8002 TLS, negotiated automatically), DIAL launch (8080), pairing-token store, per-TV connection pool |
+| **LG webOS** | SSAP over WebSocket (3000/3001, negotiated), pairing, `client-key` persistence, volume/mute/launch/power/foreground, `open_url` in the built-in browser |
+| **Roku** | unauthenticated ECP REST (8060): device info, apps, key presses, launch, power mode |
+| **Capabilities** | per-vendor capability sets + `DeviceHandle` traits, so a fleet holds `Arc<dyn DeviceHandle>` with no generics |
+| **Confidence** | `power_observation()` reports the state *and* how it was learned — read (`High`) or probed (`Inferred`) — **on `main`, not in 0.1.0** |
+| **Quirks** | firmware/model defects as TOML; with the `quirks` feature a matching row removes a dead port from the ladder — **feature is on `main`, not in 0.1.0** |
+| **Reconcile** | desired state from a file, an HTTP manifest or MQTT; one pure decision function; healing ladder; JSONL audit log |
+| **HDMI-CEC** | power on / standby / active source over the cable, for panels the network cannot reach (optional) |
+| **Serve media** | HTTP `206 Partial Content` for seeking, plus HLS playlists — the two things TV players insist on |
 
 ## What it does not do
 
@@ -172,18 +178,19 @@ on `TvClient`, and through the capability traits when you do not know the vendor
 
 ## Feature flags
 
-| Crate             | Feature        | Default | Effect                                                                                   |
-| ----------------- | -------------- | ------- | ---------------------------------------------------------------------------------------- |
-| `tv-rs-core`      | `mock-backend` | no      | the scriptable backend every test uses                                                   |
-|                   | `conformance`  | no      | the suite every `DeviceHandle` must pass                                                 |
-|                   | `quirks`       | no      | parse `quirks/default.toml`                                                              |
-| `tv-rs-transport` | `rustls`       | yes     | pure-Rust TLS, no OpenSSL                                                                |
-|                   | `native-tls`   | no      | platform trust store instead; mutually exclusive with `rustls` (both = `compile_error!`) |
-| `tv-rs-agent`     | `http`         | no      | `HttpPollProvider` (pulls `reqwest`)                                                     |
-|                   | `mqtt`         | no      | `MqttSubscribeProvider` (pulls `rumqttc`)                                                |
-| `tv-rs-cec`       | `client`       | no      | shell out to `cec-client`                                                                |
-| `tv-rs`           | `hil`          | no      | compile the hardware-in-the-loop tests                                                   |
-|                   | `conformance`  | no      | run the shared suite against the facade's clients                                        |
+| Crate | Feature | Default | Effect |
+|---|---|---|---|
+| `tv-rs-core` | `mock-backend` | no | the scriptable backend every test uses |
+| | `conformance` | no | the suite every `DeviceHandle` must pass |
+| | `quirks` | no | parse `quirks/default.toml` |
+| `tv-rs-transport` | `rustls` | yes | pure-Rust TLS, no OpenSSL |
+| | `native-tls` | no | platform trust store instead; mutually exclusive with `rustls` (both = `compile_error!`) |
+| `tv-rs-agent` | `http` | no | `HttpPollProvider` (pulls `reqwest`) |
+| | `mqtt` | no | `MqttSubscribeProvider` (pulls `rumqttc`) |
+| `tv-rs-cec` | `client` | no | shell out to `cec-client` |
+| `tv-rs` | `quirks` | no | consult `quirks/default.toml` when building a client |
+| | `hil` | no | compile the hardware-in-the-loop tests |
+| | `conformance` | no | run the shared suite against the facade's clients |
 
 ## CLI
 
@@ -216,6 +223,14 @@ cargo test -p tv-rs --features hil --test hardware_in_the_loop
 `hw-test` discovers, probes power and capabilities, and appends to
 [`docs/hil-results.md`](docs/hil-results.md). It reports "no televisions answered"
 and exits 0 rather than inventing a pass.
+
+`tv-rs-agent` also carries the Phase 4 exit criterion as a test: 50 devices, 24
+simulated hours, three blips, two devices that never pair, one whose power is never
+observable — every healthy device converges every hour, each blip costs exactly one
+wake, and no device exceeds one action per hour.
+
+`#![forbid(unsafe_code)]` is on every crate. Dependencies are audited by
+`cargo-deny`; the MSRV is checked by building it.
 
 Gates CI enforces, and you should run before pushing:
 
@@ -261,16 +276,17 @@ picks up where it stopped instead of failing on crate #1.
 New here? [`docs/glossary.md`](docs/glossary.md) is the map — every term links to
 the page that explains it.
 
-| Start with                                                         | If you want to                                                  |
-| ------------------------------------------------------------------ | --------------------------------------------------------------- |
-| [`docs/01-playbook.md`](docs/01-playbook.md)                       | the protocol facts: ports, handshakes, what each vendor exposes |
-| [`docs/architecture.md`](docs/architecture.md)                     | the three layers, the dependency rule, where a new file belongs |
-| [`docs/spec/00-device-model.md`](docs/spec/00-device-model.md)     | the device-model specification: capabilities, confidence, agent |
-| [`docs/spec/01-reconciliation.md`](docs/spec/01-reconciliation.md) | the Phase 0 audit: every symbol's destination                   |
-| [`docs/03-matrix.md`](docs/03-matrix.md)                           | what is done, what is deferred, verified test counts            |
-| [`docs/05-roadmap.md`](docs/05-roadmap.md)                         | what to add next, with the evidence and the cost                |
-| [`QUIRKS.md`](QUIRKS.md)                                           | how to submit a model/firmware defect                           |
-| [`docs/02-external-refs.md`](docs/02-external-refs.md)             | protocol references and prior art                               |
+| Start with | If you want to |
+|---|---|
+| [`docs/01-playbook.md`](docs/01-playbook.md) | the protocol facts: ports, handshakes, what each vendor exposes |
+| [`docs/architecture.md`](docs/architecture.md) | the three layers, the dependency rule, where a new file belongs |
+| [`INTEGRATION.md`](INTEGRATION.md) | **put it in an application**: discovery, pinning, quirks, a fleet, media, CEC |
+| [`docs/spec/00-device-model.md`](docs/spec/00-device-model.md) | the device-model specification: capabilities, confidence, agent |
+| [`docs/spec/01-reconciliation.md`](docs/spec/01-reconciliation.md) | the Phase 0 audit: every symbol's destination |
+| [`docs/03-matrix.md`](docs/03-matrix.md) | what is done, what is deferred, verified test counts |
+| [`docs/05-roadmap.md`](docs/05-roadmap.md) | what to add next, with the evidence and the cost |
+| [`QUIRKS.md`](QUIRKS.md) | how to submit a model/firmware defect |
+| [`docs/02-external-refs.md`](docs/02-external-refs.md) | protocol references and prior art |
 
 ## Contributing
 

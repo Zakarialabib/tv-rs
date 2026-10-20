@@ -7,6 +7,7 @@
 
 use crate::error::{Result, TvError};
 use crate::types::{DiscoveredTv, TvVendor};
+use tv_rs_core::ObservedField;
 use tv_rs_discovery::{SsdpDeviceDescriptor, SsdpMsearchResponse, SsdpScanner};
 use tv_rs_power::PowerState;
 use tv_rs_roku::{RokuClient, RokuPowerMode};
@@ -122,6 +123,26 @@ pub enum TvClient {
     Roku(RokuClient),
 }
 
+/// The port the quirks table says this panel actually listens on, if any.
+///
+/// Returns `None` when the crate was built without the `quirks` feature, when no
+/// row matches, or when the matching row is not about ports — in every one of those
+/// cases the client's own ladder is the right answer.
+#[cfg(feature = "quirks")]
+fn quirk_port(vendor: &str, model: Option<&str>) -> Option<u16> {
+    use tv_rs_core::quirks::{QuirkAction, Quirks};
+    let table = Quirks::bundled().ok()?;
+    match table.action_for(vendor, model, None)? {
+        QuirkAction::StartAtPort(port) => Some(port),
+        _ => None,
+    }
+}
+
+#[cfg(not(feature = "quirks"))]
+fn quirk_port(_vendor: &str, _model: Option<&str>) -> Option<u16> {
+    None
+}
+
 impl TvClient {
     /// Build the default control client for a discovered device.
     ///
@@ -131,8 +152,20 @@ impl TvClient {
     /// [`TvVendor::Unknown`], since no protocol crate can drive it.
     pub fn from_discovered(tv: &DiscoveredTv) -> Result<Self> {
         match tv.vendor {
-            TvVendor::Samsung => Ok(Self::Tizen(TizenClient::new(tv.ip.clone()).with_wss())),
-            TvVendor::Lg => Ok(Self::Webos(WebosClient::new(tv.ip.clone()).with_wss())),
+            TvVendor::Samsung => {
+                let mut client = TizenClient::new(tv.ip.clone()).with_wss();
+                if let Some(port) = quirk_port("samsung", tv.model_name.as_deref()) {
+                    client = client.pinned_port(port);
+                }
+                Ok(Self::Tizen(client))
+            }
+            TvVendor::Lg => {
+                let mut client = WebosClient::new(tv.ip.clone()).with_wss();
+                if let Some(port) = quirk_port("lg", tv.model_name.as_deref()) {
+                    client = client.pinned_port(port);
+                }
+                Ok(Self::Webos(client))
+            }
             TvVendor::Roku => Ok(Self::Roku(RokuClient::new(tv.ip.clone()))),
             TvVendor::Unknown => Err(TvError::UnsupportedVendor {
                 ip: tv.ip.clone(),
@@ -155,16 +188,24 @@ impl TvClient {
     /// Returns [`TvError::UnsupportedVendor`] for [`TvVendor::Unknown`].
     pub fn from_discovered_with(tv: &DiscoveredTv, tls: TlsPolicy) -> Result<Self> {
         match tv.vendor {
-            TvVendor::Samsung => Ok(Self::Tizen(
-                TizenClient::new(tv.ip.clone())
+            TvVendor::Samsung => {
+                let mut client = TizenClient::new(tv.ip.clone())
                     .with_wss()
-                    .with_tls_policy(tls),
-            )),
-            TvVendor::Lg => Ok(Self::Webos(
-                WebosClient::new(tv.ip.clone())
+                    .with_tls_policy(tls);
+                if let Some(port) = quirk_port("samsung", tv.model_name.as_deref()) {
+                    client = client.pinned_port(port);
+                }
+                Ok(Self::Tizen(client))
+            }
+            TvVendor::Lg => {
+                let mut client = WebosClient::new(tv.ip.clone())
                     .with_wss()
-                    .with_tls_policy(tls),
-            )),
+                    .with_tls_policy(tls);
+                if let Some(port) = quirk_port("lg", tv.model_name.as_deref()) {
+                    client = client.pinned_port(port);
+                }
+                Ok(Self::Webos(client))
+            }
             TvVendor::Roku => Ok(Self::Roku(RokuClient::new(tv.ip.clone()))),
             TvVendor::Unknown => Err(TvError::UnsupportedVendor {
                 ip: tv.ip.clone(),
@@ -294,15 +335,44 @@ impl TvClient {
     /// Roku that is genuinely off fails the HTTP request rather than answering
     /// "off", so a transport failure there is reported, not converted.
     pub async fn power_state(&self) -> Result<PowerState> {
+        // One implementation: the cheap answer is a projection of the careful one, so
+        // the two can never disagree about a device.
+        Ok(self
+            .power_observation()
+            .await?
+            .value
+            .unwrap_or(PowerState::Unknown))
+    }
+
+    /// Like [`TvClient::power_state`], but says how sure the answer is.
+    ///
+    /// Roku reports its power mode over ECP, so the answer is `High`. Tizen and
+    /// webOS are probed over TCP: an open control port proves the panel is powered,
+    /// and a closed one is good evidence it is not, but neither means a picture is
+    /// on the screen (a panel with *Always Ready* keeps the port open while dark).
+    /// That is an inference, and reporting it as `High` is how a fleet starts lying
+    /// about what is actually showing.
+    ///
+    /// # Errors
+    ///
+    /// Returns the originating protocol crate's error, wrapped in [`TvError`]. A
+    /// refused probe is not an error — it is `Off`.
+    pub async fn power_observation(&self) -> Result<ObservedField<PowerState>> {
         match self {
-            Self::Roku(client) => Ok(map_roku_power(client.power_state().await?)),
+            Self::Roku(client) => Ok(ObservedField::from_read(map_roku_power(
+                client.power_state().await?,
+            ))),
             Self::Tizen(client) => {
                 let probe = format!("{}:{}", client.host(), client.port());
-                Ok(tv_rs_power::poll_power_state(&probe).await?)
+                Ok(ObservedField::from_inference(
+                    tv_rs_power::poll_power_state(&probe).await?,
+                ))
             }
             Self::Webos(client) => {
                 let probe = format!("{}:{}", client.host(), client.port());
-                Ok(tv_rs_power::poll_power_state(&probe).await?)
+                Ok(ObservedField::from_inference(
+                    tv_rs_power::poll_power_state(&probe).await?,
+                ))
             }
         }
     }
@@ -339,6 +409,41 @@ impl TvClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "quirks")]
+    #[test]
+    fn a_quirk_row_pins_the_port_the_panel_actually_uses() {
+        // QN90 + T-KTM firmware: 8001 is dead, so the ladder must not probe it.
+        let mut tv = DiscoveredTv {
+            vendor: TvVendor::Samsung,
+            ip: "192.168.1.10".to_string(),
+            location: None,
+            friendly_name: None,
+            manufacturer: Some("Samsung".to_string()),
+            model_name: Some("QN90A".to_string()),
+            serial_number: None,
+            usn: None,
+        };
+        let client = TvClient::from_discovered(&tv).expect("samsung is supported");
+        match &client {
+            TvClient::Tizen(tizen) => {
+                assert_eq!(
+                    tizen.pinned_port_number(),
+                    Some(8002),
+                    "the quirk row must remove 8001 from the ladder"
+                );
+            }
+            other => panic!("expected a Tizen client, got {other:?}"),
+        }
+
+        // A model the table says nothing about keeps the full ladder.
+        tv.model_name = Some("UE40".to_string());
+        let client = TvClient::from_discovered(&tv).expect("samsung is supported");
+        match &client {
+            TvClient::Tizen(tizen) => assert_eq!(tizen.pinned_port_number(), None),
+            other => panic!("expected a Tizen client, got {other:?}"),
+        }
+    }
 
     fn response(server: &str, st: &str) -> SsdpMsearchResponse {
         SsdpMsearchResponse {

@@ -118,6 +118,16 @@ impl MockBackend {
         self
     }
 
+    /// Changes the power state without a command.
+    ///
+    /// The television is allowed to change on its own — someone picks up the remote,
+    /// a firmware update reboots the panel, a scheduled sleep fires — and a fleet that
+    /// only ever sees its own commands is the fleet that reports "on" about a screen
+    /// that has been in standby for six hours.
+    pub fn force_power(&self, power: PowerState) {
+        *self.power.lock().expect("mock lock") = power;
+    }
+
     /// Makes the next mutating command fail with `failure`.
     pub fn fail_next(&self, failure: Failure) {
         *self.next_failure.lock().expect("mock lock") = Some(failure);

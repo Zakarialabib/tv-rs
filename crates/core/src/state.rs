@@ -74,6 +74,20 @@ impl<T> ObservedField<T> {
         Self::from_read(value)
     }
 
+    /// A value inferred from a side channel rather than read from the device.
+    ///
+    /// The canonical case is a power probe: an open control port means "awake or in
+    /// standby" and says nothing about the panel actually showing a picture, so it
+    /// must never be reported as `High`.
+    #[must_use]
+    pub fn from_inference(value: T) -> Self {
+        Self {
+            value: Some(value),
+            confidence: Confidence::Inferred,
+            last_verified_at: Instant::now(),
+        }
+    }
+
     /// A value a write implied but did not prove.
     ///
     /// Use for `POST /launch` returning 200, for `set_volume` on a platform that

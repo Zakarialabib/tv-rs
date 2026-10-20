@@ -1,28 +1,28 @@
 # State matrix
 
-What exists, what is deferred, and how it is tested. Baseline measured on 2026-10-19 with
-`cargo test --workspace`; `tv-rs-local` was added on 2026-10-20. The numbers are the
-ones in the output, not estimates.
+What exists, what is deferred, and how it is tested. Measured on 2026-10-20 with
+`cargo test --workspace`; the numbers are the ones in the output, not estimates.
+Per-crate counts come from separate `-p` runs, so they do not sum to the workspace
+total — feature unification turns optional features on for the whole graph.
 
 ## Crates
 
-| Crate                           | Status                   | Tests                                                 | What it does                                                                                                                                                    |
-| ------------------------------- | ------------------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tv-rs` (facade)                | done                     | 7 + 1 doc                                             | `discover()`, `identify_vendor()`, `TvClient` dispatch, `TvError`                                                                                               |
-| `tv-rs-core`                    | **new (Phase 1a)**       | 36 with `mock-backend conformance quirks`, 20 default | capability traits, `DeviceHandle`, `CommandId`, confidence-tagged `ObservedState`, routing `TvError`, scriptable mock backend, conformance suite, quirks loader |
-| `tv-rs-discovery`               | done                     | 6 + 1 doc                                             | SSDP `M-SEARCH`, response parsing, UPnP descriptor, descriptor fetch                                                                                            |
-| `tv-rs-power`                   | done                     | 9 + 1 doc                                             | magic packet, `MacAddress` parsing, `poll_power_state`                                                                                                          |
-| `tv-rs-local`                   | **new (U2)**             | 8 + 1 doc                                             | Windows WMI + GDI and Linux DRM/EDID connector, identity, mode, physical size, TV likelihood                                                                    |
-| `tv-rs-transport`               | done                     | 4 + 2 doc                                             | `TlsPolicy`, rustls/native-tls connector, budgeted frame reader, `Unsupported`                                                                                  |
-| `tv-rs-tizen`                   | done                     | 35 + 5 doc                                            | remote channel, DIAL, token store, connection pool, SSDP discovery, app presets                                                                                 |
-| `tv-rs-webos`                   | done                     | 14 + 1 doc                                            | SSAP session, pairing, `client-key` persistence, volume/mute/launch/power                                                                                       |
-| `tv-rs-roku`                    | done                     | 9 + 1 doc                                             | ECP device-info, apps, keypress, launch, name→id resolution                                                                                                     |
-| `tv-rs-media`                   | done                     | 17 + 6 + 2 doc                                        | range parsing, `206`/`416` serving, HLS playlists                                                                                                               |
-| `tv-rs-agent`                   | **new (Phase 4a)**       | 23 + 3 fleet + 1 doc                                  | desired-state providers (file / HTTP / MQTT), pure decision function, healing ladder, JSONL audit log, `tick()`/`run()` loop with quarantine                    |
-| `tv-rs-cec`                     | **new (Phase 5a)**       | 6 (default) / 7 with `client`                         | CEC over a `cec-client` subprocess: power on, standby, active source; no `unsafe`, no libcec link                                                               |
-| `tv-rs-cli`                     | done (`publish = false`) | 16 + 1 doc                                            | `discover`, `wake`, `power-off`, `key`, `launch`, `status` (power + capabilities table), `ensure` (one reconciliation pass)                                     |
-| `tests/hardware_in_the_loop.rs` | opt-in                   | 7 (`--features hil`)                                  | real devices, skipped when `TV_RS_HIL_*` is unset                                                                                                               |
-| **Total (default features)**    |                          | **129 + 16 doc**                                      | 145 tests                                                                                                                                                       |
+| Crate | Status | Tests | What it does |
+|---|---|---|---|
+| `tv-rs` (facade) | done | 22 | `discover()`, `identify_vendor()`, `TvClient` dispatch, `power_observation()` (value + confidence), `TlsPolicy` re-export, quirk-driven port pinning |
+| `tv-rs-core` | done (Phase 1a) | 21 default / 42 with `mock-backend conformance quirks` | capability traits, `DeviceHandle`, `CommandId`, confidence-tagged `ObservedState`, routing `TvError`, scriptable mock backend (now with `force_power`), conformance suite, quirks loader **and** `QuirkAction` decoding |
+| `tv-rs-discovery` | done | 7 | SSDP `M-SEARCH`, response parsing, UPnP descriptor, descriptor fetch |
+| `tv-rs-power` | done | 10 | magic packet, `MacAddress` parsing, `poll_power_state` |
+| `tv-rs-transport` | done | 14 | `TlsPolicy`, rustls/native-tls connector, budgeted frame reader, `Unsupported`, compiles without the `ws` feature |
+| `tv-rs-tizen` | done, **experimental** | 43 | remote channel, DIAL, token store, connection pool, SSDP discovery, app presets, `pinned_port` |
+| `tv-rs-webos` | done | 18 | SSAP session, pairing, `client-key` persistence, volume/mute/launch/power, `pinned_port` |
+| `tv-rs-roku` | done | 16 | ECP device-info, apps, keypress (with the 14.1 permission gate), launch, name→id resolution |
+| `tv-rs-media` | done | 25 | range parsing, `206`/`416` serving, HLS playlists |
+| `tv-rs-agent` | done (Phase 4) | 28 default / 36 with `http mqtt` | desired-state providers (file / HTTP / MQTT), pure decision function, healing ladder, JSONL audit log, `tick()`/`run()`, 24-hour fleet simulation |
+| `tv-rs-cec` | done (Phase 5a) | 6 default / 7 with `client` | CEC over a `cec-client` subprocess: power on, standby, active source |
+| `tv-rs-cli` | done (`publish = false`) | 17 | `discover`, `wake`, `power-off`, `key`, `launch`, `status` (power + confidence + capabilities), `ensure` |
+| `tests/hardware_in_the_loop.rs` | opt-in | 7 (`--features hil`) | real devices, skipped when `TV_RS_HIL_*` is unset |
+| **Total (`cargo test --workspace`)** | | **237 across 29 binaries** | includes doctests and the three `-p tv-rs-media` suites |
 
 `cargo check --workspace --all-targets`, `cargo test --workspace`,
 `cargo clippy --workspace --all-targets -- -D warnings` and
@@ -91,6 +91,18 @@ traversal rejected before any file open.
 
 Every deferred call returns a typed `Unsupported` error. Nothing panics and
 nothing pretends to work.
+
+## Quirks: applied, not just stored
+
+`quirks/default.toml` is loaded by `tv-rs-core` and **acted on** by the facade: with
+the `quirks` feature, `TvClient::from_discovered` decodes the matching row's `action`
+(`QuirkAction`) and pins the port it names, so the generation a firmware dropped is
+never probed. Without the feature the ladder still negotiates — it just pays one
+refused connection to learn what the table already knew.
+
+Rows are keyed on what discovery can actually supply. The UPnP descriptor gives
+`modelName` but no firmware version, so each vendor has at least one model-scoped row
+(`QN9*`, not only `T-KTM*`); a firmware-scoped row is more specific and sits above it.
 
 ## Known limits worth knowing before shipping
 
