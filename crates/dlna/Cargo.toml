@@ -1,0 +1,24 @@
+[package]
+name = "tv-rs-dlna"
+description = "DLNA/UPnP MediaRenderer transport: SSDP discovery, AVTransport SOAP control, GENA eventing."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["dlna", "upnp", "avtransport", "gena", "media-renderer"]
+categories = ["api-bindings", "network-programming"]
+
+[dependencies]
+async-trait.workspace = true
+# UPnP device-descriptor streaming parser (matches the Signage approval baseline;
+# crate-local because the rest of the workspace parses with roxmltree).
+quick-xml = "0.37"
+log = "0.4"
+reqwest.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true
