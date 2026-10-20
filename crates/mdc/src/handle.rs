@@ -1,9 +1,12 @@
 //! The shared `DeviceHandle` adapter for an MDC display.
 
+use std::time::{Duration, Instant};
+
 use async_trait::async_trait;
 use tv_rs_core::{
-    Capability, CapabilitySet, CommandId, DeviceDescriptor, DeviceHandle, DeviceId, Input,
-    InputSelect, PowerControl, PowerState, ProtocolError, TvError, VolumeControl,
+    BrightnessControl, Capability, CapabilitySet, CommandId, DeviceDescriptor, DeviceHandle,
+    DeviceId, Input, InputSelect, PowerControl, PowerState, Probe, ProtocolError, Rebootable,
+    TvError, VolumeControl,
 };
 
 use crate::client::MdcClient;
@@ -12,8 +15,8 @@ use crate::types::{InputSource, MdcPower};
 
 /// An MDC display exposed through the vendor-neutral device model.
 ///
-/// The underlying [`MdcClient`] remains available for brightness, reboot and raw
-/// commands, which the shared traits do not model yet.
+/// The underlying [`MdcClient`] remains available for raw frames; the shared traits
+/// cover power, input, volume, brightness, reboot and a control-channel probe.
 pub struct MdcDevice {
     client: MdcClient,
     descriptor: DeviceDescriptor,
@@ -117,6 +120,33 @@ impl VolumeControl for MdcDevice {
     }
 }
 
+#[async_trait]
+impl BrightnessControl for MdcDevice {
+    async fn brightness(&self) -> Result<Option<u8>, TvError> {
+        Ok(self.client.brightness().await?)
+    }
+
+    async fn set_brightness(&self, level: u8, _cmd: CommandId) -> Result<(), TvError> {
+        Ok(self.client.set_brightness(level).await?)
+    }
+}
+
+#[async_trait]
+impl Rebootable for MdcDevice {
+    async fn reboot(&self, _cmd: CommandId) -> Result<(), TvError> {
+        Ok(self.client.reboot().await?)
+    }
+}
+
+#[async_trait]
+impl Probe for MdcDevice {
+    async fn ping(&self) -> Result<Duration, TvError> {
+        let started = Instant::now();
+        self.client.status().await?;
+        Ok(started.elapsed())
+    }
+}
+
 impl DeviceHandle for MdcDevice {
     fn id(&self) -> DeviceId {
         self.descriptor.id.clone()
@@ -131,6 +161,8 @@ impl DeviceHandle for MdcDevice {
             .with(Capability::PowerState)
             .with(Capability::InputSelect)
             .with(Capability::Volume)
+            .with(Capability::Brightness)
+            .with(Capability::Reboot)
     }
 
     fn as_power(&self) -> Option<&dyn PowerControl> {
@@ -157,6 +189,22 @@ impl DeviceHandle for MdcDevice {
         self.capabilities()
             .contains(Capability::Volume)
             .then_some(self as &dyn VolumeControl)
+    }
+
+    fn as_brightness(&self) -> Option<&dyn BrightnessControl> {
+        self.capabilities()
+            .contains(Capability::Brightness)
+            .then_some(self as &dyn BrightnessControl)
+    }
+
+    fn as_reboot(&self) -> Option<&dyn Rebootable> {
+        self.capabilities()
+            .contains(Capability::Reboot)
+            .then_some(self as &dyn Rebootable)
+    }
+
+    fn as_probe(&self) -> Option<&dyn Probe> {
+        Some(self)
     }
 }
 
