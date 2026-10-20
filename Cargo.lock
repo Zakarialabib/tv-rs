@@ -2076,6 +2076,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tv-rs-mdc"
+version = "0.2.0"
+dependencies = [
+ "async-trait",
+ "thiserror",
+ "tokio",
+ "tv-rs-core",
+]
+
+[[package]]
 name = "tv-rs-media"
 version = "0.2.0"
 dependencies = [
