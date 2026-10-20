@@ -4,3 +4,4 @@
 .git-msg.txt
 *.stackdump
 *.dmp
+.meta.json

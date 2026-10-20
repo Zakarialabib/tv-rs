@@ -44,7 +44,6 @@
 //! let policy = TlsPolicy::pinned(stored.trim()).expect("valid fingerprint");
 //! ```
 //!
-#[cfg(feature = "ws")]
 use std::fmt;
 #[cfg(all(feature = "ws", feature = "rustls"))]
 use std::sync::{Arc, Mutex};
@@ -57,7 +56,6 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 #[cfg(all(feature = "ws", feature = "rustls"))]
 use rustls::{ClientConfig, DigitallySignedStruct, RootCertStore, SignatureScheme};
-#[cfg(feature = "ws")]
 use thiserror::Error;
 #[cfg(feature = "ws")]
 use tokio_tungstenite::Connector;
@@ -239,7 +237,6 @@ impl TlsPolicy {
 }
 
 /// Failure while building the TLS connector or parsing a fingerprint.
-#[cfg(feature = "ws")]
 #[derive(Debug, Error)]
 pub enum TlsError {
     /// The TLS backend refused to build a connector.

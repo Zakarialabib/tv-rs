@@ -123,7 +123,7 @@ mod tests {
 
         let mac_bytes = mac.as_bytes();
         let mut blocks = 0;
-        for chunk in bytes[6..].chunks_exact(MAC_ADDRESS_LEN) {
+        for chunk in bytes[6..].as_chunks::<MAC_ADDRESS_LEN>().0.iter() {
             assert_eq!(chunk, mac_bytes);
             blocks += 1;
         }

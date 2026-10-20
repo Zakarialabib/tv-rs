@@ -75,6 +75,28 @@ jobs:
       - run: cargo test -p tv-rs-agent --features "http mqtt"
       - run: cargo test -p tv-rs-cec --features client
 
+  features:
+    name: per-crate features
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Feature unification in `--workspace` hides crates that only compile when a
+      # sibling turns an optional feature on. Each published crate is built alone.
+      - run: cargo check -p tv-rs-transport --no-default-features
+      - run: cargo check -p tv-rs-core --no-default-features
+      - run: cargo check -p tv-rs-discovery
+      - run: cargo check -p tv-rs-power
+      - run: cargo check -p tv-rs-roku
+      - run: cargo check -p tv-rs-tizen
+      - run: cargo check -p tv-rs-webos
+      - run: cargo check -p tv-rs-media
+      - run: cargo check -p tv-rs-cec
+      - run: cargo check -p tv-rs-cec --features client
+      - run: cargo check -p tv-rs-agent
+      - run: cargo check -p tv-rs
+
   msrv:
     name: msrv (${{ matrix.rust }})
     runs-on: ubuntu-latest
