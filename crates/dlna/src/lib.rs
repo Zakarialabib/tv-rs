@@ -7,17 +7,22 @@
 //! - AVTransport SOAP control — `SetAVTransportURI` + `Play` / `Pause` / `Stop` /
 //!   `Seek` ([`soap::cast`], [`soap::SoapAvTransport`]),
 //! - GENA eventing — `SUBSCRIBE` / renew / `UNSUBSCRIBE` and `LastChange`
-//!   NOTIFY parsing ([`gena_client::subscribe`], [`gena_parse::parse_notify_body`]),
+//!   NOTIFY parsing ([`gena_client::subscribe`], [`gena_parse::parse_notify_body`])
+//!   plus the subscription registry / renewal scheduler
+//!   ([`gena_registry::SubscriptionRegistry`]),
+//! - SSDP advertisement for a MediaServer the caller hosts
+//!   ([`advertise::advertise`], alive/byebye + M-SEARCH responder),
 //! - DIDL-Lite metadata generation ([`metadata::build_didl_lite`]).
 //!
 //! # What this crate is not
 //!
 //! It is **not** a media server and holds no library: no `MediaItem`, no
 //! ContentDirectory, no HTTP file serving, no 206 range responses, no database
-//! handle, no content root. Callers hand in a URI (and optional DIDL metadata);
-//! whether that URI is backed by a library is entirely the caller's business
-//! (see the Signage adoption spec, fixed boundary §2.2 — the media library and
-//! media server stay app-owned there).
+//! handle, no content root. [`advertise`] announces whatever service the caller
+//! points `AdvertiseConfig::location` at, [`soap`] pushes whatever URI the
+//! caller hands in — whether that URI is backed by a media library is entirely
+//! the caller's business (see the Signage adoption spec, fixed boundary §2.2 —
+//! the media library and media server stay app-owned there).
 //!
 //! # Example
 //!
@@ -53,7 +58,15 @@ pub mod gena;
 pub mod gena_client;
 /// GENA NOTIFY body parsing (doubly-encoded `LastChange`).
 pub mod gena_parse;
+/// GENA subscription registry + renewal scheduling (pure bookkeeping).
+pub mod gena_registry;
+/// SSDP advertisement for a MediaServer we host (alive/byebye + M-SEARCH responder).
+pub mod advertise;
 
+pub use advertise::{
+    advertise, alive_datagrams, byebye_datagrams, parse_msearch_st, search_response,
+    should_respond, AdvertiseConfig, AdvertiseHandle, MEDIA_SERVER_DEVICE_TYPE,
+};
 pub use discovery::{discover_renderers, discover_renderers_with_retries};
 pub use error::{DlnaError, Result};
 pub use gena::{
@@ -62,9 +75,17 @@ pub use gena::{
 };
 pub use gena_client::{renew, subscribe_renderer, unsubscribe, subscribe as subscribe_raw};
 pub use gena_parse::parse_notify_body;
+pub use gena_registry::{
+    next_tick_delay as next_subscription_tick, plan_action, SubscriptionAction,
+    SubscriptionRegistry, TrackedSubscription, MAX_RENEW_FAILURES, MAX_SUBSCRIBE_FAILURES,
+};
 pub use metadata::build_didl_lite;
 pub use models::Renderer;
-pub use soap::{cast, extract_av_transport_control_url, pause, seek, stop, AvTransport, SoapAvTransport};
+pub use soap::{
+    cast, extract_av_transport_control_url, pause, seek, stop, AvTransport, SoapAvTransport,
+};
 
 #[cfg(test)]
 mod gena_tests;
+#[cfg(test)]
+mod gena_registry_tests;
