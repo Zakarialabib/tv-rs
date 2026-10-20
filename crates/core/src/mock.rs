@@ -6,16 +6,18 @@
 //! tests can assert what actually happened rather than what was returned.
 
 use std::sync::Mutex;
+use std::time::Duration;
 
 use async_trait::async_trait;
 
 use crate::capability::{
-    AppLaunch, AppRef, Capability, CapabilitySet, DeviceHandle, Input, InputSelect, Key, KeyInput,
-    PowerControl, VolumeControl,
+    AppLaunch, AppRef, BrightnessControl, Capability, CapabilitySet, DeviceHandle, Input,
+    InputSelect, Key, KeyInput, PowerControl, Probe, Rebootable, VolumeControl,
 };
 use crate::command::CommandId;
 use crate::descriptor::{DeviceDescriptor, DeviceId, PowerState};
 use crate::error::{AuthError, ProtocolError, StateError, TransportError, TvError};
+use crate::telemetry::{Telemetry, TelemetryProvider};
 
 /// A failure the mock should produce for the next mutating command.
 ///
@@ -59,6 +61,10 @@ pub enum Action {
     SetMute(bool),
     /// An input was selected.
     SelectInput(Input),
+    /// Brightness was set.
+    SetBrightness(u8),
+    /// The device was rebooted.
+    Reboot,
 }
 
 /// A television that exists only in tests.
@@ -68,10 +74,14 @@ pub struct MockBackend {
     power: Mutex<PowerState>,
     volume: Mutex<Option<u8>>,
     muted: Mutex<bool>,
+    brightness: Mutex<Option<u8>>,
     foreground: Mutex<Option<AppRef>>,
     input: Mutex<Option<Input>>,
+    telemetry: Mutex<Telemetry>,
+    latency: Mutex<Duration>,
     actions: Mutex<Vec<Action>>,
     next_failure: Mutex<Option<Failure>>,
+    next_telemetry_failure: Mutex<Option<Failure>>,
 }
 
 impl MockBackend {
@@ -87,6 +97,9 @@ impl MockBackend {
             Capability::Foreground,
             Capability::InputSelect,
             Capability::Volume,
+            Capability::Brightness,
+            Capability::Reboot,
+            Capability::Telemetry,
         ] {
             capabilities.insert(capability);
         }
@@ -96,10 +109,14 @@ impl MockBackend {
             power: Mutex::new(PowerState::On),
             volume: Mutex::new(Some(30)),
             muted: Mutex::new(false),
+            brightness: Mutex::new(Some(50)),
             foreground: Mutex::new(None),
             input: Mutex::new(None),
+            telemetry: Mutex::new(Telemetry::nothing_observed()),
+            latency: Mutex::new(Duration::from_millis(1)),
             actions: Mutex::new(Vec::new()),
             next_failure: Mutex::new(None),
+            next_telemetry_failure: Mutex::new(None),
         }
     }
 
@@ -118,6 +135,25 @@ impl MockBackend {
         self
     }
 
+    /// Supplies the telemetry snapshot the mock returns.
+    #[must_use]
+    pub fn with_telemetry(mut self, telemetry: Telemetry) -> Self {
+        self.telemetry = Mutex::new(telemetry);
+        self
+    }
+
+    /// Replaces the telemetry snapshot after construction.
+    pub fn force_telemetry(&self, telemetry: Telemetry) {
+        *self.telemetry.lock().expect("mock lock") = telemetry;
+    }
+
+    /// Sets the control-plane latency returned by [`Probe::ping`].
+    #[must_use]
+    pub fn with_latency(mut self, latency: Duration) -> Self {
+        self.latency = Mutex::new(latency);
+        self
+    }
+
     /// Changes the power state without a command.
     ///
     /// The television is allowed to change on its own — someone picks up the remote,
@@ -131,6 +167,15 @@ impl MockBackend {
     /// Makes the next mutating command fail with `failure`.
     pub fn fail_next(&self, failure: Failure) {
         *self.next_failure.lock().expect("mock lock") = Some(failure);
+    }
+
+    /// Makes the next telemetry read fail with `failure`.
+    ///
+    /// Kept separate from [`MockBackend::fail_next`] because telemetry is a read:
+    /// a test needs to prove that a diagnostic failure does not consume the next
+    /// command's scripted failure.
+    pub fn fail_next_telemetry(&self, failure: Failure) {
+        *self.next_telemetry_failure.lock().expect("mock lock") = Some(failure);
     }
 
     /// The descriptor the mock was built with.
@@ -235,6 +280,28 @@ impl DeviceHandle for MockBackend {
             .contains(Capability::Volume)
             .then_some(self as &dyn VolumeControl)
     }
+
+    fn as_brightness(&self) -> Option<&dyn BrightnessControl> {
+        self.capabilities
+            .contains(Capability::Brightness)
+            .then_some(self as &dyn BrightnessControl)
+    }
+
+    fn as_reboot(&self) -> Option<&dyn Rebootable> {
+        self.capabilities
+            .contains(Capability::Reboot)
+            .then_some(self as &dyn Rebootable)
+    }
+
+    fn as_probe(&self) -> Option<&dyn Probe> {
+        Some(self)
+    }
+
+    fn as_telemetry(&self) -> Option<&dyn TelemetryProvider> {
+        self.capabilities
+            .contains(Capability::Telemetry)
+            .then_some(self as &dyn TelemetryProvider)
+    }
 }
 
 #[async_trait]
@@ -335,10 +402,70 @@ impl VolumeControl for MockBackend {
     }
 }
 
+#[async_trait]
+impl BrightnessControl for MockBackend {
+    async fn brightness(&self) -> Result<Option<u8>, TvError> {
+        if !self.capabilities.contains(Capability::Brightness) {
+            return Err(self.unsupported(Capability::Brightness));
+        }
+        Ok(*self.brightness.lock().expect("mock lock"))
+    }
+
+    async fn set_brightness(&self, level: u8, _cmd: CommandId) -> Result<(), TvError> {
+        if !self.capabilities.contains(Capability::Brightness) {
+            return Err(self.unsupported(Capability::Brightness));
+        }
+        if level > 100 {
+            return Err(TvError::protocol("brightness must be 0-100"));
+        }
+        self.perform(Action::SetBrightness(level))?;
+        *self.brightness.lock().expect("mock lock") = Some(level);
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl Rebootable for MockBackend {
+    async fn reboot(&self, _cmd: CommandId) -> Result<(), TvError> {
+        if !self.capabilities.contains(Capability::Reboot) {
+            return Err(self.unsupported(Capability::Reboot));
+        }
+        self.perform(Action::Reboot)?;
+        *self.power.lock().expect("mock lock") = PowerState::On;
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl Probe for MockBackend {
+    async fn ping(&self) -> Result<Duration, TvError> {
+        Ok(*self.latency.lock().expect("mock lock"))
+    }
+}
+
+#[async_trait]
+impl TelemetryProvider for MockBackend {
+    async fn telemetry(&self) -> Result<Telemetry, TvError> {
+        if !self.capabilities.contains(Capability::Telemetry) {
+            return Err(self.unsupported(Capability::Telemetry));
+        }
+        if let Some(failure) = self
+            .next_telemetry_failure
+            .lock()
+            .expect("mock lock")
+            .take()
+        {
+            return Err(error_for(failure));
+        }
+        Ok(self.telemetry.lock().expect("mock lock").clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::error::Remedy;
+    use crate::ObservedField;
     use futures::executor::block_on;
 
     fn descriptor() -> DeviceDescriptor {
@@ -472,5 +599,102 @@ mod tests {
         assert_eq!(block_on(mock.power_state()).unwrap(), PowerState::On);
         assert_eq!(mock.take_actions(), vec![Action::Wake]);
         assert!(mock.actions().is_empty(), "take_actions drains");
+    }
+
+    #[test]
+    fn brightness_and_reboot_are_physical_actions() {
+        let mock = mock();
+        assert!(mock.capabilities().contains(Capability::Brightness));
+        assert!(mock.capabilities().contains(Capability::Reboot));
+        assert_eq!(block_on(mock.brightness()).unwrap(), Some(50));
+
+        block_on(BrightnessControl::set_brightness(
+            &mock,
+            72,
+            CommandId::new(),
+        ))
+        .unwrap();
+        block_on(Rebootable::reboot(&mock, CommandId::new())).unwrap();
+
+        assert_eq!(block_on(mock.brightness()).unwrap(), Some(72));
+        assert_eq!(
+            mock.take_actions(),
+            vec![Action::SetBrightness(72), Action::Reboot]
+        );
+
+        let error = block_on(BrightnessControl::set_brightness(
+            &mock,
+            101,
+            CommandId::new(),
+        ))
+        .expect_err("above 100");
+        assert!(matches!(error, TvError::Protocol(_)));
+        assert!(
+            mock.actions().is_empty(),
+            "an invalid level performs nothing"
+        );
+    }
+
+    #[test]
+    fn probe_returns_the_configured_latency() {
+        let mock = mock().with_latency(Duration::from_millis(12));
+        assert!(mock.as_probe().is_some());
+        assert_eq!(
+            block_on(Probe::ping(&mock)).unwrap(),
+            Duration::from_millis(12)
+        );
+    }
+
+    #[test]
+    fn telemetry_is_a_read_and_can_fail_without_performing_an_action() {
+        let telemetry = Telemetry {
+            temperature_celsius: ObservedField::from_read(44),
+            ..Telemetry::nothing_observed()
+        };
+        let mock = mock().with_telemetry(telemetry);
+        assert_eq!(
+            block_on(mock.telemetry())
+                .unwrap()
+                .temperature_celsius
+                .value,
+            Some(44)
+        );
+        assert!(mock.actions().is_empty());
+
+        mock.fail_next_telemetry(Failure::TimeoutBeforeSend);
+        assert!(block_on(mock.telemetry()).is_err());
+        assert!(
+            block_on(mock.telemetry()).is_ok(),
+            "only the next telemetry read fails"
+        );
+        assert!(mock.actions().is_empty());
+    }
+
+    #[test]
+    fn new_capabilities_are_unsupported_when_not_advertised() {
+        let limited = MockBackend::new(descriptor())
+            .with_capabilities(CapabilitySet::of(Capability::PowerState));
+        assert!(limited.as_brightness().is_none());
+        assert!(limited.as_reboot().is_none());
+        assert!(limited.as_telemetry().is_none());
+
+        assert!(matches!(
+            block_on(BrightnessControl::set_brightness(
+                &limited,
+                10,
+                CommandId::new()
+            ))
+            .expect_err("brightness is not advertised"),
+            TvError::Unsupported(Capability::Brightness)
+        ));
+        assert!(matches!(
+            block_on(Rebootable::reboot(&limited, CommandId::new()))
+                .expect_err("reboot is not advertised"),
+            TvError::Unsupported(Capability::Reboot)
+        ));
+        assert!(matches!(
+            block_on(limited.telemetry()).expect_err("telemetry is not advertised"),
+            TvError::Unsupported(Capability::Telemetry)
+        ));
     }
 }

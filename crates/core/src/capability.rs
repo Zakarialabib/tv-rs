@@ -1,12 +1,14 @@
 //! Capability vocabulary and the erased device handle.
 
 use std::fmt;
+use std::time::Duration;
 
 use async_trait::async_trait;
 
 use crate::command::CommandId;
 use crate::descriptor::{DeviceDescriptor, DeviceId, PowerState};
 use crate::error::TvError;
+use crate::telemetry::TelemetryProvider;
 
 /// One thing a device can be asked to do.
 ///
@@ -28,6 +30,12 @@ pub enum Capability {
     InputSelect,
     /// Read and change volume / mute.
     Volume,
+    /// Read and change panel brightness.
+    Brightness,
+    /// Reboot the device.
+    Reboot,
+    /// Read diagnostic telemetry such as temperature and signal quality.
+    Telemetry,
 }
 
 impl Capability {
@@ -42,13 +50,16 @@ impl Capability {
             Self::Foreground => "foreground",
             Self::InputSelect => "input_select",
             Self::Volume => "volume",
+            Self::Brightness => "brightness",
+            Self::Reboot => "reboot",
+            Self::Telemetry => "telemetry",
         }
     }
 }
 
 /// The set of capabilities a device advertises.
 ///
-/// Deliberately not a bitflags crate: seven capabilities fit in a `u16`, and a
+/// Deliberately not a bitflags crate: ten capabilities fit in a `u16`, and a
 /// hand-written set keeps the dependency list of the core honest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CapabilitySet(u16);
@@ -99,7 +110,7 @@ impl CapabilitySet {
     }
 }
 
-const ALL_CAPABILITIES: [Capability; 7] = [
+const ALL_CAPABILITIES: [Capability; 10] = [
     Capability::PowerState,
     Capability::Wake,
     Capability::Key,
@@ -107,6 +118,9 @@ const ALL_CAPABILITIES: [Capability; 7] = [
     Capability::Foreground,
     Capability::InputSelect,
     Capability::Volume,
+    Capability::Brightness,
+    Capability::Reboot,
+    Capability::Telemetry,
 ];
 
 const fn capability_index(capability: Capability) -> u16 {
@@ -118,6 +132,9 @@ const fn capability_index(capability: Capability) -> u16 {
         Capability::Foreground => 4,
         Capability::InputSelect => 5,
         Capability::Volume => 6,
+        Capability::Brightness => 7,
+        Capability::Reboot => 8,
+        Capability::Telemetry => 9,
     }
 }
 
@@ -363,6 +380,41 @@ pub trait VolumeControl: Send + Sync {
     async fn set_mute(&self, muted: bool, cmd: CommandId) -> Result<(), TvError>;
 }
 
+/// Panel brightness.
+#[async_trait]
+pub trait BrightnessControl: Send + Sync {
+    /// Reads brightness as a percentage, when the platform can report it.
+    async fn brightness(&self) -> Result<Option<u8>, TvError>;
+
+    /// Sets brightness, 0-100.
+    ///
+    /// A backend that only accepts relative steps must report the value as
+    /// [`crate::Confidence::Inferred`] rather than claiming the requested level
+    /// was reached.
+    async fn set_brightness(&self, level: u8, cmd: CommandId) -> Result<(), TvError>;
+}
+
+/// A device that can be rebooted without removing power.
+#[async_trait]
+pub trait Rebootable: Send + Sync {
+    /// Requests a reboot.
+    ///
+    /// Success means the request was accepted, not that the device has finished
+    /// restarting; callers must wait for it to answer again before sending another
+    /// command.
+    async fn reboot(&self, cmd: CommandId) -> Result<(), TvError>;
+}
+
+/// A control-plane round-trip measurement.
+///
+/// This deliberately measures the same channel commands use, not ICMP: a TV that
+/// answers `ping` but not its control port is still unreachable for this library.
+#[async_trait]
+pub trait Probe: Send + Sync {
+    /// Performs one cheap control-channel round trip and returns its latency.
+    async fn ping(&self) -> Result<Duration, TvError>;
+}
+
 /// An erased television.
 ///
 /// The fleet reason this trait exists: `Vec<Arc<dyn DeviceHandle>>` compiles, and a
@@ -397,6 +449,34 @@ pub trait DeviceHandle: Send + Sync {
 
     /// Volume, or `None`.
     fn as_volume(&self) -> Option<&dyn VolumeControl>;
+
+    /// Brightness, or `None`.
+    ///
+    /// Defaulted to `None` so existing backends compile unchanged; a backend that
+    /// advertises [`Capability::Brightness`] must override it.
+    fn as_brightness(&self) -> Option<&dyn BrightnessControl> {
+        None
+    }
+
+    /// Reboot control, or `None`.
+    ///
+    /// Defaulted to `None` for the same reason as [`DeviceHandle::as_brightness`].
+    fn as_reboot(&self) -> Option<&dyn Rebootable> {
+        None
+    }
+
+    /// Control-plane latency measurement, or `None`.
+    fn as_probe(&self) -> Option<&dyn Probe> {
+        None
+    }
+
+    /// Diagnostic telemetry, or `None`.
+    ///
+    /// Defaulted to `None`; a backend that advertises [`Capability::Telemetry`]
+    /// must override it.
+    fn as_telemetry(&self) -> Option<&dyn TelemetryProvider> {
+        None
+    }
 }
 
 #[cfg(test)]

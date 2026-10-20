@@ -46,12 +46,14 @@ pub mod mock;
 #[cfg(feature = "quirks")]
 pub mod quirks;
 pub mod state;
+pub mod telemetry;
 
 pub use capability::{
-    AppLaunch, AppRef, Capability, CapabilitySet, DeviceHandle, Input, InputSelect, Key, KeyInput,
-    PowerControl, VolumeControl,
+    AppLaunch, AppRef, BrightnessControl, Capability, CapabilitySet, DeviceHandle, Input,
+    InputSelect, Key, KeyInput, PowerControl, Probe, Rebootable, VolumeControl,
 };
 pub use command::CommandId;
 pub use descriptor::{DeviceDescriptor, DeviceId, DeviceOs, PowerState};
 pub use error::{AuthError, ProtocolError, QuirkId, Remedy, StateError, TransportError, TvError};
 pub use state::{Confidence, ObservedField, ObservedState};
+pub use telemetry::{Telemetry, TelemetryProvider};

@@ -67,6 +67,9 @@ fn capability_accessors(handle: &dyn DeviceHandle, violations: &mut Vec<Violatio
         (Capability::AppLaunch, handle.as_app().is_some()),
         (Capability::InputSelect, handle.as_input().is_some()),
         (Capability::Volume, handle.as_volume().is_some()),
+        (Capability::Brightness, handle.as_brightness().is_some()),
+        (Capability::Reboot, handle.as_reboot().is_some()),
+        (Capability::Telemetry, handle.as_telemetry().is_some()),
     ];
 
     for (capability, accessor) in pairs {
@@ -116,6 +119,42 @@ async fn unsupported_routing(handle: &dyn DeviceHandle, violations: &mut Vec<Vio
                 other => violations.push(Violation::new(
                     "unsupported_routing",
                     format!("wake without Wake capability returned {other:?}"),
+                )),
+            }
+        }
+    }
+
+    if !set.contains(Capability::Brightness) {
+        if let Some(brightness) = handle.as_brightness() {
+            match brightness.set_brightness(50, CommandId::new()).await {
+                Err(TvError::Unsupported(Capability::Brightness)) => {}
+                other => violations.push(Violation::new(
+                    "unsupported_routing",
+                    format!("set_brightness without Brightness returned {other:?}"),
+                )),
+            }
+        }
+    }
+
+    if !set.contains(Capability::Reboot) {
+        if let Some(reboot) = handle.as_reboot() {
+            match reboot.reboot(CommandId::new()).await {
+                Err(TvError::Unsupported(Capability::Reboot)) => {}
+                other => violations.push(Violation::new(
+                    "unsupported_routing",
+                    format!("reboot without Reboot returned {other:?}"),
+                )),
+            }
+        }
+    }
+
+    if !set.contains(Capability::Telemetry) {
+        if let Some(telemetry) = handle.as_telemetry() {
+            match telemetry.telemetry().await {
+                Err(TvError::Unsupported(Capability::Telemetry)) => {}
+                other => violations.push(Violation::new(
+                    "unsupported_routing",
+                    format!("telemetry without Telemetry returned {other:?}"),
                 )),
             }
         }

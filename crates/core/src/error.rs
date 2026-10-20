@@ -48,7 +48,8 @@ impl TvError {
             Self::Transport(_) => Remedy::Retry,
             Self::Protocol(_) => Remedy::BackOff,
             Self::Auth(_) => Remedy::Reprovision,
-            Self::State(_) => Remedy::Wait,
+            Self::State(StateError::NotReady) => Remedy::Wait,
+            Self::State(StateError::Quarantined) => Remedy::Quarantine,
             Self::Unsupported(_) => Remedy::Disable,
             Self::PlatformQuirk(_) => Remedy::ApplyQuirk,
         }
@@ -72,6 +73,12 @@ pub enum Remedy {
     Reprovision,
     /// The device is not ready yet; do nothing.
     Wait,
+    /// Stop touching the device until a human or an external health check
+    /// establishes that it is safe to continue.
+    ///
+    /// Unlike [`Remedy::Disable`], the capability still exists; the device's
+    /// current condition forbids using it.
+    Quarantine,
     /// The capability does not exist here; remove the control.
     Disable,
     /// A documented defect with documented handling.
@@ -178,7 +185,8 @@ mod tests {
             TvError::Transport(_) => Remedy::Retry,
             TvError::Protocol(_) => Remedy::BackOff,
             TvError::Auth(_) => Remedy::Reprovision,
-            TvError::State(_) => Remedy::Wait,
+            TvError::State(StateError::NotReady) => Remedy::Wait,
+            TvError::State(StateError::Quarantined) => Remedy::Quarantine,
             TvError::Unsupported(_) => Remedy::Disable,
             TvError::PlatformQuirk(_) => Remedy::ApplyQuirk,
         }
@@ -191,6 +199,7 @@ mod tests {
             TvError::protocol("bad xml"),
             TvError::Auth(AuthError::PairingRequired),
             TvError::State(StateError::NotReady),
+            TvError::State(StateError::Quarantined),
             TvError::Unsupported(Capability::Key),
             TvError::PlatformQuirk(QuirkId::new("samsung_8001_disabled")),
         ];
