@@ -6,67 +6,75 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.2.0] - 2026-10-20
+
+Thirteen crates. Two are new (`tv-rs-local`, `tv-rs-dlna`), `tv-rs-tizen` gains the U1
+remote service, and the facade learns what confidence and quirks mean.
+
+`TizenError` gained a variant (`InvalidKey`), which the versioning policy in
+`CONTRIBUTING.md` classes as breaking at `0.x` — hence `0.2.0` rather than `0.1.1`.
+
 ### Added
 
+- **`tv-rs-local`** (new crate): probes the host's own displays — EDID identity,
+  connector, mode, physical size and a TV-likelihood score — with no television on the
+  network. Windows uses WMI + GDI, Linux DRM/EDID; a platform failure is a typed error,
+  never a panic.
+- **`tv-rs-dlna`** (new crate): DLNA renderer transport — SSDP discovery of
+  MediaRenderers, AVTransport SOAP (`SetAVTransportURI`, `Play`, `Pause`, `Stop`,
+  `Seek`), GENA subscribe/renew/unsubscribe with `LastChange` parsing and a renewal
+  registry, SSDP advertisement for a server the caller hosts, and DIDL-Lite metadata.
+  It is transport only: no media library, no server, no ContentDirectory.
+- **`TizenRemote`**: the stateful Samsung service for fleet callers. It owns the token
+  store, the connection pool and per-host TLS trust, and exposes pairing, raw/typed
+  keys, app launch, `disconnect`, `forget_paired` and `shutdown`.
+- **Pairing flow** (`TizenClient::pair`): 30-second on-screen window, token and TV name
+  from the handshake, accepting both `name` and `deviceName` firmware spellings.
+- **Raw key codes** (`send_key_code`): any validated Samsung `KEY_*` code, so
+  model-specific keys no longer need a closed enum; an invalid code is a typed error.
+- **Channel launching**: `ed.apps.launch` with `NativeLaunch`/`DeepLink`, the legacy
+  `ms.channel.launch` event, and a channel → DIAL → legacy fallback that starts with
+  DIAL when the TV is not paired.
 - **Quirks are consumed, not just loaded.** `tv-rs-core` decodes a row's `action` into
-  a typed `QuirkAction` (`StartAtPort`, `ExpectAuthRequired`, `TrustDeviceInfoFlags`,
-  `PromptUser`, `Other`), and with the facade's `quirks` feature a matching row pins
-  the port at client construction: a `QN90*` Tizen panel is built on 8002 only, a
-  webOS 23 panel on 3001 only, so the dead generation is never probed. A test asserts
-  that every action shipped in `quirks/default.toml` decodes to known vocabulary — a
-  typo in the table would otherwise be a comment nothing reads.
-- **`power_observation()`**: the facade now returns the power state _and_ its
-  confidence. Roku is `High` (it reports the mode); Tizen and webOS are `Inferred`,
-  because an answering control port does not prove a picture is on. `power_state()`
-  is a projection of it, so the two cannot disagree. `tv-rs-cli status` prints a
-  `CONFIDENCE` column.
-- **`INTEGRATION.md`**: the adoption guide — discovery, TLS pin-on-first-use, quirks,
-  a fleet, media, CEC, and the pre-ship checklist.
+  a typed `QuirkAction`, and with the facade's `quirks` feature a matching row pins the
+  port at client construction: a `QN90*` Tizen panel is built on 8002 only, a webOS 23
+  panel on 3001 only, so the dead generation is never probed. A test asserts every
+  action shipped in `quirks/default.toml` decodes to known vocabulary.
+- **`power_observation()`**: the facade returns the power state *and* its confidence.
+  Roku is `High` (it reports the mode); Tizen and webOS are `Inferred`, because an
+  answering control port does not prove a picture is on. `power_state()` is a
+  projection of it, so the two cannot disagree. `tv-rs-cli status` prints `CONFIDENCE`.
+- **`INTEGRATION.md`**: the adoption guide — discovery, pin-on-first-use, quirks, a
+  fleet, media, CEC, and the pre-ship checklist.
 - **`crates/tizen/README.md`** marks Tizen experimental and says exactly why: mocks
   prove the parsers, not that Samsung sends those frames.
 - **24-hour fleet simulation** (`twenty_four_simulated_hours_with_three_blips`): 50
   devices, three panels that drop into standby on their own, two that never pair, one
-  whose power is never observable. Every healthy device converges every hour, each
-  blip costs exactly one wake, and no device exceeds one action per hour.
-- **`MockBackend::force_power`** so a test can make a television change state without
-  a command, which is the case a fleet actually has to survive.
-- **Versioning policy** in `CONTRIBUTING.md`, including what counts as breaking at
-  `0.x` and the 90-day freeze on removing error variants.
-
-### Changed
-
-- `#![forbid(unsafe_code)]` now covers every crate in the workspace, including
-  `tv-rs-cec`.
-- `tv-rs` re-exports `tv-rs-transport`, so `TlsPolicy` and `cert_sink` are reachable
-  from the facade that already needs them.
-
-## [0.2.0] - 2026-10-20
-
-`tv-rs-tizen` only. The new `TizenError::InvalidKey` variant is a breaking change
-under the 0.x policy, so this is a minor bump rather than `0.1.1`.
-
-### Added
-
-- **`TizenRemote`**: the stateful Samsung service for fleet callers. It owns the
-  token store, the connection pool and per-host TLS trust, and exposes pairing,
-  raw/typed keys, app launch, `disconnect`, `forget_paired` and `shutdown`.
-- **Pairing flow** (`TizenClient::pair`): 30-second on-screen window, token and TV
-  name from the handshake, accepting both `name` and `deviceName` firmware spellings.
-- **Raw key codes** (`send_key_code`): any validated Samsung `KEY_*` code, plus
-  `TizenRemoteKey::from_code`, so model-specific keys no longer need a closed enum.
-- **Channel launching**: `ed.apps.launch` with `NativeLaunch`/`DeepLink`, and the
-  legacy `ms.channel.launch` path for pre-`ed.apps.launch` panels.
-- **Launch fallback**: channel → DIAL → legacy, with DIAL first when the TV is not
-  paired.
+  whose power is never observable. Every healthy device converges every hour, each blip
+  costs exactly one wake, and no device exceeds one action per hour. Backed by
+  `MockBackend::force_power`, so a test can make a television change state without a
+  command.
+- **Versioning policy** in `CONTRIBUTING.md`: what counts as breaking at `0.x`, and the
+  90-day freeze on removing error variants.
 
 ### Changed
 
 - The connection pool drains the remote channel's read half in the background, so a
   silent TV cannot fill its receive buffer and make the next key press look dead.
+- `#![forbid(unsafe_code)]` covers every crate, with one documented exception:
+  `tv-rs-local`'s Windows FFI module, which is the only code in the workspace that calls
+  platform APIs the safe crates do not expose.
+- `tv-rs` re-exports `tv-rs-transport`, so `TlsPolicy` and `cert_sink` are reachable
+  from the facade that already needs them.
 
 ### Fixed
 
-- `ms.error` during the handshake maps to `Unauthorized` instead of an untyped
+- **Two RUSTSEC advisories in `quick-xml`** (quadratic duplicate-attribute scan,
+  unbounded namespace allocation — both denial of service). The DLNA crate now pins
+  `0.41`, the first patched release, and uses the split decode/unescape API.
+- `ms.error` during the Tizen handshake maps to `Unauthorized` instead of an untyped
   protocol error.
 
 ## [0.1.0] - 2026-10-20
