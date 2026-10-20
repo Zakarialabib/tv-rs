@@ -134,10 +134,7 @@ impl TizenRemote {
         let token = pairing.token.clone().unwrap_or_default();
         let name = pairing.tv_name.clone().unwrap_or_default();
         let token_saved = !token.is_empty();
-        self.tokens
-            .lock()
-            .await
-            .upsert(&host, &token, &name)?;
+        self.tokens.lock().await.upsert(&host, &token, &name)?;
         Ok(PairingOutcome {
             tv_name: pairing.tv_name,
             token_saved,
@@ -185,7 +182,7 @@ impl TizenRemote {
 
     /// Launches an app using an explicit route strategy.
     ///
-    /// `app_id` accepts the presets from [`resolve_app_id`](crate::resolve_app_id)
+    /// `app_id` accepts the presets from [`resolve_app_id`]
     /// (`netflix`, `youtube`, `prime`) or a numeric Samsung app id. `Auto` tries
     /// the route most likely to work for the current pairing state, then falls
     /// back through the other routes before returning the last error.
@@ -215,10 +212,7 @@ impl TizenRemote {
         for route in routes {
             let result = match route {
                 LaunchRoute::Channel => self.pool.launch_app(&client, &app_id, action).await,
-                LaunchRoute::Dial => client
-                    .launch_app_via_dial(&app_id, None)
-                    .await
-                    .map(|_| ()),
+                LaunchRoute::Dial => client.launch_app_via_dial(&app_id, None).await.map(|_| ()),
                 LaunchRoute::Legacy => self.pool.launch_app_legacy(&client, &app_id).await,
             };
             match result {
@@ -271,12 +265,7 @@ impl TizenRemote {
     }
 
     async fn client_for(&self, host: &str) -> TizenClient {
-        let token = self
-            .tokens
-            .lock()
-            .await
-            .token_for(host)
-            .map(str::to_string);
+        let token = self.tokens.lock().await.token_for(host).map(str::to_string);
         let client = self.pairing_client(host).await;
         match token {
             Some(token) => client.with_token(token),

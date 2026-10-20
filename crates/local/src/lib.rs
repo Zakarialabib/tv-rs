@@ -811,7 +811,8 @@ mod linux {
     }
 
     fn parse_edid(edid: &[u8]) -> (Option<String>, Option<String>, Option<f64>, Option<f64>) {
-        if edid.len() < 128 || &edid[0..8] != [0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00] {
+        if edid.len() < 128 || !edid.starts_with(&[0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00])
+        {
             return (None, None, None, None);
         }
 

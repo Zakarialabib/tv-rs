@@ -10,6 +10,18 @@
 //! - [`SoapAvTransport`] implementing the [`AvTransport`] trait, for callers that
 //!   hold a renderer handle and want a typed control surface.
 
+/// Decodes a text event and resolves XML entities.
+///
+/// `quick-xml` 0.41 split the old `unescape()` into decoding (bytes -> str) and
+/// entity resolution (`escape::unescape`). Malformed entities fall back to the empty
+/// string, which is what the previous single-call version did.
+fn text_of(t: &quick_xml::events::BytesText<'_>) -> String {
+    let decoded = t.decode().unwrap_or_default();
+    quick_xml::escape::unescape(&decoded)
+        .map(|unescaped| unescaped.into_owned())
+        .unwrap_or_default()
+}
+
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -73,7 +85,7 @@ pub fn extract_av_transport_control_url(
                 if !in_service {
                     continue;
                 }
-                let text = t.unescape().unwrap_or_default().to_string();
+                let text = text_of(t);
                 match last_tag.to_ascii_lowercase().as_str() {
                     "servicetype" => service_type = text,
                     "controlurl" => control_url = text,
@@ -152,11 +164,7 @@ pub async fn cast(control_url: &str, media_url: &str, title: &str) -> Result<(),
 /// Lets a caller push a URI and control playback start separately (some
 /// renderers buffer for a long time and it is nicer to send `Play` at exactly
 /// the right beat).
-pub async fn set_uri(
-    control_url: &str,
-    media_url: &str,
-    didl: &str,
-) -> Result<(), DlnaError> {
+pub async fn set_uri(control_url: &str, media_url: &str, didl: &str) -> Result<(), DlnaError> {
     let set_body = format!(
         "<u:SetAVTransportURI xmlns:u=\"{AV_TRANSPORT_ACTION}\"><InstanceID>0</InstanceID><CurrentURI>{uri}</CurrentURI><CurrentURIMetaData>{meta}</CurrentURIMetaData></u:SetAVTransportURI>",
         uri = escape_xml(media_url),
@@ -175,17 +183,15 @@ pub async fn play(control_url: &str) -> Result<(), DlnaError> {
 
 /// `Stop` the current playback on the renderer.
 pub async fn stop(control_url: &str) -> Result<(), DlnaError> {
-    let stop_body = format!(
-        "<u:Stop xmlns:u=\"{AV_TRANSPORT_ACTION}\"><InstanceID>0</InstanceID></u:Stop>",
-    );
+    let stop_body =
+        format!("<u:Stop xmlns:u=\"{AV_TRANSPORT_ACTION}\"><InstanceID>0</InstanceID></u:Stop>",);
     send_soap(control_url, "Stop", &stop_body).await
 }
 
 /// `Pause` the current playback.
 pub async fn pause(control_url: &str) -> Result<(), DlnaError> {
-    let pause_body = format!(
-        "<u:Pause xmlns:u=\"{AV_TRANSPORT_ACTION}\"><InstanceID>0</InstanceID></u:Pause>",
-    );
+    let pause_body =
+        format!("<u:Pause xmlns:u=\"{AV_TRANSPORT_ACTION}\"><InstanceID>0</InstanceID></u:Pause>",);
     send_soap(control_url, "Pause", &pause_body).await
 }
 

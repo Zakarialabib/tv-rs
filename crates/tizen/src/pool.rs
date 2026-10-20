@@ -35,8 +35,8 @@ use tokio_tungstenite::tungstenite::Message;
 use tv_rs_transport::WsStream;
 
 use crate::client::{
-    build_channel_launch_payload, build_legacy_launch_payload, build_remote_command_payload,
-    build_raw_remote_command_payload, open_channel, TizenClient, TizenSession,
+    build_channel_launch_payload, build_legacy_launch_payload, build_raw_remote_command_payload,
+    build_remote_command_payload, open_channel, TizenClient, TizenSession,
 };
 use crate::error::Result;
 use crate::types::{TizenLaunchAction, TizenRemoteKey};

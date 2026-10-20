@@ -46,7 +46,7 @@ pub use apps::{resolve_app_id, NETFLIX_APP_ID, PRIME_VIDEO_APP_ID, YOUTUBE_APP_I
 pub use auth::TizenAuthProvider;
 pub use client::{
     build_channel_connect_payload, build_channel_launch_payload, build_dial_launch_url,
-    build_legacy_launch_payload, build_remote_command_payload, build_raw_remote_command_payload,
+    build_legacy_launch_payload, build_raw_remote_command_payload, build_remote_command_payload,
     build_ws_url, encode_remote_name, extract_token, extract_tv_name, is_unauthorized,
     parse_channel_connect_response, HandshakeInfo, TizenClient, TizenPairing, TizenSession,
 };
@@ -63,9 +63,7 @@ pub use payload::{
 };
 pub use pool::{LiveChannelFactory, TizenChannel, TizenChannelFactory, TizenConnectionPool};
 pub use protocol::{DialLauncher, WebSocketHandshake};
-pub use remote::{
-    normalize_host, LaunchRoute, LaunchStrategy, PairingOutcome, TizenRemote,
-};
+pub use remote::{normalize_host, LaunchRoute, LaunchStrategy, PairingOutcome, TizenRemote};
 pub use token_store::{load_token, save_token, PairedTv, SamsungTokenStore};
 pub use tv_rs_transport::TlsPolicy;
 pub use types::{
