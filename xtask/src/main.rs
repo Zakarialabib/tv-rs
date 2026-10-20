@@ -39,6 +39,8 @@ const ORDER: [&str; 11] = [
 ];
 
 /// Seconds to wait after each upload so the crates.io index catches up.
+const SETTLE_RETRY: u64 = 30;
+
 const INDEX_SETTLE: u64 = 20;
 
 fn main() -> ExitCode {
@@ -175,20 +177,28 @@ fn publish(args: &[String]) -> Result<(), String> {
             position + 1,
             ORDER.len()
         );
-        let mut command = Command::new("cargo");
-        command
-            .arg("publish")
-            .arg("-p")
-            .arg(package)
-            .args(&publish_args);
-        let output = command
-            .output()
-            .map_err(|error| format!("cannot run cargo: {error}"))?;
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        print!("{stdout}{stderr}");
+        let mut attempt = 0;
+        let mut uploaded = false;
+        loop {
+            attempt += 1;
+            let mut command = Command::new("cargo");
+            command
+                .arg("publish")
+                .arg("-p")
+                .arg(package)
+                .args(&publish_args);
+            let output = command
+                .output()
+                .map_err(|error| format!("cannot run cargo: {error}"))?;
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            print!("{stdout}{stderr}");
 
-        if !output.status.success() {
+            if output.status.success() {
+                uploaded = true;
+                break;
+            }
+
             // First publish: workspace path deps are not on crates.io yet, so a
             // dependent cannot resolve during a dry run. Expected, not a defect.
             if options.dry_run && stderr.contains("no matching package named `tv-rs-") {
@@ -196,12 +206,32 @@ fn publish(args: &[String]) -> Result<(), String> {
                     "warning: dry-run of {package} skipped — a workspace dependency is not on \
                      crates.io yet. Re-run after the earlier crates have been published once."
                 );
+                break;
+            }
+
+            // A retry is the normal path here: the index is eventually consistent,
+            // and a dependent published ten seconds ago may not be visible yet.
+            if !options.dry_run && stderr.contains("no matching package named") && attempt < 5 {
+                println!(
+                    "index has not caught up with {package} yet; retry {attempt}/4 in {SETTLE_RETRY}s"
+                );
+                sleep(Duration::from_secs(SETTLE_RETRY));
                 continue;
             }
+
+            // A previous run may have uploaded this crate before failing later. That
+            // is not an error: the version is immutable, so skip it and keep going.
+            if !options.dry_run
+                && (stderr.contains("already exists") || stderr.contains("already uploaded"))
+            {
+                println!("skip {package}: already published");
+                break;
+            }
+
             return Err(format!("cargo publish failed for {package}"));
         }
 
-        if !options.dry_run {
+        if !options.dry_run && uploaded {
             println!("published {package}; waiting {INDEX_SETTLE}s for the index");
             sleep(Duration::from_secs(INDEX_SETTLE));
         }

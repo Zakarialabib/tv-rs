@@ -238,6 +238,11 @@ cargo xtask publish --yes                  # real publish, token from $CRATES_IO
 cargo xtask publish --version 0.2.0 --yes  # bump every pin, then publish in order
 ```
 
+The publisher is idempotent on purpose: a version already on crates.io is skipped,
+and a dependent that cannot resolve yet is retried four times. A first publish
+therefore survives the index being a minute behind, and a re-run after a failure
+picks up where it stopped instead of failing on crate #1.
+
 ## Docs
 
 New here? [`docs/glossary.md`](docs/glossary.md) is the map — every term links to
