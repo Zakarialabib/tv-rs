@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.0] - 2026-10-20
+
+First published release: eleven crates on crates.io, all at `0.1.0`.
+
 ### Added
 
 - **`tv-rs-agent`**: the reconciliation layer. A `DesiredStateProvider` seam
@@ -71,53 +77,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reported as `Standby`, not `Off`), Tizen and webOS fall back to the shared TCP
   probe against their control port.
 
-### Changed
-
-- **Phase 6 hardening.** `rust-version` corrected from `1.75` to `1.89` — the old
-  value was never buildable (`uuid` and the ICU crates behind `idna` already require
-  1.88–1.89), and CI now checks the claim in an `msrv` job. Added a `cargo-deny` job
-  with a deliberate advisory/licence/bans policy, an explicit-features rustdoc job
-  (`--all-features` is impossible by design: both TLS backends at once is a compile
-  error), and per-crate README/`deny.toml`. Removed a stray `du.exe.stackdump` and
-  the per-crate `LICENSE` copies, which were eleven chances to drift from the one at
-  the root.
-
-- **Workspace reorganization.** All packages are flattened under `crates/` (one
-  home per package), the facade moved from the repository root to
-  `crates/tv-rs`, the CLI was promoted from `utils/cli` to `crates/cli`, and the
-  root manifest is now a virtual workspace. Release tooling was ported from a
-  shell script to `cargo xtask publish`.
-- `missing_docs` is enforced once, in `[workspace.lints.rust]`, instead of in
-  every crate root.
-
-### Removed
-
-- `roku`'s no-op `RokuAuthProvider` marker trait: Roku ECP is unauthenticated, and
-  a marker that always reports "no credentials" was noise.
-
-### Fixed
-
-- **Tizen frame budget is per read.** `TizenSession` decremented one counter for the
-  life of the session, so after a dozen reads every command reported a timeout. Each
-  `recv_json` now takes a fresh budget, and the counter is no longer stored.
-- **Tizen DIAL reuses one HTTP client.** `launch_app_via_dial` and
-  `dial_device_description` built a `reqwest::Client` per call, discarding the
-  connection pool and re-resolving DNS every time.
-- **`Debug` no longer prints credentials.** `TizenClient`'s pairing token and
-  `WebosClient`'s `client-key` are redacted: both are bearer credentials, and a log
-  line containing one hands over the screen.
-
-- The facade's `keywords` contained path-like entries with slashes, which
-  crates.io rejects.
-- The facade `description` advertised mDNS discovery, which is not implemented;
-  mDNS is now described as planned.
-
-No public API changes.
-
-## [0.1.0] - 2026-10-19
-
-### Added
-
 - **Facade (`tv-rs`)** — `discover()` / `discover_with()`, a documented
   `identify_vendor()` heuristic over SSDP and UPnP fields, `DiscoveredTv`, and
   a `TvClient` that dispatches power and app-launch calls across Samsung, LG
@@ -142,8 +101,47 @@ No public API changes.
   subcommands (`publish = false`).
 - **Hardware-in-the-loop harness** behind the `hil` feature, skipped unless
   `TV_RS_HIL_*` host variables are set.
-- MIT license, CI (rustfmt, clippy, test on Linux+Windows, rustdoc) and an
-  ordered multi-crate release script.
+- MIT license, CI (rustfmt, clippy, test on Linux+Windows, rustdoc) and
+  `cargo xtask publish`, which releases the eleven crates in dependency order.
+
+### Changed
+
+- **Phase 6 hardening.** `rust-version` corrected from `1.75` to `1.89` — the old
+  value was never buildable (`uuid` and the ICU crates behind `idna` already require
+  1.88–1.89), and CI now checks the claim in an `msrv` job. Added a `cargo-deny` job
+  with a deliberate advisory/licence/bans policy, an explicit-features rustdoc job
+  (`--all-features` is impossible by design: both TLS backends at once is a compile
+  error), and per-crate README/`deny.toml`. Removed a stray `du.exe.stackdump` and
+  the per-crate `LICENSE` copies, which were eleven chances to drift from the one at
+  the root.
+- **Workspace reorganization.** All packages are flattened under `crates/` (one
+  home per package), the facade moved from the repository root to
+  `crates/tv-rs`, the CLI was promoted from `utils/cli` to `crates/cli`, and the
+  root manifest is now a virtual workspace. Release tooling was ported from a
+  shell script to `cargo xtask publish`.
+- `missing_docs` is enforced once, in `[workspace.lints.rust]`, instead of in
+  every crate root.
+
+### Removed
+
+- `roku`'s no-op `RokuAuthProvider` marker trait: Roku ECP is unauthenticated, and
+  a marker that always reports "no credentials" was noise.
+
+### Fixed
+
+- **Tizen frame budget is per read.** `TizenSession` decremented one counter for the
+  life of the session, so after a dozen reads every command reported a timeout. Each
+  `recv_json` now takes a fresh budget, and the counter is no longer stored.
+- **Tizen DIAL reuses one HTTP client.** `launch_app_via_dial` and
+  `dial_device_description` built a `reqwest::Client` per call, discarding the
+  connection pool and re-resolving DNS every time.
+- **`Debug` no longer prints credentials.** `TizenClient`'s pairing token and
+  `WebosClient`'s `client-key` are redacted: both are bearer credentials, and a log
+  line containing one hands over the screen.
+- The facade's `keywords` contained path-like entries with slashes, which
+  crates.io rejects.
+- The facade `description` advertised mDNS discovery, which is not implemented;
+  mDNS is now described as planned.
 
 ### Known limitations
 
