@@ -1,0 +1,25 @@
+[package]
+name = "tv-rs-local"
+description = "Local display probing: connector, EDID identity, physical size and TV likelihood without a TV on the network."
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["display", "edid", "monitor", "connector", "tv"]
+categories = ["hardware-support", "api-bindings"]
+
+[dependencies]
+serde.workspace = true
+tokio.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+wmi = "0.14"
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+] }
+
+[lints]
+workspace = true

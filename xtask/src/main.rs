@@ -24,11 +24,13 @@ use std::time::Duration;
 /// Publish order. Every path dependency must reach crates.io before its
 /// dependents, so `transport` leads and the facade follows the protocol crates.
 /// Keep in sync with `docs/adr/001-crate-publication.md`.
-const ORDER: [&str; 11] = [
+const ORDER: [&str; 13] = [
     "tv-rs-core",
     "tv-rs-transport",
     "tv-rs-discovery",
     "tv-rs-power",
+    "tv-rs-local",
+    "tv-rs-dlna",
     "tv-rs-roku",
     "tv-rs-tizen",
     "tv-rs-webos",
