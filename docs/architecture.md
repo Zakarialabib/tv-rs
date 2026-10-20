@@ -79,8 +79,8 @@ has that concept.
 | `mdc` | ✓ `MdcClient` + `MdcDevice` | ✓ frame codec + checksum | ✓ `Status` | ✓ `DisplayId`, `InputSource`, `MdcPower` | ✓ `MdcError` | — |
 | `transport` | — | — | — | ✓ `TlsPolicy` | ✓ `Unsupported` | — |
 | `media` | — | — | — | ✓ ranges/segments | — | — |
-| `core` | — | — | — | ✓ ids, capabilities, state | ✓ `TvError` + `Remedy` | — |
-| `agent` | — | — | ✓ desired-state JSON | ✓ `Decision`, `Outcome` | ✓ provider errors | — |
+| `core` | — | — | — | ✓ ids, capabilities, state, `Telemetry` | ✓ `TvError` + `Remedy` | — |
+| `agent` | — | ✓ telemetry policy (`assess_telemetry`) | ✓ desired-state JSON | ✓ `Decision`, `Outcome`, `TelemetryVerdict` | ✓ provider errors | — |
 | `cec` | ✓ `CecClient` (in `lib.rs`) | ✓ `cec-client` grammar | — | ✓ `CecAddress` | ✓ | — |
 
 **The auth rule.** An `auth.rs` exists only where the protocol performs a real
@@ -93,9 +93,8 @@ Additional files that exist where a protocol needs them, not by convention:
 `tizen/token_store.rs` (pairing persistence), `tizen/pool.rs` (one channel per TV),
 `tizen/discovery.rs` (Samsung's private SSDP target), `tizen/apps.rs` (app-id
 presets), `media/{range,hls,server}.rs` (the three things a TV player demands),
-`core/{mock,conformance,quirks}.rs` (the parts that exist for tests and for the
-quirks table), `agent/{desired,healer,audit,reconciler,runner}.rs` (the loop and its
-pure core), `cec/transport.rs` (the `cec-client` invocation).
+`core/{mock,conformance,quirks,telemetry}.rs` (tests, the quirks table, and what a
+panel reports about its own health), `agent/{desired,healer,audit,reconciler,runner,telemetry}.rs` (the loop and its pure core), `cec/transport.rs` (the `cec-client` invocation).
 
 ## Directory naming
 

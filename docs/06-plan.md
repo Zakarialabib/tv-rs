@@ -19,47 +19,34 @@ accumulates ticks is a second changelog, and a worse one.
 - **`tv-rs-mdc` is merged and unreleased** — Samsung MDC over TCP 1515, the protocol
   commercial signage panels expose. Its manifest is `0.2.0`; that version does not
   exist for it on the registry, so it can be published as-is.
-- **The telemetry lane is in flight** (see below) — uncommitted work in `tv-rs-core`,
-  `tv-rs-agent` and `tv-rs-mdc`.
+- **Telemetry is merged and unreleased** — `Telemetry`/`TelemetryProvider` in core,
+  `Brightness`/`Reboot`/`Telemetry` capabilities, `Remedy::Quarantine`, the agent's
+  `assess_telemetry` policy, and `DeviceOs::SamsungMdc`. It ships in the next version.
 - **Hardware is still unverified.** `docs/hil-results.md` is empty and that is the one
   honest gap in the v0.2 definition of done.
 
 ---
 
-## 1. Land the telemetry lane — *in flight*
+## 1. Release `0.3.0`
 
-**What exists in the working tree:** a `Telemetry` snapshot where every metric is an
-`ObservedField` (`temperature_celsius`, `signal_strength`, `signal_quality`, `uptime`),
-a `TelemetryProvider` trait, three new capabilities (`Brightness`, `Reboot`,
-`Telemetry`), the matching traits (`BrightnessControl`, `Rebootable`, `Probe`), a
-`TelemetryPolicy` on the agent's `ReconcilePolicy`, and the MDC backend implementing
-the read.
+Three breaking additions have accumulated on `main` since `0.2.0`: `Remedy::Quarantine`,
+`DeviceOs::SamsungMdc`, and the three new capabilities. Under the policy in
+`CONTRIBUTING.md` that is a **minor** bump, not a patch.
 
-**Why it matters:** power/input/volume say what a screen is *doing*; telemetry says
-whether it can keep doing it. A fleet that cannot tell "the app crashed" from "the
-panel is at 78 °C" sends a technician to the wrong place.
+Order matters: `tv-rs-core` first (everything else resolves it from the registry), then
+`tv-rs-transport`, then the protocol crates, `tv-rs-mdc` last among the leaves — it is
+new, so its first upload is `0.3.0`. `cargo xtask publish --version 0.3.0` rewrites every
+pin and publishes in that order.
 
-**Exit criteria**
+**Why it blocks everything else:** `cargo package -p tv-rs-mdc` fails today because the
+packaged tarball resolves `tv-rs-core 0.2.0` from crates.io, which has none of the new
+APIs (`E0407`/`E0432`). The crate is fine; the registry is behind.
 
-- `cargo test --workspace` green with the mock backend exercising every telemetry path;
-- the conformance suite accepts a backend that reports telemetry and one that does not;
-- one agent rule uses it (over-temperature or signal collapse → `Remedy::Wait` /
-  `Quarantine`), with the decision still pure and testable without I/O;
-- `docs/architecture.md` module inventory lists `telemetry.rs` for core and agent;
-- CHANGELOG entry under the next version.
+**Exit:** fourteen crates at `0.3.0`, a fresh `cargo add tv-rs` consumer builds against
+`power_observation()` and `assess_telemetry`, docs.rs serves the new items, CHANGELOG
+and README agree with the registry.
 
-**Risk:** scope creep into a metrics pipeline. The seam is `TelemetryProvider`; the
-crate reports, the caller decides what to store.
-
-## 2. Publish `tv-rs-mdc`
-
-No version bump required: `tv-rs-mdc 0.2.0` is a new crate. `cargo xtask publish`
-already lists it (fourteenth, after `tv-rs-roku`), and the token now has
-`publish-update`, so later bumps work too.
-
-**Exit:** `cargo add tv-rs-mdc` resolves; docs.rs serves it.
-
-## 3. MDC over RS-232
+## 2. MDC over RS-232
 
 The same frame codec over a serial port, behind a `serial` feature
 (`tokio-serial`), because video walls are frequently wired, not networked — and a
@@ -68,7 +55,7 @@ wired wall has no discovery, no DHCP and no TLS to argue about.
 **Exit:** the codec is shared, not copied; `serial` is off by default so a cloud agent
 does not compile a serial stack; the TCP path is unchanged.
 
-## 4. `tv-rs-sony` — Bravia REST + IRCC
+## 3. `tv-rs-sony` — Bravia REST + IRCC
 
 Sony's consumer and pro panels expose a documented JSON-REST API plus IRCC-IP for
 key presses, authenticated with a pre-shared key. It is the smallest remaining vendor
@@ -77,7 +64,7 @@ integration: power, input, volume, app launch, and key codes.
 **Exit:** passes the conformance suite; capability set is honest (no absolute volume
 if the API only takes steps); pairing failure maps to `Auth` with `Remedy::Reprovision`.
 
-## 5. Native CEC — only after a measurement
+## 4. Native CEC — only after a measurement
 
 `tv-rs-cec` shells out to `cec-client`. That is a deliberate trade (no `unsafe`, no C
 toolchain), and it is fine until someone shows the subprocess latency hurts. If that
@@ -87,7 +74,7 @@ confined to one module; keep the subprocess adapter as the default.
 **Exit:** a number, not an opinion — p50/p95 for a standby command through each path,
 and no new botched error paths.
 
-## 6. DDC/CI in `tv-rs-local`
+## 5. DDC/CI in `tv-rs-local`
 
 Brightness and input for the display the machine is *attached to*, over `/dev/i2c`
 (`VCP 0x10`, `VCP 0x60`). It belongs in `tv-rs-local` because that crate already owns
@@ -96,7 +83,7 @@ Brightness and input for the display the machine is *attached to*, over `/dev/i2
 **Exit:** Linux-only, feature-gated, reads VCP codes on a real monitor, and returns a
 typed error where i2c is unavailable.
 
-## 7. Hardware verification — the only unmet gate
+## 6. Hardware verification — the only unmet gate
 
 `cargo xtask hw-test --write-doc` fills `docs/hil-results.md` the moment a television
 answers SSDP. Until then every protocol claim in this repository is
@@ -105,11 +92,6 @@ documented-and-mocked.
 **Exit:** at least one row per supported vendor (Tizen, webOS, Roku, MDC), each stating
 what was commanded and what came back — or an explicit "not verified" line, which is
 also a result.
-
-## 8. Release `0.3.0`
-
-After 1–4: bump, changelog, tag, publish sixteen crates in order. The `msrv`,
-`cargo-deny`, `per-crate features` and tokio-free gates already guard the mechanics.
 
 ---
 
@@ -126,12 +108,11 @@ Recorded so they do not come back as "suggestions" a year from now:
 | `type Percentage = u8` as a "bounded" type | an alias enforces nothing; a brightness control needs a validating newtype |
 | A CMS/scheduler inside this workspace | `NON_GOALS.md`; the agent converges a device, it does not decide what plays |
 
-## Definition of done for `0.3.0`
+## Definition of done for `0.4.0`
 
-1. Telemetry landed, with one agent rule that acts on it.
-2. `tv-rs-mdc` published, plus RS-232 behind a feature.
-3. `tv-rs-sony` merged and conformance-passing.
-4. `docs/hil-results.md` has at least one real row, or an explicit per-vendor
+1. `tv-rs-mdc` published (it goes out with `0.3.0`), plus RS-232 behind a feature.
+2. `tv-rs-sony` merged and conformance-passing.
+3. `docs/hil-results.md` has at least one real row, or an explicit per-vendor
    "not verified" statement.
-5. Every crate published at the same version; no new `unsafe` outside the two
+4. Every crate published at the same version; no new `unsafe` outside the two
    documented modules (`tv-rs-local`'s Windows FFI, and `tv-rs-cec` if native lands).
