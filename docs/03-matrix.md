@@ -1,26 +1,28 @@
 # State matrix
 
-What exists, what is deferred, and how it is tested. Measured on 2026-10-19 with
-`cargo test --workspace`; the numbers are the ones in the output, not estimates.
+What exists, what is deferred, and how it is tested. Baseline measured on 2026-10-19 with
+`cargo test --workspace`; `tv-rs-local` was added on 2026-10-20. The numbers are the
+ones in the output, not estimates.
 
 ## Crates
 
-| Crate | Status | Tests | What it does |
-|---|---|---|---|
-| `tv-rs` (facade) | done | 7 + 1 doc | `discover()`, `identify_vendor()`, `TvClient` dispatch, `TvError` |
-| `tv-rs-core` | **new (Phase 1a)** | 36 with `mock-backend conformance quirks`, 20 default | capability traits, `DeviceHandle`, `CommandId`, confidence-tagged `ObservedState`, routing `TvError`, scriptable mock backend, conformance suite, quirks loader |
-| `tv-rs-discovery` | done | 6 + 1 doc | SSDP `M-SEARCH`, response parsing, UPnP descriptor, descriptor fetch |
-| `tv-rs-power` | done | 9 + 1 doc | magic packet, `MacAddress` parsing, `poll_power_state` |
-| `tv-rs-transport` | done | 4 + 2 doc | `TlsPolicy`, rustls/native-tls connector, budgeted frame reader, `Unsupported` |
-| `tv-rs-tizen` | done | 35 + 5 doc | remote channel, DIAL, token store, connection pool, SSDP discovery, app presets |
-| `tv-rs-webos` | done | 14 + 1 doc | SSAP session, pairing, `client-key` persistence, volume/mute/launch/power |
-| `tv-rs-roku` | done | 9 + 1 doc | ECP device-info, apps, keypress, launch, name→id resolution |
-| `tv-rs-media` | done | 17 + 6 + 2 doc | range parsing, `206`/`416` serving, HLS playlists |
-| `tv-rs-agent` | **new (Phase 4a)** | 23 + 3 fleet + 1 doc | desired-state providers (file / HTTP / MQTT), pure decision function, healing ladder, JSONL audit log, `tick()`/`run()` loop with quarantine |
-| `tv-rs-cec` | **new (Phase 5a)** | 6 (default) / 7 with `client` | CEC over a `cec-client` subprocess: power on, standby, active source; no `unsafe`, no libcec link |
-| `tv-rs-cli` | done (`publish = false`) | 16 + 1 doc | `discover`, `wake`, `power-off`, `key`, `launch`, `status` (power + capabilities table), `ensure` (one reconciliation pass) |
-| `tests/hardware_in_the_loop.rs` | opt-in | 7 (`--features hil`) | real devices, skipped when `TV_RS_HIL_*` is unset |
-| **Total (default features)** | | **121 + 15 doc** | 136 tests |
+| Crate                           | Status                   | Tests                                                 | What it does                                                                                                                                                    |
+| ------------------------------- | ------------------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tv-rs` (facade)                | done                     | 7 + 1 doc                                             | `discover()`, `identify_vendor()`, `TvClient` dispatch, `TvError`                                                                                               |
+| `tv-rs-core`                    | **new (Phase 1a)**       | 36 with `mock-backend conformance quirks`, 20 default | capability traits, `DeviceHandle`, `CommandId`, confidence-tagged `ObservedState`, routing `TvError`, scriptable mock backend, conformance suite, quirks loader |
+| `tv-rs-discovery`               | done                     | 6 + 1 doc                                             | SSDP `M-SEARCH`, response parsing, UPnP descriptor, descriptor fetch                                                                                            |
+| `tv-rs-power`                   | done                     | 9 + 1 doc                                             | magic packet, `MacAddress` parsing, `poll_power_state`                                                                                                          |
+| `tv-rs-local`                   | **new (U2)**             | 8 + 1 doc                                             | Windows WMI + GDI and Linux DRM/EDID connector, identity, mode, physical size, TV likelihood                                                                    |
+| `tv-rs-transport`               | done                     | 4 + 2 doc                                             | `TlsPolicy`, rustls/native-tls connector, budgeted frame reader, `Unsupported`                                                                                  |
+| `tv-rs-tizen`                   | done                     | 35 + 5 doc                                            | remote channel, DIAL, token store, connection pool, SSDP discovery, app presets                                                                                 |
+| `tv-rs-webos`                   | done                     | 14 + 1 doc                                            | SSAP session, pairing, `client-key` persistence, volume/mute/launch/power                                                                                       |
+| `tv-rs-roku`                    | done                     | 9 + 1 doc                                             | ECP device-info, apps, keypress, launch, name→id resolution                                                                                                     |
+| `tv-rs-media`                   | done                     | 17 + 6 + 2 doc                                        | range parsing, `206`/`416` serving, HLS playlists                                                                                                               |
+| `tv-rs-agent`                   | **new (Phase 4a)**       | 23 + 3 fleet + 1 doc                                  | desired-state providers (file / HTTP / MQTT), pure decision function, healing ladder, JSONL audit log, `tick()`/`run()` loop with quarantine                    |
+| `tv-rs-cec`                     | **new (Phase 5a)**       | 6 (default) / 7 with `client`                         | CEC over a `cec-client` subprocess: power on, standby, active source; no `unsafe`, no libcec link                                                               |
+| `tv-rs-cli`                     | done (`publish = false`) | 16 + 1 doc                                            | `discover`, `wake`, `power-off`, `key`, `launch`, `status` (power + capabilities table), `ensure` (one reconciliation pass)                                     |
+| `tests/hardware_in_the_loop.rs` | opt-in                   | 7 (`--features hil`)                                  | real devices, skipped when `TV_RS_HIL_*` is unset                                                                                                               |
+| **Total (default features)**    |                          | **129 + 16 doc**                                      | 145 tests                                                                                                                                                       |
 
 `cargo check --workspace --all-targets`, `cargo test --workspace`,
 `cargo clippy --workspace --all-targets -- -D warnings` and
@@ -77,7 +79,7 @@ traversal rejected before any file open.
 - **Certificate pinning** for Samsung 8002 / LG 3001 — implemented as
   `TlsPolicy::TrustOnFirstUse` (record) and `TlsPolicy::Pinned` (verify) in
   `tv-rs-transport`, rustls only; a `native-tls` build returns
-  `TlsError::PinningUnavailable`. What is *not* done is verifying it against a
+  `TlsError::PinningUnavailable`. What is _not_ done is verifying it against a
   real TV's certificate.
 - **Enterprise token derivation** and **encrypted framing** on newer Samsung
   firmware.
@@ -106,8 +108,8 @@ nothing pretends to work.
 
 ## Next
 
-| Task | Why | Size |
-|---|---|---|
-| mDNS listener | AirPlay/Cast devices are invisible to `discover()` | small |
-| More `SsapUri` variants | input/source switching is the most requested webOS gap | small |
-| Real-device verification pass | the only way to close limitation 1 | needs hardware |
+| Task                          | Why                                                    | Size           |
+| ----------------------------- | ------------------------------------------------------ | -------------- |
+| mDNS listener                 | AirPlay/Cast devices are invisible to `discover()`     | small          |
+| More `SsapUri` variants       | input/source switching is the most requested webOS gap | small          |
+| Real-device verification pass | the only way to close limitation 1                     | needs hardware |

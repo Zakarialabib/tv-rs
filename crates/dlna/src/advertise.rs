@@ -346,10 +346,7 @@ mod tests {
         let msg = "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 3\r\nST: ssdp:all\r\n\r\n";
         assert_eq!(parse_msearch_st(msg).as_deref(), Some("ssdp:all"));
         // Header scan is case-insensitive; empty ST is rejected.
-        assert_eq!(
-            parse_msearch_st("M-SEARCH * HTTP/1.1\r\nst:\r\n").is_none(),
-            true
-        );
+        assert!(parse_msearch_st("M-SEARCH * HTTP/1.1\r\nst:\r\n").is_none());
         // Non-M-SEARCH traffic is ignored (our own NOTIFYs loop back with multicast
         // loop enabled).
         assert!(parse_msearch_st(&alive_datagrams(&cfg())[0]).is_none());

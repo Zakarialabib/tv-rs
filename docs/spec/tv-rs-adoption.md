@@ -1,21 +1,22 @@
 # TV-RS Adoption & Domain Consolidation Spec
 
-**Status:** **U0 COMPLETE · U1 DESIGN DECIDED 2026-10-20** — dependency resolved,
-inventory recorded, roadmap linked. U1's architecture is settled (below); implementation
-is the next pull.
+**Status:** **U0 COMPLETE · U1 DESIGN DECIDED 2026-10-20 · U2 EXTRACTED, SOFTWARE-VERIFIED** —
+dependency resolved, inventory recorded, roadmap linked. U1's architecture is settled
+(below); U2's crate extraction has landed and passed software gates. Windows hardware
+and Linux parity remain before U2 is fully closed.
 
 ### U1 architecture decisions (the interesting part)
 
 The app's `plugin-samsung-remote` is 1,582 LOC across 8 files. After U1 it is a **thin
 IPC adapter**: `commands.rs` (7 commands) + `models.rs` (DTOs) + `error.rs` +
-`lifecycle.rs` + `lib.rs`, plus one new `adapter.rs` that is the *only* place tv-rs
+`lifecycle.rs` + `lib.rs`, plus one new `adapter.rs` that is the _only_ place tv-rs
 types are mapped to the app's IPC surface. Three protocol files are deleted outright:
 
-| Deleted | LOC | Replaced by |
-| ------- | --- | ----------- |
-| `remote.rs` | 570 | `tv_rs_tizen::{TizenClient, TizenSession, TizenConnectionPool}` |
-| `tokens.rs` | 214 | `tv_rs_tizen::SamsungTokenStore` (drop-in) |
-| `discovery.rs` | 274 | `tv_rs_tizen::discover_samsung` |
+| Deleted        | LOC | Replaced by                                                     |
+| -------------- | --- | --------------------------------------------------------------- |
+| `remote.rs`    | 570 | `tv_rs_tizen::{TizenClient, TizenSession, TizenConnectionPool}` |
+| `tokens.rs`    | 214 | `tv_rs_tizen::SamsungTokenStore` (drop-in)                      |
+| `discovery.rs` | 274 | `tv_rs_tizen::discover_samsung`                                 |
 
 **Decision 1 — TLS: TOFU replaces accept-any. The security debt is real and it is
 the point of U1.** The app ships a live `rustls::client::danger::ServerCertVerifier`
@@ -24,7 +25,7 @@ The secure path uses `TlsPolicy::TrustOnFirstUse(cert_sink())`: the first certif
 is recorded, any later mismatch is rejected — TOFU with pinning, exactly the spec's
 "TOFU first, then pinned" requirement.
 
-Note: `tv-rs-transport` *also* contains an `AcceptAnyTvCert`, but it is **private**
+Note: `tv-rs-transport` _also_ contains an `AcceptAnyTvCert`, but it is **private**
 (`struct`, not `pub`) and reachable only through `TlsPolicy::AcceptInvalid` — a gated
 escape hatch, not a default. U1 simply never constructs it. The app-side verifier is
 the one that had to go; the upstream one stays unused and unreachable.
@@ -39,7 +40,7 @@ resolves to **"no upstream change"** and the UI keeps its flexibility.
 **Decision 3 — the app's hand-rolled plain→secure fallback is already upstream.**
 `remote.rs::open_channel` tries `ws://8001` then `wss://8002`. tv-rs's
 `open_channel` iterates `client.port_candidates()` with the same ordering and, via
-`should_try_next_port`, only falls through on *transport* refusal — a certificate or
+`should_try_next_port`, only falls through on _transport_ refusal — a certificate or
 protocol verdict is final. So the fallback is not re-implemented in the adapter; it
 is inherited, and the adapter gets the stricter "auth answer is final" semantics for
 free.
@@ -322,24 +323,26 @@ every UI/scheduling/tenancy surface.
 
 **Target:** new `tv-rs-local` crate.
 
-**Proposed API:**
+**API (implemented 2026-10-20):**
 
 ```rust
-pub enum Attachment { Hdmi, DisplayPort, Dvi, Vga, Internal, Virtual, Unknown }
+pub enum Attachment { Internal, Hdmi, DisplayPort, Dvi, Vga, Wireless, Unknown }
 
 pub struct ProbeInfo {
-    pub id: String,                 // connector key; not the app display_id
-    pub name: String,
-    pub attachment: Attachment,
+    pub system_name: Option<String>, // connector key; not the app display_id
     pub width: u32,
     pub height: u32,
-    pub refresh_hz: Option<f32>,
     pub vendor: Option<String>,
     pub model: Option<String>,
     pub serial: Option<String>,
-    pub physical_inches: Option<f32>,
-    pub is_tv: bool,
+    pub attachment: Attachment,
+    pub refresh_rate: Option<u32>,
+    pub bits_per_pixel: Option<u32>,
+    pub physical_width_cm: Option<f64>,
+    pub physical_height_cm: Option<f64>,
+    pub brightness: Option<u32>,
     pub tv_confidence: f32,
+    pub is_tv: bool,
     pub evidence: Vec<String>,
 }
 
@@ -347,19 +350,43 @@ pub trait DisplayProbe {
     fn probe(&self) -> Vec<ProbeInfo>;
 }
 
+pub struct SystemProbe;
 pub fn probe_displays() -> Vec<ProbeInfo>;
+pub async fn probe_displays_async() -> Vec<ProbeInfo>;
+pub fn probe_for<'a>(probes: &'a [ProbeInfo], system_name: Option<&str>, index: usize)
+    -> Option<&'a ProbeInfo>;
+pub fn fallback(system_name: Option<&str>, width: u32, height: u32, refresh: Option<u32>)
+    -> ProbeInfo;
 ```
+
+The first cut deliberately keeps the field names and units the app already maps
+(`system_name`, `refresh_rate`, `physical_*_cm`, `bits_per_pixel`, `brightness`).
+Renaming to `id`/`refresh_hz`/`physical_inches` would be app churn without a
+consumer benefit; the crate docs state the units. `ProbeInfo` is
+`Serialize`/`Deserialize`/`PartialEq` so downstreams can cache or compare probes.
+
+**U2 implementation note (2026-10-20):**
+
+- New `crates/local` (`tv-rs-local`): Windows WMI + `EnumDisplayDevicesW`, Linux
+  DRM/EDID, macOS/other empty (declared unsupported, caller falls back).
+- `plugin-display/src/hardware/probe.rs` is now a 10-line re-export; `wmi` and
+  `windows-sys` left the plugin's manifest.
+- `cargo test -p tv-rs-local`: 8 unit + 1 doctest pass; `cargo clippy` clean;
+  `cargo package --allow-dirty` verifies.
+- App tauri-free harness: 8/8 link tests pass after the re-export.
+- Until `tv-rs-local 0.1.0` is published, the app uses a temporary sibling path
+  dependency. Switch to `tv-rs-local = "0.1.0"` at publish, as rule 10 requires.
 
 **App adapter:** `plugin-display/src/hardware/link.rs` maps `ProbeInfo` into `DisplayLinkStatus`; the app keeps `display_id`, binding and `TvAssignment`.
 
 **Acceptance:**
 
-- [ ] The existing 7 probe tests move and pass in `tv-rs-local`.
+- [x] The existing 7 probe tests move and pass in `tv-rs-local`; one lookup test added.
 - [ ] Windows reports a real HDMI TV and a non-TV internal panel correctly.
 - [ ] Linux behavior is parity or explicitly marked unsupported.
-- [ ] `tv-rs-core` remains `forbid(unsafe_code)`; platform APIs are isolated in `tv-rs-local`.
-- [ ] `plugin-display` no longer owns WMI/DRM/EDID parsing.
-- [ ] App `display_id` and binding semantics are unchanged.
+- [x] `tv-rs-core` remains `forbid(unsafe_code)`; platform APIs are isolated in `tv-rs-local`.
+- [x] `plugin-display` no longer owns WMI/DRM/EDID parsing.
+- [x] App `display_id` and binding semantics are unchanged (8/8 harness tests).
 
 **Risk:** macOS has no implementation today. Either add IOKit in the new crate or declare macOS unsupported; do not silently return "not a TV".
 
