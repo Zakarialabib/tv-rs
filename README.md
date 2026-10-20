@@ -2,39 +2,47 @@
 
 [![CI](https://github.com/Zakarialabib/tv-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/Zakarialabib/tv-rs/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV 1.75](https://img.shields.io/badge/MSRV-1.75-blue.svg)](Cargo.toml)
+[![MSRV 1.89](https://img.shields.io/badge/MSRV-1.89-blue.svg)](Cargo.toml)
 
 Find the televisions on your LAN and drive them from Rust — discovery, power,
-remote control and media serving, behind one small facade.
+remote control, fleet reconciliation and media serving, behind one small facade.
 
 ```rust
-use tv_rs::{discover, TvVendor};
+use tv_rs::discover;
 
 for tv in discover().await? {
     println!("{} ({}) at {}", tv.label(), tv.vendor.as_str(), tv.ip);
-    if tv.vendor != TvVendor::Unknown {
-        tv.to_client()?.power_off().await?;
-    }
+    let client = tv.to_client()?;
+    println!("  power: {:?}", client.power_state().await?);
 }
 ```
 
 ## Why this exists
 
 Every TV vendor speaks a different protocol on the same LAN, and none of the
-libraries that wrap them agree on anything: one returns a socket, another a
-future of XML, a third panics when the TV is asleep. This workspace puts each
-protocol in its own crate with the same shape, and adds a facade that covers only
-the operations every vendor actually has.
+libraries that wrap them agree on anything: one returns a socket, another a future
+of XML, a third panics when the TV is asleep. This workspace puts each protocol in
+its own crate with the same shape, then adds two layers on top:
+
+- a **device model** (`tv-rs-core`) that says what a TV can do, what it is believed
+  to be doing, and what a failure means — so callers branch on capability and remedy
+  instead of on vendor;
+- a **reconciler** (`tv-rs-agent`) that converges a fleet towards desired state,
+  heals what it can and quarantines what it cannot, with an audit trail a technician
+  can read.
 
 The rules the code follows:
 
 - **Discovery needs no credentials.** SSDP is plain LAN multicast.
-- **Control is paired once, then remembered.** Samsung returns a token, LG
-  returns a `client-key`; both are persisted by the caller and reused.
+- **Control is paired once, then remembered.** Samsung returns a token, LG a
+  `client-key`; both are persisted and reused. Self-signed TV certificates are
+  handled by pinning, not by disabling validation.
 - **Nothing panics in library code.** A capability a TV does not have is a typed
-  error, not a `unimplemented!()` or an `unwrap()`.
-- **No vendor SDK ships with it.** Every protocol here is spoken directly over
-  sockets; there is no bundled blob and no build-time download.
+  error, never an `unimplemented!()` or an `unwrap()`.
+- **Refusals are part of the API.** Capability sets say in advance what will be
+  refused; the same set drives the CLI, the facade and the tests.
+- **No vendor SDK ships with it.** Every protocol is spoken directly over sockets —
+  no bundled blob, no build-time download.
 
 ## What it does
 
@@ -42,63 +50,74 @@ The rules the code follows:
 |---|---|
 | **Discover** | SSDP `M-SEARCH` on UDP 1900, UPnP descriptor parsing, vendor identification |
 | **Wake** | Wake-on-LAN magic packet, plus a TCP probe that tells `On` / `Standby` / `Off` apart |
-| **Samsung Tizen** | remote WebSocket channel (8001 plain, 8002 TLS), DIAL app launch (8080), pairing-token store, per-TV connection pool |
-| **LG webOS** | SSAP over WebSocket (3000/3001), pairing, `client-key` persistence, volume/mute/launch/power |
-| **Roku** | unauthenticated ECP REST (8060): device info, apps, key presses, launch |
+| **Samsung Tizen** | remote WebSocket channel (8001 plain, 8002 TLS, negotiated automatically), DIAL launch (8080), pairing-token store, per-TV connection pool |
+| **LG webOS** | SSAP over WebSocket (3000/3001, negotiated), pairing, `client-key` persistence, volume/mute/launch/power/foreground, `open_url` in the built-in browser |
+| **Roku** | unauthenticated ECP REST (8060): device info, apps, key presses, launch, power mode |
+| **Capabilities** | per-vendor capability sets + `DeviceHandle` traits, so a fleet holds `Arc<dyn DeviceHandle>` with no generics |
+| **Reconcile** | desired state from a file, an HTTP manifest or MQTT; one pure decision function; healing ladder; JSONL audit log |
+| **HDMI-CEC** | power on / standby / active source over the cable, for panels the network cannot reach (optional) |
 | **Serve media** | HTTP `206 Partial Content` for seeking, plus HLS playlists — the two things TV players insist on |
 
 ## What it does not do
 
-It does not decode video, render anything, or transcode. It returns URLs and
-issues commands; what you do with the picture is your call. It also does not
-implement Android TV ADB or Google Cast/AirPlay.
+It does not decode video, render anything, or transcode. It returns URLs and issues
+commands; what you do with the picture is your call. There is no Android TV, Google
+Cast or AirPlay backend yet, no event subscriptions (the agent polls), and no
+input switching on any vendor. See [`NON_GOALS.md`](NON_GOALS.md).
 
-Self-signed TV certificates are handled without disabling validation: connect
-once with `TlsPolicy::TrustOnFirstUse`, store the `CertFingerprint` it reports,
-and use `TlsPolicy::Pinned` from then on. Enterprise token derivation and
-encrypted framing are still unimplemented and return `Unsupported` errors instead
-of pretending to work.
+Nothing here has been verified on hardware from the development host that produced
+it — [`docs/hil-results.md`](docs/hil-results.md) is the table, and it is empty.
 
 ## Install
 
 ```toml
 [dependencies]
-tv-rs = "0.1"           # facade + all protocol crates
+tv-rs = "0.1"           # facade + the protocol crates it dispatches to
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-Want less? Depend on one protocol crate directly — `tv-rs-tizen`, `tv-rs-webos`,
-`tv-rs-roku`, `tv-rs-discovery`, `tv-rs-power` — or on `tv-rs-media` alone if you
-only need the file server.
+Want less? Depend on one crate:
+
+- `tv-rs-core` — the device model only (no tokio in its graph, ever)
+- `tv-rs-tizen`, `tv-rs-webos`, `tv-rs-roku` — one vendor each
+- `tv-rs-discovery`, `tv-rs-power` — SSDP and Wake-on-LAN
+- `tv-rs-agent` — reconciliation, when you are driving more than one screen
+- `tv-rs-cec` — HDMI-CEC, behind the `client` feature
+- `tv-rs-media` — `206`/HLS serving
 
 ## The crates
 
 | Crate | Role | Why it is separate |
 |---|---|---|
-| `tv-rs` | Facade: discovery orchestration, vendor identification, `TvClient` dispatch | one dependency for the common case |
+| `tv-rs-core` | capability traits, `DeviceHandle`, `CommandId`, confidence-tagged state, error taxonomy, mock backend, conformance suite, quirks loader | no tokio, no protocol: the part a CMS can embed |
+| `tv-rs` | facade: discovery orchestration, vendor identification, `TvClient` (which implements `DeviceHandle`) | one dependency for the common case |
 | `tv-rs-discovery` | SSDP + UPnP descriptors | no TLS, no vendor knowledge |
 | `tv-rs-power` | Wake-on-LAN + power probe | useful without any control protocol |
 | `tv-rs-tizen` | Samsung remote channel, DIAL, token store, connection pool | largest protocol surface |
 | `tv-rs-webos` | LG SSAP | different framing, different pairing |
 | `tv-rs-roku` | Roku ECP | plain REST, no auth at all |
-| `tv-rs-transport` | TLS policy/connector + budgeted WebSocket frame reader | shared vocabulary, one place for the TLS decision |
+| `tv-rs-transport` | TLS policy/pinning + budgeted WebSocket frame reader | one place for the TLS decision |
+| `tv-rs-agent` | providers, `decide()`, healer, audit log, run loop | opinionated; the facade stays a library |
+| `tv-rs-cec` | HDMI-CEC via `cec-client` (optional) | needs an adapter most machines lack |
 | `tv-rs-media` | `206` + HLS HTTP server | pulls `axum`; must never enter a protocol crate's graph |
-| `tv-rs-cli` | `discover`, `wake`, `power-off`, `key`, `launch` | the facade's reference consumer (`publish = false`) |
+| `tv-rs-cli` | `discover`, `status`, `ensure`, `wake`, `power-off`, `key`, `launch` | the facade's reference consumer (`publish = false`) |
 
 ### When to reach for which
 
 | You want to… | Use |
 |---|---|
 | find whatever is on the LAN and control it | `tv-rs` (facade) |
-| control one known vendor, nothing else | that vendor's crate (`tv-rs-tizen`, `tv-rs-webos`, `tv-rs-roku`) |
+| control one known vendor, nothing else | that vendor's crate |
+| keep fifty screens on the intended content | `tv-rs-agent` — and read §12 of the desktop roadmap before writing your own retry loop |
 | turn a TV on from cold | `tv-rs-power` — it works without any control protocol |
-| only enumerate devices | `tv-rs-discovery` — no TLS, no vendor knowledge |
+| control a panel that is not on the network at all | `tv-rs-cec`, if there is a CEC adapter |
 | serve video to a TV | `tv-rs-media` — nothing else pulls `axum` |
-| poke at a TV from a terminal | `tv-rs-cli` |
+| poke at a TV from a terminal | `tv-rs-cli`, or `cargo xtask hw-test` for a probe report |
 
 ## Layout
 
 ```
+crates/core          device model      (package `tv-rs-core`)
 crates/tv-rs         facade            (package `tv-rs`)
 crates/discovery     SSDP              (package `tv-rs-discovery`)
 crates/power         Wake-on-LAN       (package `tv-rs-power`)
@@ -107,62 +126,84 @@ crates/webos         LG                (package `tv-rs-webos`)
 crates/roku          Roku              (package `tv-rs-roku`)
 crates/transport     TLS + WS plumbing (package `tv-rs-transport`)
 crates/media         206 + HLS server  (package `tv-rs-media`)
+crates/agent         reconciliation    (package `tv-rs-agent`)
+crates/cec           HDMI-CEC          (package `tv-rs-cec`)
 crates/cli           terminal front end (package `tv-rs-cli`, not published)
-crates/agent         fleet reconciliation (package `tv-rs-agent`)
-crates/cec           HDMI-CEC (package `tv-rs-cec`)
+quirks/              model+firmware defects, as data
 xtask                `cargo xtask publish` · `cargo xtask hw-test`
 ```
 
-The root `Cargo.toml` is a virtual workspace, so a bare `cargo build` does nothing
-useful — name the package (`cargo build -p tv-rs`) or use `--workspace`.
+The root `Cargo.toml` is a virtual workspace, so a bare `cargo build` builds
+everything — name the package (`cargo build -p tv-rs`) unless you want that.
 
 ## How it fits together
 
 ```
-your app ──▶ tv-rs (facade) ──▶ tv-rs-tizen ─┐
-                             ├▶ tv-rs-webos  ├──▶ tv-rs-transport (TLS + WS)
-                             ├▶ tv-rs-roku   │
-                             └▶ tv-rs-discovery
-              tv-rs-media ── (axum, independent)
+              ┌──────────────────────────────┐
+your app ────▶│ tv-rs (facade)               │
+   or         │ TvClient: DeviceHandle        │
+tv-rs-agent ─▶└──┬───────────┬───────────┬───┘
+                  │           │           │
+            tv-rs-tizen  tv-rs-webos  tv-rs-roku
+                  └───────────┴───────────┘
+                              │
+                    tv-rs-transport (TLS, pinning, frames)
 
+tv-rs-core ── traits, state, errors, mock, conformance   (no tokio)
+tv-rs-media ── axum, independent of everything above
+tv-rs-cec ── HDMI, independent, optional
 ```
 
-The facade holds no protocol logic: it classifies a discovered device and
-forwards. Anything vendor-specific is reached through `as_tizen()`,
-`as_webos()` or `as_roku()` on `TvClient`.
+The facade holds no protocol logic: it classifies a discovered device and forwards.
+Vendor specifics stay reachable through `as_tizen()`, `as_webos()` and `as_roku()`
+on `TvClient`, and through the capability traits when you do not know the vendor.
 
 ## Feature flags
 
 | Crate | Feature | Default | Effect |
 |---|---|---|---|
+| `tv-rs-core` | `mock-backend` | no | the scriptable backend every test uses |
+| | `conformance` | no | the suite every `DeviceHandle` must pass |
+| | `quirks` | no | parse `quirks/default.toml` |
 | `tv-rs-transport` | `rustls` | yes | pure-Rust TLS, no OpenSSL |
-| | `native-tls` | no | platform trust store instead; mutually exclusive with `rustls` |
-| `tv-rs` | `hil` | no | compiles the hardware-in-the-loop tests (they run only with `--features hil`) |
+| | `native-tls` | no | platform trust store instead; mutually exclusive with `rustls` (both = `compile_error!`) |
+| `tv-rs-agent` | `http` | no | `HttpPollProvider` (pulls `reqwest`) |
+| | `mqtt` | no | `MqttSubscribeProvider` (pulls `rumqttc`) |
+| `tv-rs-cec` | `client` | no | shell out to `cec-client` |
+| `tv-rs` | `hil` | no | compile the hardware-in-the-loop tests |
+| | `conformance` | no | run the shared suite against the facade's clients |
 
 ## CLI
 
 ```bash
 cargo run -p tv-rs-cli -- discover
-cargo run -p tv-rs-cli -- status        # power + capability set per device
+cargo run -p tv-rs-cli -- status          # power + capability set per device
+cargo run -p tv-rs-cli -- ensure --config desired.json --audit audit.jsonl
 cargo run -p tv-rs-cli -- wake --mac AA:BB:CC:DD:EE:FF
-cargo run -p tv-rs-cli -- power-off --ip 192.168.1.40
-cargo run -p tv-rs-cli -- key --ip 192.168.1.40 --key home
-cargo run -p tv-rs-cli -- launch --ip 192.168.1.41 --app netflix
+cargo run -p tv-rs-cli -- power-off --ip 192.168.1.40 --vendor samsung
+cargo run -p tv-rs-cli -- key --ip 192.168.1.40 --vendor roku --key home
+cargo run -p tv-rs-cli -- launch --ip 192.168.1.41 --vendor roku --app netflix
 ```
 
-The CLI is also the best example of how the facade is meant to be used: it
-matches on `TvError` and turns `UnsupportedOperation` into its own exit code.
+`status` is the table to read before blaming the crate: it prints what each device
+advertises, and an unsupported control shows up there before it shows up as an
+error. `ensure` runs one reconciliation pass and exits non-zero if any device
+failed, so a deploy script can gate on it.
 
 ## Testing
 
 ```bash
-cargo test --workspace                 # unit + integration, no network needed
-cargo test -p tv-rs --features hil --test hardware_in_the_loop   # against real TVs
+cargo test --workspace                          # no network needed
+cargo test -p tv-rs --features conformance      # the shared device-model suite
+cargo test -p tv-rs-core --features "mock-backend conformance quirks"
+cargo test -p tv-rs-agent --features "http mqtt"
+cargo xtask hw-test --timeout 5 --write-doc     # probe real televisions
+cargo test -p tv-rs --features hil --test hardware_in_the_loop
 ```
 
-The hardware suite compiles to zero tests unless `--features hil` is passed, and
-each test skips with a printed reason when its `TV_RS_HIL_*` host variable is
-unset. `TV_RS_HIL_STRICT=1` turns a missing TV into a failure for a lab runner.
+`hw-test` discovers, probes power and capabilities, and appends to
+[`docs/hil-results.md`](docs/hil-results.md). It reports "no televisions answered"
+and exits 0 rather than inventing a pass.
 
 Gates CI enforces, and you should run before pushing:
 
@@ -173,45 +214,53 @@ cargo test --workspace
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 ```
 
+Plus `cargo-deny check` for advisories/licences, and an `msrv` job that builds
+against the declared `rust-version` (1.89 — the lowest version that actually
+resolves, not a target chosen for reach).
+
 ## Publishing
 
-Eight crates go out in dependency order because `cargo publish` is not atomic —
-a partial release burns the version:
+Eleven crates go out in dependency order because `cargo publish` is not atomic — a
+partial release burns the version:
 
 ```
-tv-rs-transport → tv-rs-discovery → tv-rs-power → tv-rs-roku
-  → tv-rs-tizen → tv-rs-webos → tv-rs → tv-rs-media
+tv-rs-core → tv-rs-transport → tv-rs-discovery → tv-rs-power → tv-rs-roku
+  → tv-rs-tizen → tv-rs-webos → tv-rs → tv-rs-media → tv-rs-agent → tv-rs-cec
 ```
 
-`transport` leads because every protocol crate depends on its shared error
-vocabulary; `media` is last because nothing here depends on it.
+`core` leads because every backend depends on its vocabulary; `media`, `agent` and
+`cec` are independent leaves. The list lives in `xtask/src/main.rs` so `cargo` can
+check that every name still exists.
 
 ```bash
-cargo xtask publish --dry-run          # verify all eight, upload nothing
-cargo xtask publish --version 0.2.0    # bump and publish in order
+cargo xtask publish --dry-run              # verify all eleven, upload nothing
+cargo xtask publish --yes                  # real publish, token from $CRATES_IO_TOKEN
+cargo xtask publish --version 0.2.0 --yes  # bump every pin, then publish in order
 ```
 
 ## Docs
 
 New here? [`docs/glossary.md`](docs/glossary.md) is the map — every term links to
-the page that explains it. The short version:
+the page that explains it.
 
 | Start with | If you want to |
 |---|---|
 | [`docs/01-playbook.md`](docs/01-playbook.md) | the protocol facts: ports, handshakes, what each vendor exposes |
-| [`docs/03-matrix.md`](docs/03-matrix.md) | what is done, what is deferred, and the verified test counts |
-| [`docs/architecture.md`](docs/architecture.md) | the three layers, the dependency rule, and where a new file belongs |
-| [`docs/04-rust-package-standard.md`](docs/04-rust-package-standard.md) | the engineering standard this workspace follows |
+| [`docs/architecture.md`](docs/architecture.md) | the three layers, the dependency rule, where a new file belongs |
+| [`docs/spec/00-device-model.md`](docs/spec/00-device-model.md) | the device-model specification: capabilities, confidence, agent |
+| [`docs/spec/01-reconciliation.md`](docs/spec/01-reconciliation.md) | the Phase 0 audit: every symbol's destination |
+| [`docs/03-matrix.md`](docs/03-matrix.md) | what is done, what is deferred, verified test counts |
 | [`docs/05-roadmap.md`](docs/05-roadmap.md) | what to add next, with the evidence and the cost |
-| [`docs/spec/00-device-model.md`](docs/spec/00-device-model.md) | the v2 device-model specification (capabilities, confidence, agent) |
-| [`docs/adr/001-crate-publication.md`](docs/adr/001-crate-publication.md) | why eight crates and how a release works |
+| [`QUIRKS.md`](QUIRKS.md) | how to submit a model/firmware defect |
 | [`docs/02-external-refs.md`](docs/02-external-refs.md) | protocol references and prior art |
 
 ## Contributing
 
-[`CONTRIBUTING.md`](CONTRIBUTING.md) has the gates, the module layout rule and
-the commit convention. [`SECURITY.md`](SECURITY.md) covers disclosure.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) has the gates, the module layout rule and the
+commit convention. [`SECURITY.md`](SECURITY.md) covers disclosure and the LAN threat
+model. [`NON_GOALS.md`](NON_GOALS.md) is what will be refused.
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+MIT — see [`LICENSE`](LICENSE). One licence at the root; each manifest carries the
+SPDX identifier.

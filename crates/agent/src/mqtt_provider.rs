@@ -54,6 +54,14 @@ impl Drop for MqttSubscribeProvider {
 impl MqttSubscribeProvider {
     /// Connects to `broker` (`host:port`) and subscribes to `<prefix>/+/desired`.
     ///
+    /// The connection is **plain TCP**: `rumqttc`'s TLS path pins
+    /// `rustls-webpki 0.102`, which carries open RUSTSEC advisories (CRL parsing
+    /// panic, name-constraint acceptance, a downgrade on an unauthenticated
+    /// ServerHello), so it is compiled out rather than shipped. Put the broker on a
+    /// trusted segment, or use [`HttpPollProvider`](crate::HttpPollProvider) when the
+    /// manifest must cross an untrusted network — that one runs on `reqwest` with
+    /// `rustls 0.23`.
+    ///
     /// # Errors
     ///
     /// Returns [`ProviderError::Unavailable`] when the broker address cannot be

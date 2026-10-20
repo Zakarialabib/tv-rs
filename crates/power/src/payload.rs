@@ -18,7 +18,11 @@ impl MagicPacket {
         bytes[..SYNC_PREFIX_LEN].fill(0xFF);
 
         let mac_bytes = mac.as_bytes();
-        for chunk in bytes[SYNC_PREFIX_LEN..].chunks_exact_mut(MAC_ADDRESS_LEN) {
+        for chunk in bytes[SYNC_PREFIX_LEN..]
+            .as_chunks_mut::<MAC_ADDRESS_LEN>()
+            .0
+            .iter_mut()
+        {
             chunk.copy_from_slice(mac_bytes);
         }
 
