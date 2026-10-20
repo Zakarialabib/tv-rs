@@ -57,9 +57,63 @@ pub struct TizenChannelConnectResponseData {
     /// Pairing token issued by the TV; persisted by the application for reconnects.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
+    /// TV name reported by some firmware revisions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// TV name reported under the `deviceName` spelling by other revisions.
+    #[serde(
+        rename = "deviceName",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub device_name: Option<String>,
     /// Connected-client list. Its shape varies by firmware, so it is kept opaque.
     #[serde(default)]
     pub clients: Option<serde_json::Value>,
+}
+
+/// The `ms.channel.emit` request used to launch an application.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TizenChannelEmitPayload {
+    /// Always `ms.channel.emit`.
+    pub method: String,
+    /// Emit parameters.
+    pub params: TizenChannelEmitParams,
+}
+
+/// Parameters of a [`TizenChannelEmitPayload`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TizenChannelEmitParams {
+    /// Event name; `ed.apps.launch` for app launches.
+    pub event: String,
+    /// Event target; `host` for the TV.
+    pub to: String,
+    /// Event payload.
+    pub data: TizenChannelLaunchData,
+}
+
+/// Data carried by the `ed.apps.launch` event.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TizenChannelLaunchData {
+    /// Samsung application id.
+    #[serde(rename = "appId")]
+    pub app_id: String,
+    /// `NATIVE_LAUNCH` or `DEEP_LINK`.
+    pub action_type: String,
+    /// Optional deep-link argument.
+    #[serde(rename = "metaTag", default, skip_serializing_if = "Option::is_none")]
+    pub meta_tag: Option<String>,
+}
+
+/// Legacy `ms.channel.launch` event used by older community clients.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TizenLegacyLaunchPayload {
+    /// Always `ms.channel.launch`.
+    pub event: String,
+    /// Numeric application id.
+    pub data: String,
+    /// Message id.
+    pub id: u32,
 }
 
 /// The `ms.remote.control` request used to press a remote key.

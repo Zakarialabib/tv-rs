@@ -41,9 +41,18 @@ pub enum TizenError {
     #[error("tls error: {0}")]
     Tls(String),
 
-    /// The TV rejected the pairing request (`ms.channel.unauthorized`).
+    /// The TV rejected the pairing request (`ms.channel.unauthorized`) or
+    /// reported a channel error (`ms.error`).
     #[error("unauthorized: the TV rejected the on-screen pairing request")]
     Unauthorized,
+
+    /// A remote key did not have the Samsung `KEY_*` wire shape.
+    #[error("invalid remote key '{0}': expected KEY_<UPPERCASE/DIGIT/underscore>")]
+    InvalidKey(String),
+
+    /// A TV address was empty, too long, or contained URL/path syntax.
+    #[error("invalid TV address '{0}'")]
+    InvalidHost(String),
 
     /// The frame budget was exhausted before a usable reply arrived.
     #[error("timeout: frame budget exhausted before a reply arrived")]

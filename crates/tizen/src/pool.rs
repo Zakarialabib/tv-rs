@@ -25,13 +25,21 @@
 //! channel is single-writer.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use async_trait::async_trait;
+use futures_util::{SinkExt, StreamExt};
 use tokio::sync::Mutex;
+use tokio_tungstenite::tungstenite::Message;
+use tv_rs_transport::WsStream;
 
-use crate::client::{TizenClient, TizenSession};
+use crate::client::{
+    build_channel_launch_payload, build_legacy_launch_payload, build_remote_command_payload,
+    build_raw_remote_command_payload, open_channel, TizenClient, TizenSession,
+};
 use crate::error::Result;
-use crate::types::TizenRemoteKey;
+use crate::types::{TizenLaunchAction, TizenRemoteKey};
 
 /// A live remote channel that can accept frames.
 ///
@@ -44,6 +52,11 @@ pub trait TizenChannel: Send {
 
     /// Sends a raw text frame.
     async fn send_raw(&mut self, raw: &str) -> Result<()>;
+
+    /// Token captured while opening this channel, when the TV issued one.
+    fn handshake_token(&self) -> Option<&str> {
+        None
+    }
 }
 
 #[async_trait]
@@ -54,6 +67,10 @@ impl TizenChannel for TizenSession {
 
     async fn send_raw(&mut self, raw: &str) -> Result<()> {
         TizenSession::send_raw(self, raw).await
+    }
+
+    fn handshake_token(&self) -> Option<&str> {
+        TizenSession::token(self)
     }
 }
 
@@ -68,11 +85,65 @@ pub trait TizenChannelFactory: Send + Sync {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct LiveChannelFactory;
 
+/// A pooled channel with its read half drained in the background.
+///
+/// The TV sends periodic channel events and pings. Leaving them unread lets the
+/// socket's receive buffer fill, which eventually blocks the TV's writer and
+/// makes the next key press look like a dead channel. The reader task exists
+/// purely to drain those frames; it flags closure so a send can fail fast.
+struct LiveChannel {
+    sink: futures_util::stream::SplitSink<WsStream, Message>,
+    closed: Arc<AtomicBool>,
+    token: Option<String>,
+}
+
+#[async_trait]
+impl TizenChannel for LiveChannel {
+    async fn send_key(&mut self, key: TizenRemoteKey) -> Result<()> {
+        let payload = serde_json::to_string(&build_remote_command_payload(key))?;
+        self.send_raw(&payload).await
+    }
+
+    async fn send_raw(&mut self, raw: &str) -> Result<()> {
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(crate::error::TizenError::Protocol(
+                "pooled channel is closed".to_string(),
+            ));
+        }
+        self.sink
+            .send(Message::text(raw.to_string()))
+            .await
+            .map_err(|error| {
+                self.closed.store(true, Ordering::SeqCst);
+                crate::error::TizenError::Ws(error)
+            })
+    }
+
+    fn handshake_token(&self) -> Option<&str> {
+        self.token.as_deref()
+    }
+}
+
 #[async_trait]
 impl TizenChannelFactory for LiveChannelFactory {
     async fn open(&self, client: &TizenClient) -> Result<Box<dyn TizenChannel>> {
-        let session = TizenSession::connect(client).await?;
-        Ok(Box::new(session))
+        let (stream, handshake) = open_channel(client, client.token()).await?;
+        let (sink, mut receiver) = stream.split();
+        let closed = Arc::new(AtomicBool::new(false));
+        let reader_closed = Arc::clone(&closed);
+        tokio::spawn(async move {
+            while let Some(frame) = receiver.next().await {
+                if frame.is_err() {
+                    break;
+                }
+            }
+            reader_closed.store(true, Ordering::SeqCst);
+        });
+        Ok(Box::new(LiveChannel {
+            sink,
+            closed,
+            token: handshake.token,
+        }))
     }
 }
 
@@ -128,6 +199,29 @@ impl<F: TizenChannelFactory> TizenConnectionPool<F> {
         self.dispatch(client, &Op::Raw(raw)).await
     }
 
+    /// Sends any valid Samsung `KEY_*` code through the pooled channel.
+    pub async fn send_key_code(&self, client: &TizenClient, code: &str) -> Result<()> {
+        let payload = serde_json::to_string(&build_raw_remote_command_payload(code)?)?;
+        self.send_raw(client, &payload).await
+    }
+
+    /// Launches an app through the remote channel's `ed.apps.launch` event.
+    pub async fn launch_app(
+        &self,
+        client: &TizenClient,
+        app_id: &str,
+        action: TizenLaunchAction,
+    ) -> Result<()> {
+        let payload = serde_json::to_string(&build_channel_launch_payload(app_id, action, None))?;
+        self.send_raw(client, &payload).await
+    }
+
+    /// Launches an app with the legacy `ms.channel.launch` event.
+    pub async fn launch_app_legacy(&self, client: &TizenClient, app_id: &str) -> Result<()> {
+        let payload = serde_json::to_string(&build_legacy_launch_payload(app_id))?;
+        self.send_raw(client, &payload).await
+    }
+
     /// Drops the pooled channel for `host`; `true` when one was connected.
     ///
     /// Call this when a TV is removed from the fleet, or when the caller knows it
@@ -149,6 +243,24 @@ impl<F: TizenChannelFactory> TizenConnectionPool<F> {
     /// `true` when `host` has a pooled channel.
     pub async fn contains(&self, host: &str) -> bool {
         self.channels.lock().await.contains_key(host)
+    }
+
+    /// Token captured by the pooled channel's handshake, if the TV issued one.
+    pub async fn token_for(&self, host: &str) -> Option<String> {
+        self.channels
+            .lock()
+            .await
+            .get(host)
+            .and_then(|channel| channel.handshake_token())
+            .map(str::to_string)
+    }
+
+    /// Drops every pooled channel; returns how many were connected.
+    pub async fn clear(&self) -> usize {
+        let mut channels = self.channels.lock().await;
+        let count = channels.len();
+        channels.clear();
+        count
     }
 
     async fn dispatch(&self, client: &TizenClient, op: &Op<'_>) -> Result<()> {
@@ -306,6 +418,38 @@ mod tests {
         assert!(pool.contains("10.0.0.4").await);
         assert!(pool.evict("10.0.0.4").await);
         assert!(pool.is_empty().await);
+    }
+
+    #[tokio::test]
+    async fn raw_keys_and_launches_use_the_pooled_channel() {
+        let (opens, sent) = counters();
+        let pool = TizenConnectionPool::with_factory(factory(opens.clone(), 0, sent.clone()));
+        let client = TizenClient::new("10.0.0.7");
+
+        pool.send_key_code(&client, "KEY_CH_LIST")
+            .await
+            .expect("raw key");
+        pool.launch_app(&client, "1110110", TizenLaunchAction::DeepLink)
+            .await
+            .expect("channel launch");
+        pool.launch_app_legacy(&client, "1110110")
+            .await
+            .expect("legacy launch");
+
+        assert_eq!(opens.load(Ordering::SeqCst), 1, "one channel reused");
+        assert_eq!(sent.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn an_invalid_raw_key_fails_before_opening_a_channel() {
+        let (opens, sent) = counters();
+        let pool = TizenConnectionPool::with_factory(factory(opens.clone(), 0, sent));
+        let client = TizenClient::new("10.0.0.8");
+
+        let result = pool.send_key_code(&client, "MUTE").await;
+
+        assert!(result.is_err());
+        assert_eq!(opens.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]

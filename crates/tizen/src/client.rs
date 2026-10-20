@@ -19,12 +19,14 @@ use url::Url;
 use crate::error::{Result, TizenError};
 use crate::payload::{
     TizenChannelConnectData, TizenChannelConnectParams, TizenChannelConnectPayload,
-    TizenChannelConnectResponse, TizenDialLaunchResponse, TizenRemoteCommand,
+    TizenChannelConnectResponse, TizenChannelEmitParams, TizenChannelEmitPayload,
+    TizenChannelLaunchData, TizenDialLaunchResponse, TizenLegacyLaunchPayload, TizenRemoteCommand,
     TizenRemoteCommandParams,
 };
 use crate::types::{
-    TizenRemoteKey, TIZEN_APP_ID, TIZEN_CMD_CLICK, TIZEN_DIAL_DESC_PATH, TIZEN_DIAL_LAUNCH_PREFIX,
-    TIZEN_DIAL_PORT, TIZEN_REMOTE_TYPE, TIZEN_REMOTE_WS_PATH, TIZEN_WSS_PORT, TIZEN_WS_PORT,
+    validate_remote_key_code, TizenLaunchAction, TizenRemoteKey, TIZEN_APP_ID, TIZEN_CMD_CLICK,
+    TIZEN_DIAL_DESC_PATH, TIZEN_DIAL_LAUNCH_PREFIX, TIZEN_DIAL_PORT, TIZEN_REMOTE_TYPE,
+    TIZEN_REMOTE_WS_PATH, TIZEN_WSS_PORT, TIZEN_WS_PORT,
 };
 
 /// Default number of inbound frames inspected while awaiting a handshake reply or
@@ -36,6 +38,30 @@ const EVENT_CONNECT: &str = "ms.channel.connect";
 
 /// The event the TV sends when the user denies the on-screen pairing prompt.
 const EVENT_UNAUTHORIZED: &str = "ms.channel.unauthorized";
+
+/// The event the TV sends for channel-level errors (including stale tokens).
+const EVENT_ERROR: &str = "ms.error";
+
+/// Pairing waits for a human to accept the TV's on-screen prompt.
+const PAIR_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Result of a completed `ms.channel.connect` handshake.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HandshakeInfo {
+    /// Token issued by the TV, when this firmware issues one.
+    pub token: Option<String>,
+    /// TV name reported by the handshake, when present.
+    pub tv_name: Option<String>,
+}
+
+/// Result of [`TizenClient::pair`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TizenPairing {
+    /// Pairing token, if the TV issues one (pre-2018 sets may not).
+    pub token: Option<String>,
+    /// TV name reported during pairing, when present.
+    pub tv_name: Option<String>,
+}
 
 /// Base64-encodes a remote name using the standard alphabet.
 ///
@@ -94,6 +120,54 @@ pub fn build_remote_command_payload(key: TizenRemoteKey) -> TizenRemoteCommand {
     }
 }
 
+/// Builds the `ms.remote.control` payload for any valid Samsung key code.
+///
+/// Use this for model-specific keys (for example `KEY_CH_LIST` or channel
+/// digits) that are absent from [`TizenRemoteKey`]. The code is validated with
+/// [`validate_remote_key_code`] before it reaches the wire.
+pub fn build_raw_remote_command_payload(code: &str) -> Result<TizenRemoteCommand> {
+    validate_remote_key_code(code)?;
+    Ok(TizenRemoteCommand {
+        method: "ms.remote.control".to_string(),
+        params: TizenRemoteCommandParams {
+            cmd: TIZEN_CMD_CLICK.to_string(),
+            data_of_cmd: code.to_string(),
+            option: "false".to_string(),
+            type_of_remote: TIZEN_REMOTE_TYPE.to_string(),
+        },
+    })
+}
+
+/// Builds the `ms.channel.emit` payload that launches an app through the remote
+/// channel.
+pub fn build_channel_launch_payload(
+    app_id: &str,
+    action: TizenLaunchAction,
+    meta_tag: Option<&str>,
+) -> TizenChannelEmitPayload {
+    TizenChannelEmitPayload {
+        method: "ms.channel.emit".to_string(),
+        params: TizenChannelEmitParams {
+            event: "ed.apps.launch".to_string(),
+            to: "host".to_string(),
+            data: TizenChannelLaunchData {
+                app_id: app_id.to_string(),
+                action_type: action.as_str().to_string(),
+                meta_tag: meta_tag.map(str::to_string),
+            },
+        },
+    }
+}
+
+/// Builds the legacy `ms.channel.launch` event used by older clients.
+pub fn build_legacy_launch_payload(app_id: &str) -> TizenLegacyLaunchPayload {
+    TizenLegacyLaunchPayload {
+        event: "ms.channel.launch".to_string(),
+        data: app_id.to_string(),
+        id: 0,
+    }
+}
+
 /// Parses a raw text frame into a [`TizenChannelConnectResponse`].
 pub fn parse_channel_connect_response(raw: &str) -> Result<TizenChannelConnectResponse> {
     Ok(serde_json::from_str(raw)?)
@@ -106,6 +180,17 @@ pub fn extract_token(resp: &TizenChannelConnectResponse) -> Option<String> {
         .and_then(|data| data.token.as_ref())
         .filter(|token| !token.is_empty())
         .cloned()
+}
+
+/// Extracts the TV name from a connect response, accepting both firmware
+/// spellings (`name` and `deviceName`).
+pub fn extract_tv_name(resp: &TizenChannelConnectResponse) -> Option<String> {
+    resp.data
+        .as_ref()
+        .and_then(|data| data.name.as_ref().or(data.device_name.as_ref()))
+        .map(|name| name.trim())
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
 }
 
 /// Returns `true` when the response is the `ms.channel.unauthorized` denial event.
@@ -127,7 +212,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 ///
 /// The frame reader has a budget in frames; a 2024 panel that accepts the socket and
 /// then says nothing would otherwise hang the caller forever.
-const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+const DEFAULT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl TizenClient {
     /// The ports to try, most likely first.
@@ -159,12 +244,11 @@ impl TizenClient {
 
 /// Opens a remote channel and performs the `ms.channel.connect` handshake.
 ///
-/// Returns the live stream and the captured pairing token (`None` when the TV
-/// returned none).
+/// Returns the live stream and the captured handshake metadata.
 pub(crate) async fn open_channel(
     client: &TizenClient,
     token: Option<&str>,
-) -> Result<(WsStream, Option<String>)> {
+) -> Result<(WsStream, HandshakeInfo)> {
     let mut last_error: Option<TizenError> = None;
 
     for port in client.port_candidates() {
@@ -202,7 +286,7 @@ pub(crate) async fn open_channel(
         stream.send(Message::text(text)).await?;
 
         let handshake = tokio::time::timeout(
-            HANDSHAKE_TIMEOUT,
+            client.handshake_timeout,
             await_handshake_reply(&mut stream, DEFAULT_FRAME_BUDGET),
         )
         .await;
@@ -219,25 +303,28 @@ pub(crate) async fn open_channel(
 async fn await_handshake_reply(
     stream: &mut WsStream,
     frame_budget: usize,
-) -> Result<Option<String>> {
+) -> Result<HandshakeInfo> {
     let mut budget = frame_budget;
     let outcome = read_until(stream, &mut budget, |message| {
         if !message.is_text() {
             return Ok(None);
         }
         let resp = parse_channel_connect_response(&message.into_text()?)?;
-        if is_unauthorized(&resp) {
+        if is_unauthorized(&resp) || resp.event.as_deref() == Some(EVENT_ERROR) {
             return Err(TizenError::Unauthorized);
         }
         if resp.event.as_deref() == Some(EVENT_CONNECT) {
-            return Ok(Some(extract_token(&resp)));
+            return Ok(Some(HandshakeInfo {
+                token: extract_token(&resp),
+                tv_name: extract_tv_name(&resp),
+            }));
         }
         Ok(None)
     })
     .await?;
 
     match outcome {
-        ReadOutcome::Ready(token) => Ok(token),
+        ReadOutcome::Ready(info) => Ok(info),
         ReadOutcome::Closed => Err(TizenError::Protocol(
             "channel closed before the handshake completed".to_string(),
         )),
@@ -258,6 +345,8 @@ pub struct TizenClient {
     tls: TlsPolicy,
     device_name: String,
     token: Option<String>,
+    /// How long to wait for `ms.channel.connect` after opening the socket.
+    handshake_timeout: Duration,
     /// Which port actually answered, once one has. Shared across clones: every
     /// session for the same TV should stop re-probing.
     negotiated: Arc<Mutex<Option<u16>>>,
@@ -297,6 +386,7 @@ impl TizenClient {
             tls: TlsPolicy::default(),
             device_name: TIZEN_APP_ID.to_string(),
             token: None,
+            handshake_timeout: DEFAULT_HANDSHAKE_TIMEOUT,
             negotiated: Arc::new(Mutex::new(None)),
             http: reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(5))
@@ -344,6 +434,15 @@ impl TizenClient {
     /// Sets a previously-saved pairing token for reconnects.
     pub fn with_token(mut self, token: impl Into<String>) -> Self {
         self.token = Some(token.into());
+        self
+    }
+
+    /// Overrides the `ms.channel.connect` wait.
+    ///
+    /// Pairing uses 30 seconds because a human must accept the TV prompt; the
+    /// default 10 seconds is for reconnects that should already be authorised.
+    pub fn with_handshake_timeout(mut self, timeout: Duration) -> Self {
+        self.handshake_timeout = timeout;
         self
     }
 
@@ -403,6 +502,47 @@ impl TizenClient {
         let response = self.http.get(url).send().await?.error_for_status()?;
         Ok(response.text().await?)
     }
+
+    /// Runs the pairing flow without a token so the TV displays its allow prompt.
+    ///
+    /// Waits up to 30 seconds for a human to accept the prompt, then closes the
+    /// channel. A TV that never issues a token (pre-2018 firmware) is still a
+    /// successful pairing; `token` is simply `None`.
+    pub async fn pair(&self) -> Result<TizenPairing> {
+        let mut client = self.clone();
+        client.token = None;
+        client.handshake_timeout = PAIR_HANDSHAKE_TIMEOUT;
+        let (mut stream, info) = open_channel(&client, None).await?;
+        let _ = stream.close(None).await;
+        Ok(TizenPairing {
+            token: info.token,
+            tv_name: info.tv_name,
+        })
+    }
+
+    /// Launches an app through the remote channel's `ed.apps.launch` event.
+    ///
+    /// This uses the client's stored token when present. For TVs where the
+    /// remote-channel launch is unavailable, call [`launch_app_via_dial`](Self::launch_app_via_dial)
+    /// instead (or use the legacy event as a final fallback).
+    pub async fn launch_app_via_channel(
+        &self,
+        app_id: &str,
+        action: TizenLaunchAction,
+    ) -> Result<()> {
+        let mut session = TizenSession::connect(self).await?;
+        session.launch_app_with_action(app_id, action).await
+    }
+
+    /// Launches an app with the older `ms.channel.launch` event.
+    ///
+    /// Kept for TVs that accepted the pre-`ed.apps.launch` payload. Prefer
+    /// [`launch_app_via_channel`](Self::launch_app_via_channel) or DIAL.
+    pub async fn launch_app_via_legacy_channel(&self, app_id: &str) -> Result<()> {
+        let mut session = TizenSession::connect(self).await?;
+        let payload = serde_json::to_string(&build_legacy_launch_payload(app_id))?;
+        session.send_raw(&payload).await
+    }
 }
 
 /// An open Tizen remote-channel session.
@@ -413,6 +553,7 @@ impl TizenClient {
 pub struct TizenSession {
     stream: WsStream,
     token: Option<String>,
+    tv_name: Option<String>,
     /// Frames a single `recv_json` call may read before giving up.
     ///
     /// Per call, not per session: a session that reused one counter ran out after a
@@ -428,10 +569,11 @@ impl TizenSession {
     /// the on-screen PIN prompt. The captured token is available via
     /// [`TizenSession::token`]. A denial surfaces as [`TizenError::Unauthorized`].
     pub async fn connect(client: &TizenClient) -> Result<TizenSession> {
-        let (stream, token) = open_channel(client, client.token.as_deref()).await?;
+        let (stream, info) = open_channel(client, client.token.as_deref()).await?;
         Ok(TizenSession {
             stream,
-            token,
+            token: info.token,
+            tv_name: info.tv_name,
             frame_budget_per_read: DEFAULT_FRAME_BUDGET,
             client: client.clone(),
         })
@@ -442,11 +584,41 @@ impl TizenSession {
         self.token.as_deref()
     }
 
+    /// Returns the TV name reported during the handshake, if any.
+    pub fn tv_name(&self) -> Option<&str> {
+        self.tv_name.as_deref()
+    }
+
     /// Sends a remote key press as a `ms.remote.control` frame.
     pub async fn send_key(&mut self, key: TizenRemoteKey) -> Result<()> {
         let command = build_remote_command_payload(key);
         let text = serde_json::to_string(&command)?;
         self.send_raw(&text).await
+    }
+
+    /// Sends any valid Samsung `KEY_*` code, including model-specific keys that
+    /// are not represented by [`TizenRemoteKey`].
+    pub async fn send_key_code(&mut self, code: &str) -> Result<()> {
+        let command = build_raw_remote_command_payload(code)?;
+        let text = serde_json::to_string(&command)?;
+        self.send_raw(&text).await
+    }
+
+    /// Launches an application through the remote channel.
+    pub async fn launch_app(&mut self, app_id: &str) -> Result<()> {
+        self.launch_app_with_action(app_id, TizenLaunchAction::NativeLaunch)
+            .await
+    }
+
+    /// Launches an application through the remote channel with an explicit
+    /// `NATIVE_LAUNCH` / `DEEP_LINK` action.
+    pub async fn launch_app_with_action(
+        &mut self,
+        app_id: &str,
+        action: TizenLaunchAction,
+    ) -> Result<()> {
+        let payload = serde_json::to_string(&build_channel_launch_payload(app_id, action, None))?;
+        self.send_raw(&payload).await
     }
 
     /// Sends a raw text frame.
@@ -497,8 +669,8 @@ impl TizenSession {
 #[async_trait::async_trait]
 impl crate::protocol::WebSocketHandshake for TizenSession {
     async fn connect_ws(&self, token: Option<&str>) -> Result<Option<String>> {
-        let (_stream, captured) = open_channel(&self.client, token).await?;
-        Ok(captured)
+        let (_stream, info) = open_channel(&self.client, token).await?;
+        Ok(info.token)
     }
 }
 
@@ -586,6 +758,60 @@ mod tests {
         assert_eq!(TizenRemoteKey::Power.as_str(), "KEY_POWER");
         assert_eq!(TizenRemoteKey::VolumeUp.as_str(), "KEY_VOLUP");
         assert_eq!(TizenRemoteKey::FastForward.as_str(), "KEY_FF");
+    }
+
+    #[test]
+    fn raw_key_codes_cover_model_specific_keys() {
+        let command = build_raw_remote_command_payload("KEY_CH_LIST").expect("valid key");
+        let value = serde_json::to_value(command).expect("to_value");
+        assert_eq!(value["method"], "ms.remote.control");
+        assert_eq!(value["params"]["DataOfCmd"], "KEY_CH_LIST");
+        assert_eq!(value["params"]["Cmd"], "Click");
+        assert!(build_raw_remote_command_payload("MUTE").is_err());
+        assert!(build_raw_remote_command_payload("key_mute").is_err());
+    }
+
+    #[test]
+    fn channel_launch_payload_uses_ed_apps_launch() {
+        let payload = build_channel_launch_payload(
+            "1110110",
+            TizenLaunchAction::DeepLink,
+            Some("https://example.test"),
+        );
+        let value = serde_json::to_value(payload).expect("to_value");
+        assert_eq!(value["method"], "ms.channel.emit");
+        assert_eq!(value["params"]["event"], "ed.apps.launch");
+        assert_eq!(value["params"]["to"], "host");
+        assert_eq!(value["params"]["data"]["appId"], "1110110");
+        assert_eq!(value["params"]["data"]["action_type"], "DEEP_LINK");
+        assert_eq!(
+            value["params"]["data"]["metaTag"],
+            "https://example.test"
+        );
+    }
+
+    #[test]
+    fn legacy_launch_payload_keeps_old_wire_shape() {
+        let value = serde_json::to_value(build_legacy_launch_payload("1110110"))
+            .expect("to_value");
+        assert_eq!(value["event"], "ms.channel.launch");
+        assert_eq!(value["data"], "1110110");
+        assert_eq!(value["id"], 0);
+    }
+
+    #[test]
+    fn connect_response_name_accepts_both_firmware_spellings() {
+        let named = parse_channel_connect_response(
+            r#"{"event":"ms.channel.connect","data":{"token":"t","name":"Den TV"}}"#,
+        )
+        .expect("parse");
+        assert_eq!(extract_tv_name(&named).as_deref(), Some("Den TV"));
+
+        let device_named = parse_channel_connect_response(
+            r#"{"event":"ms.channel.connect","data":{"deviceName":"  Kitchen TV  "}}"#,
+        )
+        .expect("parse");
+        assert_eq!(extract_tv_name(&device_named).as_deref(), Some("Kitchen TV"));
     }
 
     #[test]
