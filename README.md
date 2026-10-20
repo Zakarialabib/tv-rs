@@ -9,11 +9,11 @@
 Find the televisions on your LAN and drive them from Rust — discovery, power,
 remote control, fleet reconciliation and media serving, behind one small facade.
 
-> **What is on crates.io right now:** `0.1.0`. `power_observation()`, the facade's
-> `quirks` feature, `tv-rs-cec`/`tv-rs-media`'s current APIs and everything in
-> [`INTEGRATION.md`](INTEGRATION.md) describe `main` and land in the next release —
-> check [docs.rs](https://docs.rs/tv-rs) for what a published version actually has
-> before copying an example from here.
+> **Version check.** `0.1.0` of the original eleven crates and `0.1.0` of
+> `tv-rs-local` / `tv-rs-dlna` are on crates.io. Everything this page describes is in
+> `0.2.0`, which is tagged in this repository; if `cargo add` resolves an older
+> version, check [docs.rs](https://docs.rs/tv-rs) for the surface that version
+> actually has before copying an example from here.
 
 ```rust
 use tv_rs::discover;
