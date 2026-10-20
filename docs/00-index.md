@@ -9,14 +9,15 @@ failure behind a panic. These pages are the long version of that.
 |---|---|---|
 | 0 | [`glossary.md`](glossary.md) | **The map.** Every term, and the page or file that explains it. Start here if you only have five minutes. |
 | 1 | [`01-playbook.md`](01-playbook.md) | The protocol facts: ports, handshakes, discovery, media, and what each vendor exposes. |
-| 2 | [`architecture.md`](architecture.md) | The three layers, the dependency rule, the module inventory per crate, the auth rule, and the playbook → crate map. |
-| — | [`../INTEGRATION.md`](../INTEGRATION.md) | **Putting it in an application**: discovery, TLS pinning, quirks, a fleet, media, CEC, and the pre-ship checklist. |
-| 4 | [`03-matrix.md`](03-matrix.md) | State: what is implemented, what is deferred, verified test counts, remaining gaps. |
+| 2 | [`architecture.md`](architecture.md) | The layers, the dependency rule, the module inventory per crate, the auth rule, and the playbook → crate map. |
+| 3 | [`03-matrix.md`](03-matrix.md) | State: what is implemented, what is deferred, verified test counts, remaining gaps. |
 | 4 | [`02-external-refs.md`](02-external-refs.md) | Protocol references, prior art, and the crates this workspace learned from. |
 | 5 | [`04-rust-package-standard.md`](04-rust-package-standard.md) | The engineering standard the whole workspace follows — reusable outside this repo. |
-| 6 | [`05-roadmap.md`](05-roadmap.md) | Proposals: what to add next, each with the evidence behind it and what it costs. |
-| 7 | [`spec/00-device-model.md`](spec/00-device-model.md) | **The v2 specification**: capability traits, `DeviceHandle`, confidence-tagged state, the error taxonomy, the agent, and the phases. |
-| 8 | [`spec/01-reconciliation.md`](spec/01-reconciliation.md) | Phase 0 audit: every existing public item mapped to keep / move / merge / remove. |
+| 6 | [`06-plan.md`](06-plan.md) | **The live plan.** Only open work: telemetry, MDC serial, Sony, native CEC, DDC/CI, hardware, the next release. |
+| 7 | [`spec/00-device-model.md`](spec/00-device-model.md) | The device-model reference: capabilities, `DeviceHandle`, confidence, the error taxonomy, the agent — and the verification record for what shipped. |
+| 8 | [`spec/01-reconciliation.md`](spec/01-reconciliation.md) | The Phase 0 audit: every old public item mapped to keep / move / merge / remove. |
+| — | [`../INTEGRATION.md`](../INTEGRATION.md) | **Putting it in an application**: discovery, TLS pinning, quirks, a fleet, media, CEC, the pre-ship checklist. |
+| — | [`05-roadmap.md`](05-roadmap.md) | Archive: the P0–P9 proposals and how each one actually resolved. |
 | — | [`hil-results.md`](hil-results.md) | What has actually run against a physical TV. Today: nothing. |
 | — | [`adr/`](adr/) | [001 — crate publication](adr/001-crate-publication.md), [002 — workspace layout](adr/002-workspace-layout.md). |
 

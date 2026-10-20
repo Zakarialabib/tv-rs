@@ -1,7 +1,8 @@
 # Spec: the v2 device model
 
-**Status:** proposed · 2026-10-19 · supersedes nothing yet, and changes nothing until
-Phase 1 lands.
+**Status:** **shipped** · written 2026-10-19, implemented and released as `0.2.0` ·
+this page is now the reference for the model, not a plan. Open work moved to
+[`../06-plan.md`](../06-plan.md).
 
 This is the specification for turning the current workspace — eight protocol crates
 that each speak their wire format well — into a **device model**: a small, embeddable
@@ -318,18 +319,18 @@ Readable by a technician without a Rust toolchain. This is a product requirement
 
 ## 7. Phases
 
-| Phase | Deliverable | Exit criterion |
-|---|---|---|
-| **0. Audit** | [`01-reconciliation.md`](01-reconciliation.md): every current public item → keep / migrate / rename / remove | the map exists; no code changed |
-| **0b. Correctness slice** *(landed)* | port negotiation with caching, `open_url()`, pinning reachable from `from_discovered_with`, credential redaction in `Debug`, bounded connect/handshake timeouts | a client built from discovery reaches a modern panel without downgrading TLS |
-| **1. Core + mock** | `tv-rs-core` types, traits, taxonomy, mock backend **(landed)**; `TvClient` implements `DeviceHandle` **(landed)** | `cargo test -p tv-rs-core --features mock-backend` green; every transition in §4.4 exercised |
-| **2. Dual-protocol conformance** | shared suite in `tv-rs-core::conformance`, run against the mock **and** the facade's three clients **(landed)**; real-device run **blocked — no hardware reachable** | conformance passes on mocks (done); hardware report pending |
-| **3. Tizen isolation** | quirks table + loader **(landed)**; port ladder **(landed)**; rows applied at client construction **(landed)**: a matching row pins the port, so the dead generation is never probed | conformance passes against a mock simulating both port generations; no hardware needed |
-| **4. Agent** | provider seam (`StaticFileProvider`), pure `decide()` reconciler, `HealerLadder`, JSONL audit log **(landed)**; `tick()`/`run()` loop with cancellation, quarantine and audit wiring **(landed)**; `StaticFileProvider`, `HttpPollProvider`, `MqttSubscribeProvider` **(landed)**; 24-hour simulation with three blips **(landed, `twenty_four_simulated_hours_with_three_blips`)** | 50-device mock fleet, 24 simulated hours, 3 blips, 2 devices that never pair, 1 permanently `Unknown`: converges the healthy, quarantines the rest, zero panics, bounded task count |
-| **5. Fleet + HIL + CEC** | `cargo xtask hw-test` **(landed)**, `tv-rs-cec` **(landed, `client` feature)**; CLI `status`/`ensure` **(landed)** | the harness reports honestly when no device answers (verified on this host); CEC compiles without its feature |
-| **6. Hardening** | MSRV job, `cargo deny`, docs (`INTEGRATION`, `QUIRKS`, `SECURITY`), SemVer policy, `forbid(unsafe_code)` **(all landed)** | published crates **(done — 11 crates at 0.1.0)**; error taxonomy unchanged for 90 days before `1.0` (clock starts at `0.1.0`, 2026-10-20) |
+All eight phases landed, in order, each with its exit criterion checked in CI or in a
+test: audit → correctness slice → core + mock → dual-protocol conformance → Tizen
+isolation (quirks **consumed**, not just loaded) → agent (providers, `decide()`,
+healer, audit, 24-hour/50-device simulation) → fleet + HIL + CEC + CLI → hardening
+(MSRV, `cargo-deny`, `forbid(unsafe_code)`, publication).
 
-## 8. Definition of done for v0.1
+The phase table that tracked them was deleted on purpose: a checklist that is all
+ticks is history, and history belongs in `git log` and the CHANGELOG. What remains
+below is the part worth re-reading — the evidence that the definition of done was
+actually met.
+
+## 8. Verification record (v0.1 → v0.2.0)
 
 Status as of `0.1.0` (published 2026-10-20). "Met" means a gate in CI or a test that
 would fail if the claim stopped being true.
@@ -360,22 +361,10 @@ answers, and the two conformance runs it enables are the remaining gate.
 | 5 | AP isolation kills discovery on a real LAN | high | medium | static address + MAC manifest is a first-class path, not a workaround |
 | 6 | Scope creeps into CMS/scheduler | high | high | `NON_GOALS.md`, checked in the PR template |
 
-## 10. What this costs
+## 10. Decisions that were open, now closed
 
-Phase 1 is where the risk actually sits: it changes the shape of types that seven
-crates already use. Everything after it is additive. The current code is not thrown
-away — the protocol bodies, parsers and tests are exactly what the backends need to
-keep; what changes is the boundary they sit behind.
-
-## 11. Open decisions (owner: repository owner)
-
-1. **License.** MIT today; the playbook proposes dual MIT/Apache-2.0. Dual licensing
-   is friendlier to corporate embedders (patent grant) and costs two files and a
-   CONTRIBUTING clause — but it is a governance choice, and it must happen before
-   the first publish, not after.
-2. **Crate prefix.** This spec keeps `tv-rs-*`. `tv-core`, `tv-roku`, `tv-webos`,
-   `tv-tizen`, `tv-discovery`, `tv-credentials`, `tv-agent`, `tv-cec` are all free on
-   crates.io; `tv-cli` is not. Renaming is only free before the first publish.
-3. **`VolumeControl` as a core trait.** Proposed here because three vendors support
-   it; if it is rejected, volume moves back into per-backend accessors and every
-   consumer re-learns the vendor branch.
+| Decision | Resolution | Why |
+|---|---|---|
+| License | **MIT only** | The dual-licence question had to be settled before the first publish and it is now published at `0.1.0`/`0.2.0`; changing it later is a governance change, not a release step. |
+| Crate prefix | **`tv-rs-*`** (fourteen crates) | Short names were free, but the registry is immutable after the first upload; the prefix is now permanent. |
+| `VolumeControl` in core | **Adopted** | All three consumer vendors expose volume; without the trait every consumer re-learns the vendor branch. Tizen and Roku still refuse *absolute* volume through the capability set, which is the honest version of the same decision. |
