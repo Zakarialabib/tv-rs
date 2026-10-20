@@ -6,7 +6,7 @@ for at least once; the answer is "use this crate, then build that yourself".
 ## This is not a CMS
 
 No playlists, no scheduling, no content management, no accounts. The
-[`tv-rs-agent`](docs/spec/00-device-model.md) crate converges a device to a desired
+[`tv-rs-agent`](crates/agent) crate converges a device to a desired
 state that someone else decides.
 
 ## This is not a media server

@@ -284,8 +284,6 @@ the page that explains it.
 | [`docs/01-playbook.md`](docs/01-playbook.md)                       | the protocol facts: ports, handshakes, what each vendor exposes               |
 | [`docs/architecture.md`](docs/architecture.md)                     | the three layers, the dependency rule, where a new file belongs               |
 | [`INTEGRATION.md`](INTEGRATION.md)                                 | **put it in an application**: discovery, pinning, quirks, a fleet, media, CEC |
-| [`docs/spec/00-device-model.md`](docs/spec/00-device-model.md)     | the device-model specification: capabilities, confidence, agent               |
-| [`docs/spec/01-reconciliation.md`](docs/spec/01-reconciliation.md) | the Phase 0 audit: every symbol's destination                                 |
 | [`docs/03-matrix.md`](docs/03-matrix.md)                           | what is done, what is deferred, verified test counts                          |
 | [`docs/06-plan.md`](docs/06-plan.md)                         | **the live plan**: only open work, with exit criteria          |
 | [`QUIRKS.md`](QUIRKS.md)                                           | how to submit a model/firmware defect                                         |

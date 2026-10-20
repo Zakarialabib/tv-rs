@@ -1,9 +1,10 @@
 # Plan
 
-**This is the live plan.** It replaces the proposal list in
-[`05-roadmap.md`](05-roadmap.md), which is now an archive of closed proposals, and it
-supersedes the phase tables in [`spec/00-device-model.md`](spec/00-device-model.md),
-which are history.
+**This is the only plan.** The specification documents that used to sit beside it
+(`spec/00-device-model.md`, `spec/01-reconciliation.md`) are deleted: they described a
+model that shipped, and a design that ships is documented by its code, its rustdoc and
+[`architecture.md`](architecture.md), not by a proposal that keeps a phase table
+forever. The P0–P9 proposals are archived in [`05-roadmap.md`](05-roadmap.md).
 
 Rule for this page: an item exists here only while it is **not** done. When it lands,
 it moves to the CHANGELOG and the matrix, and its section is deleted. A plan that
