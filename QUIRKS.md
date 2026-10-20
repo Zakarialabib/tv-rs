@@ -39,10 +39,27 @@ Three requirements, enforced by review and partly by the parser:
 - **A guess.** An unverified row is worse than no row: it makes a device take a
   fallback path nobody has tested.
 
+## The action vocabulary
+
+`action` is not prose: `tv-rs-core` decodes it into `QuirkAction`, and a row whose
+action this crate cannot act on fails a test. Current vocabulary:
+
+| `action` | Means | Applied by |
+|---|---|---|
+| `start_at_8001` / `start_at_8002` | only this port exists on the device | facade pins the port (`TizenClient::pinned_port`) |
+| `start_at_3000` / `start_at_3001` | same, for webOS | facade pins the port (`WebosClient::pinned_port`) |
+| `auth_not_permitted` | the device refuses until a setting is enabled | surfaced as `Auth(NotPermitted)`, never retried |
+| `read_device_info_flags` | trust the device-info flags over the model | the Roku client reads them |
+| `point_user_at_settings` | a human has to change something | reported, with the setting named |
+
+A new action needs three things in one PR: the variant, the code that obeys it, and
+a case in the vocabulary test. Anything else is a comment.
+
 ## Where it is applied
 
-| Backend | Today | Next |
-|---|---|---|
-| Samsung | port ladder already tries 8002 → 8001 | skip 8001 outright when the quirk says it is dead |
-| LG | port ladder already tries 3001 → 3000 | same |
-| Roku | not consulted yet | map `keypress_gated` to `Auth(NotPermitted)` with the setting named, and read `supports-tv-power-control` from OS 15 |
+| Backend | Today |
+|---|---|
+| Samsung | with the `quirks` feature, a matching row pins the client to 8002 and 8001 leaves the ladder |
+| LG | same, pinned to 3001 for firmware 23/24 |
+| Roku | the 14.1 keypress gate is mapped to `Auth(NotPermitted)` in the client; the table row documents it |
+| all | without the feature, each backend still negotiates its ladder and pays one refused connection |

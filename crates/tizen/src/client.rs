@@ -138,6 +138,9 @@ impl TizenClient {
         if let Some(port) = *self.negotiated.lock().expect("negotiated lock") {
             return vec![port];
         }
+        if let Some(port) = self.pinned {
+            return vec![port];
+        }
         let other = if self.port == TIZEN_WSS_PORT {
             TIZEN_WS_PORT
         } else {
@@ -261,6 +264,9 @@ pub struct TizenClient {
     /// Which port actually answered, once one has. Shared across clones: every
     /// session for the same TV should stop re-probing.
     negotiated: Arc<Mutex<Option<u16>>>,
+    /// A port the caller has already established as the only one this panel
+    /// listens on (from the quirks table). Never falls back.
+    pinned: Option<u16>,
     /// Shared HTTP client for the DIAL endpoints.
     ///
     /// A `reqwest::Client` owns a connection pool and a TLS configuration; building
@@ -298,6 +304,7 @@ impl TizenClient {
             device_name: TIZEN_APP_ID.to_string(),
             token: None,
             negotiated: Arc::new(Mutex::new(None)),
+            pinned: None,
             http: reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(5))
                 .timeout(Duration::from_secs(10))
@@ -318,6 +325,27 @@ impl TizenClient {
         self.port = TIZEN_WSS_PORT;
         *self.negotiated.lock().expect("negotiated lock") = None;
         self
+    }
+
+    /// Uses `port` and **only** `port`.
+    ///
+    /// The port ladder exists because the generation of a panel is not known until
+    /// something answers. When the caller already knows — the quirks table says
+    /// `T-KTM` firmware does not listen on 8001 — trying the other port is a
+    /// guaranteed timeout per command, so this removes it from the ladder instead of
+    /// relying on the failure being fast.
+    #[must_use]
+    pub fn pinned_port(mut self, port: u16) -> Self {
+        self.port = port;
+        self.pinned = Some(port);
+        *self.negotiated.lock().expect("negotiated lock") = None;
+        self
+    }
+
+    /// The port this client is pinned to, if any.
+    #[must_use]
+    pub fn pinned_port_number(&self) -> Option<u16> {
+        self.pinned
     }
 
     /// Sets the DIAL HTTP port.
@@ -616,6 +644,19 @@ mod tests {
             .await
             .expect("mock launch should succeed");
         assert_eq!(response.raw, "");
+    }
+
+    #[test]
+    fn a_pinned_port_is_the_only_candidate() {
+        let client = TizenClient::new("192.168.1.10")
+            .with_wss()
+            .pinned_port(8002);
+        assert_eq!(client.pinned_port_number(), Some(8002));
+        assert_eq!(client.port_candidates(), vec![8002], "no fallback to 8001");
+
+        // Without a pin the ladder still holds both generations.
+        let ladder = TizenClient::new("192.168.1.10").with_wss();
+        assert_eq!(ladder.port_candidates(), vec![8002, 8001]);
     }
 
     #[test]

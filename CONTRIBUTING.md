@@ -59,6 +59,34 @@ chore(lint): satisfy clippy -D warnings
 
 Group related files in a commit; do not mix formatting churn with behaviour.
 
+## Versioning policy
+
+`0.x` until the error taxonomy and the capability traits have been stable for a full
+release cycle; from `1.0`, plain [SemVer](https://semver.org/spec/v2.0.0.html).
+
+What counts as breaking while at `0.x`, and needs a minor bump (`0.1` → `0.2`) plus a
+CHANGELOG entry under **Changed** or **Removed**:
+
+- adding a **variant to an enum a caller matches on** without `_ =>` — `TvError`,
+  `PowerState`, `TvVendor`, `Confidence`, `Decision`. Adding a variant is additive for
+  the crate and breaking for the caller, and pretending otherwise is how a patch
+  release breaks a build;
+- removing or renaming a public item, or changing a method's argument order;
+- changing a default that alters behaviour (a port order, a timeout, a confidence);
+- raising `rust-version`.
+
+Not breaking: a new capability on a backend, a new defaulted method on a trait, a new
+quirk row, a new feature flag (off by default), a new field on a struct that is
+`#[non_exhaustive]` or not constructed by callers.
+
+**The error taxonomy is the strictest surface.** Once `0.2` ships, variants of
+`TvError` may not be removed or repurposed for at least 90 days, because `Remedy`
+mapping lives in downstream retry code. Add a variant, add its remedy, add the
+exhaustiveness test case — in the same PR.
+
+All eleven crates are versioned together and published together: `cargo xtask publish
+--version X.Y.Z` rewrites the pins. A partial release is worse than a late one.
+
 ## Releasing
 
 Eight crates publish in dependency order via `cargo xtask publish`. crates.io

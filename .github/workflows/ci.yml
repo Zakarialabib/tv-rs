@@ -71,6 +71,9 @@ jobs:
       - run: cargo test --workspace
       # The facade must satisfy the same conformance suite every backend does.
       - run: cargo test -p tv-rs --features conformance
+      # Quirk-driven port pinning lives on the facade, so its own test needs the feature.
+      - run: cargo test -p tv-rs --features quirks
+      - run: cargo check -p tv-rs --features quirks
       # The optional providers pull reqwest/rumqttc; default builds stay lean.
       - run: cargo test -p tv-rs-agent --features "http mqtt"
       - run: cargo test -p tv-rs-cec --features client

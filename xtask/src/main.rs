@@ -13,6 +13,7 @@
 //! all of them), and keeping it in the workspace means `cargo` itself can check
 //! that every name in the order still exists as a package.
 
+#![forbid(unsafe_code)]
 mod hw;
 
 use std::io::Write;

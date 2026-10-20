@@ -181,13 +181,20 @@ async fn run_status(args: StatusArgs) -> Result<(), CliError> {
             Err(_) => "-".to_string(),
         };
 
-        let power = match TvClient::from_discovered(tv) {
-            Ok(client) => client
-                .power_state()
-                .await
-                .map(|state| format!("{state:?}"))
-                .unwrap_or_else(|error| format!("probe failed: {error}")),
-            Err(error) => format!("no client: {error}"),
+        let (power, confidence) = match TvClient::from_discovered(tv) {
+            Ok(client) => match client.power_observation().await {
+                // The confidence is part of the answer, not a decoration: a probe
+                // cannot tell "standby" from "on but nothing playing".
+                Ok(observed) => (
+                    observed
+                        .value
+                        .map(|state| format!("{state:?}"))
+                        .unwrap_or_else(|| "Unknown".to_string()),
+                    observed.confidence.as_str().to_string(),
+                ),
+                Err(error) => (format!("probe failed: {error}"), "unknown".to_string()),
+            },
+            Err(error) => (format!("no client: {error}"), "unknown".to_string()),
         };
 
         rows.push(render::StatusRow {
@@ -195,6 +202,7 @@ async fn run_status(args: StatusArgs) -> Result<(), CliError> {
             label: tv.label().to_string(),
             address: tv.ip.clone(),
             power,
+            confidence,
             capabilities,
         });
     }

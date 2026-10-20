@@ -60,6 +60,67 @@ impl Quirk {
     }
 }
 
+/// What a backend should do differently, decoded from a row's `action`.
+///
+/// The `action` strings in the table are a fixed vocabulary rather than prose: a
+/// typo would otherwise turn a workaround into a comment that nothing reads. An
+/// unrecognised action is preserved as [`QuirkAction::Other`] so the table can gain
+/// vocabulary before the code does, and a test asserts that every action shipped in
+/// `quirks/default.toml` decodes to a known variant.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QuirkAction {
+    /// Skip straight to this port and never fall back: the other one is dead on
+    /// this firmware, so probing it costs a timeout per command.
+    StartAtPort(u16),
+    /// The device will refuse keypresses until a setting is enabled; surface
+    /// `Auth(NotPermitted)` rather than retrying.
+    ExpectAuthRequired,
+    /// Trust the capability flags in the device-info response over the model.
+    TrustDeviceInfoFlags,
+    /// The user has to change something in the TV's settings menu.
+    PromptUser,
+    /// Vocabulary the crate does not know yet.
+    Other(String),
+}
+
+impl QuirkAction {
+    /// Decodes one `action` string.
+    #[must_use]
+    pub fn decode(action: &str) -> Self {
+        match action.trim() {
+            "start_at_8001" => Self::StartAtPort(8001),
+            "start_at_8002" => Self::StartAtPort(8002),
+            "start_at_3000" => Self::StartAtPort(3000),
+            "start_at_3001" => Self::StartAtPort(3001),
+            "auth_not_permitted" => Self::ExpectAuthRequired,
+            "read_device_info_flags" => Self::TrustDeviceInfoFlags,
+            "point_user_at_settings" => Self::PromptUser,
+            other => Self::Other(other.to_string()),
+        }
+    }
+
+    /// The port this action pins, if any.
+    #[must_use]
+    pub fn port(&self) -> Option<u16> {
+        match self {
+            Self::StartAtPort(port) => Some(*port),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for QuirkAction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::StartAtPort(port) => write!(f, "start at {port}"),
+            Self::ExpectAuthRequired => f.write_str("expect auth refusal"),
+            Self::TrustDeviceInfoFlags => f.write_str("trust device-info flags"),
+            Self::PromptUser => f.write_str("prompt the user"),
+            Self::Other(action) => write!(f, "{action}"),
+        }
+    }
+}
+
 /// The loaded table.
 #[derive(Debug, Clone, Default)]
 pub struct Quirks {
@@ -145,6 +206,21 @@ impl Quirks {
             .iter()
             .find(|quirk| quirk.matches(vendor, model, firmware))
     }
+
+    /// The decoded action for a device, or `None` when no row applies.
+    ///
+    /// This is the function a backend calls: [`Quirks::lookup`] returns the row for
+    /// diagnostics, this returns the thing to *do*.
+    #[must_use]
+    pub fn action_for(
+        &self,
+        vendor: &str,
+        model: Option<&str>,
+        firmware: Option<&str>,
+    ) -> Option<QuirkAction> {
+        self.lookup(vendor, model, firmware)
+            .map(|quirk| QuirkAction::decode(&quirk.action))
+    }
 }
 
 /// Why a table could not be loaded.
@@ -171,7 +247,7 @@ impl fmt::Display for Quirk {
 
 #[cfg(test)]
 mod tests {
-    use super::Quirks;
+    use super::{QuirkAction, Quirks};
 
     #[test]
     fn the_bundled_table_parses_and_is_not_empty() {
@@ -179,6 +255,58 @@ mod tests {
         assert!(
             quirks.entries().len() >= 5,
             "the shipped table is the point"
+        );
+    }
+
+    #[test]
+    fn every_shipped_action_decodes_to_known_vocabulary() {
+        // A typo in the table would otherwise turn a workaround into a comment.
+        let quirks = Quirks::bundled().expect("bundled table");
+        for quirk in quirks.entries() {
+            let action = QuirkAction::decode(&quirk.action);
+            assert!(
+                !matches!(action, QuirkAction::Other(_)),
+                "{} ships an action this crate cannot act on: '{}'",
+                quirk.issue,
+                quirk.action
+            );
+        }
+    }
+
+    #[test]
+    fn a_matching_row_becomes_an_action_a_backend_can_use() {
+        let quirks = Quirks::bundled().expect("bundled table");
+
+        // 2020+ Neo QLED: 8001 is dead, so the ladder must not probe it.
+        assert_eq!(
+            quirks.action_for("samsung", Some("QN90A"), Some("T-KTM")),
+            Some(QuirkAction::StartAtPort(8002))
+        );
+        // Older firmware: still TLS-first, same instruction.
+        assert_eq!(
+            quirks.action_for("samsung", None, Some("T-KT")),
+            Some(QuirkAction::StartAtPort(8002))
+        );
+        // webOS 23 drops the plaintext port.
+        assert_eq!(
+            quirks.action_for("lg", None, Some("23")),
+            Some(QuirkAction::StartAtPort(3001))
+        );
+        // No firmware known: the general LG row applies, which asks the user to
+        // change a setting rather than silently doing nothing.
+        assert_eq!(
+            quirks.action_for("lg", None, None),
+            Some(QuirkAction::PromptUser)
+        );
+        // A vendor with no row is not an error.
+        assert_eq!(quirks.action_for("sony", None, None), None);
+    }
+
+    #[test]
+    fn an_unknown_action_is_preserved_rather_than_dropped() {
+        assert_eq!(
+            QuirkAction::decode("some_future_action"),
+            QuirkAction::Other("some_future_action".to_string())
         );
     }
 
