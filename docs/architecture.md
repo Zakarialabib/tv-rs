@@ -1,6 +1,6 @@
 # Architecture
 
-The workspace is eleven published crates, a reference CLI and a task runner,
+The workspace is fourteen published crates, a reference CLI and a task runner,
 arranged in four layers. The layering is a property of the dependency graph, not of
 folders — every package lives at `crates/<dir>` and the shape below is what makes the
 graph valid.
@@ -11,7 +11,7 @@ graph valid.
 |---|---|---|---|
 | **Device model** | `tv-rs-core` | `crates/core` | capabilities, `DeviceHandle`, `CommandId`, confidence-tagged state, the error taxonomy, the mock backend, the conformance suite, the quirks table. **No tokio, in any configuration.** |
 | **Facade** | `tv-rs` | `crates/tv-rs` | the only multi-vendor-aware code: discovery orchestration, `identify_vendor`, `TvClient` dispatch (which implements `DeviceHandle`), quirk-driven port pinning |
-| **Protocol** | `tv-rs-discovery`, `tv-rs-power`, `tv-rs-tizen`, `tv-rs-webos`, `tv-rs-roku`, `tv-rs-cec` | `crates/{discovery,power,tizen,webos,roku,cec}` | one wire protocol each: SSDP, Wake-on-LAN, Tizen remote channel, LG SSAP, Roku ECP, and HDMI-CEC over `cec-client` |
+| **Protocol** | `tv-rs-discovery`, `tv-rs-power`, `tv-rs-tizen`, `tv-rs-webos`, `tv-rs-roku`, `tv-rs-mdc`, `tv-rs-cec` | `crates/{discovery,power,tizen,webos,roku,mdc,cec}` | one wire protocol each: SSDP, Wake-on-LAN, Tizen remote channel, LG SSAP, Roku ECP, Samsung MDC over TCP 1515, and HDMI-CEC over `cec-client` |
 | **Support** | `tv-rs-transport`, `tv-rs-media` | `crates/{transport,media}` | shared plumbing: TLS policy + WebSocket frame reader; an independent HTTP `206`/HLS server |
 | **Reconciliation** | `tv-rs-agent` | `crates/agent` | desired state in, fleet converged: providers, `decide()`, the healer ladder, the JSONL audit log, the loop. Depends on `core` only |
 | **Tooling** | `tv-rs-cli`, `xtask` | `crates/cli`, `xtask` | reference consumer (`publish = false`), workspace automation (`publish = false`) |
@@ -42,6 +42,7 @@ used to suggest otherwise and no longer exists (see
      └────────────────────────────────────────────────────────────┘
 
   discovery, power  ── no dependency on any vendor crate
+  mdc               ── TCP 1515 frames; depends on core, not on transport
   cec               ── shells out to cec-client; no workspace dependency
   media             ── depends on nothing in the workspace (pulls axum)
 ```
@@ -75,6 +76,7 @@ has that concept.
 | `tizen` | ✓ channel/session | ✓ `WebSocketHandshake`, `DialLauncher` | ✓ channel frames | ✓ keys/ports | ✓ | ✓ pairing token |
 | `webos` | ✓ SSAP session | ✓ `SsapController` | ✓ JSON-RPC frames | ✓ `SsapUri` | ✓ | ✓ `client-key` |
 | `roku` | ✓ ECP REST | ✓ `EcpRestClient` | ✓ XML views | ✓ `RokuKey`, paths | ✓ | — |
+| `mdc` | ✓ `MdcClient` + `MdcDevice` | ✓ frame codec + checksum | ✓ `Status` | ✓ `DisplayId`, `InputSource`, `MdcPower` | ✓ `MdcError` | — |
 | `transport` | — | — | — | ✓ `TlsPolicy` | ✓ `Unsupported` | — |
 | `media` | — | — | — | ✓ ranges/segments | — | — |
 | `core` | — | — | — | ✓ ids, capabilities, state | ✓ `TvError` + `Remedy` | — |
@@ -134,4 +136,5 @@ of them each crate implements.
 | §7–8 DLNA control, `206`, HLS | `tv-rs-media` (serving only) + not started (SOAP control) | range + HLS implemented; DLNA `AVTransport`/`RenderingControl` not started |
 | §9 Google Cast / AirPlay | — | not started |
 | HDMI-CEC (no playbook section) | `tv-rs-cec` | power on, standby, active source, over `cec-client` |
+| MDC (no playbook section) | `tv-rs-mdc` | commercial Samsung panels: power, input, volume/mute, brightness, status; display-ID addressing over one socket per wall |
 | §10 undocumented auth | `tizen`, `webos` | deferred, surfaced as typed `Unsupported` errors |

@@ -1,0 +1,24 @@
+[package]
+name = "tv-rs-mdc"
+description = "Samsung Multiple Display Control (MDC) over TCP 1515: frames, display IDs, power, input, volume, mute and brightness."
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["samsung", "mdc", "signage", "display", "tcp"]
+categories = ["api-bindings", "network-programming"]
+
+[dependencies]
+async-trait.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tv-rs-core.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+tv-rs-core = { workspace = true, features = ["conformance", "mock-backend"] }
+
+[lints]
+workspace = true

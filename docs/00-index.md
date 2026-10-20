@@ -1,6 +1,6 @@
 # Documentation
 
-Twelve crates, one facade, one idea: speak each TV's own protocol and never hide a
+Fourteen crates, one facade, one idea: speak each TV's own protocol and never hide a
 failure behind a panic. These pages are the long version of that.
 
 ## Read in this order

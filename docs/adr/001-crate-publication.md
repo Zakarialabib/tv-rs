@@ -55,16 +55,20 @@ crates.io, and Cargo strips `path` from the facade's dependencies at publish
 time, turning them into registry requirements (`tv-rs-discovery = "0.1.0"`).
 The publish will therefore fail with a missing-dependency error.
 
-Correcting this requires publishing all eight packages in dependency order:
+**Resolved.** `cargo xtask publish` publishes every crate in dependency order, and
+the order lives in one place (`xtask/src/main.rs::ORDER`) so it cannot drift from the
+manifests. Current sequence of fourteen:
 
 ```
-tv-rs-transport → tv-rs-discovery → tv-rs-power → tv-rs-roku → tv-rs-tizen
-  → tv-rs-webos → tv-rs → tv-rs-media
+tv-rs-core → tv-rs-transport → tv-rs-discovery → tv-rs-power → tv-rs-local
+  → tv-rs-dlna → tv-rs-roku → tv-rs-mdc → tv-rs-tizen → tv-rs-webos → tv-rs
+  → tv-rs-media → tv-rs-agent → tv-rs-cec
 ```
 
-`tv-rs-transport` leads because the five protocol crates depend on it for the
-shared `Unsupported` error vocabulary; the facade (`tv-rs`) follows its
-dependencies, and `tv-rs-media` is published last.
+`tv-rs-core` leads because every backend and the facade depend on its vocabulary;
+`tv-rs-transport` follows for the crates that open a TLS channel. `tv-rs-local`,
+`tv-rs-dlna`, `tv-rs-media`, `tv-rs-agent` and `tv-rs-cec` are independent leaves,
+and the facade (`tv-rs`) comes after the protocol crates it names.
 
 There is no stable `cargo publish --workspace`, and crates.io has **yank, not
 delete** — so a partial failure burns the version already published. Options are
