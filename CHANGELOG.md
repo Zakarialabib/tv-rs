@@ -6,7 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **`tv-rs-mdc`**: Samsung Multiple Display Control over TCP 1515 — the protocol
+  commercial signage panels actually expose (RJ45; the same frames travel over RS-232).
+  Frame encoding with checksum validation, display-ID addressing including the
+  broadcast address, one shared socket for every panel in a video wall, and power,
+  input, volume, mute, brightness and aggregated status. A `NAK` is returned with its
+  command and error code and the socket stays open, because the wire is still in sync;
+  a timeout or a malformed reply drops the socket so the next command reconnects.
+
+  This is a different protocol from the consumer Tizen channel in `tv-rs-tizen`: no
+  WebSocket, no TLS, no pairing — which is exactly why it exists.
 
 ## [0.2.0] - 2026-10-20
 
