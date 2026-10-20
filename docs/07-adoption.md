@@ -61,14 +61,16 @@ the on-TV prompt (`PAIR_WAIT`). `TizenSession::connect` uses tv-rs's own
 window, or the pairing flow regresses.
 
 > **U0 premise correction (2026-10-20).** This spec assumed `tv-rs` was unpublished
-> and needed a git-SHA pin. It is **published on crates.io at 0.1.0** — the facade and
+> and needed a git-SHA pin. It is **published on crates.io at 0.2.0** — the facade and
 > all eight protocol crates are in the registry cache — so the app depends on the
-> semver `tv-rs = "0.1.0"`. No git pin, no fork, no local path. The facade already
+> semver `tv-rs = "0.2"`. No git pin, no fork, no local path. The facade already
 > exposes the surface U1–U4 need: `discover`, `discover_with`, `identify_vendor`,
 > `TvClient`, `TvError`/`Result`, `DiscoveredTv`, `TvVendor`, plus re-exports of
 > `core`/`discovery`/`power`/`roku`/`tizen`/`webos`.
 > **Scope:** desktop TV/display lane; `tv-rs` as the source of truth for the TV domain.
-> **Roadmap companion:** [`ROADMAP-DESKTOP.md`](../../../Simple-Signage/docs/specs/ROADMAP-DESKTOP.md) §12 (verified `tv-rs` state) and §13 (what is coming).
+> **Roadmap companion:** §12 (verified `tv-rs` state) and §13 (what is coming) of the
+> application's own `docs/specs/ROADMAP-DESKTOP.md`. It is not linked: that file lives
+> in another repository, and a relative path into it renders as a dead link here.
 > **Reference implementation:** `tv-rs` GitHub `fedbf07`, MIT, MSRV `1.89`; app MSRV `1.94`.
 
 ---
@@ -191,12 +193,12 @@ No `tv-rs` crate may depend on an app crate. The app may depend on `tv-rs`; neve
 
 | Crate                            | Current state     | Program role                                                                       |
 | -------------------------------- | ----------------- | ---------------------------------------------------------------------------------- |
-| `tv-rs-core`                     | published `0.1.0` | capability traits, `DeviceHandle`, `TvError`/`Remedy`, `CommandId`, observed state |
-| `tv-rs-discovery`                | published `0.1.0` | SSDP + descriptor parsing; add generic mDNS source later                           |
-| `tv-rs-power`                    | published `0.1.0` | Wake-on-LAN + TCP power/health probe                                               |
-| `tv-rs-transport`                | published `0.1.0` | TLS policy, pinning, frame reader                                                  |
-| `tv-rs-tizen` / `webos` / `roku` | published `0.1.0` | vendor backends, pairing, sessions                                                 |
-| `tv-rs` facade                   | published `0.1.0` | stable `discover` / `TvClient` / `DeviceHandle` surface; semver dependency         |
+| `tv-rs-core`                     | published `0.2.0` | capability traits, `DeviceHandle`, `TvError`/`Remedy`, `CommandId`, observed state |
+| `tv-rs-discovery`                | published `0.2.0` | SSDP + descriptor parsing; add generic mDNS source later                           |
+| `tv-rs-power`                    | published `0.2.0` | Wake-on-LAN + TCP power/health probe                                               |
+| `tv-rs-transport`                | published `0.2.0` | TLS policy, pinning, frame reader                                                  |
+| `tv-rs-tizen` / `webos` / `roku` | published `0.2.0` | vendor backends, pairing, sessions                                                 |
+| `tv-rs` facade                   | published `0.2.0` | stable `discover` / `TvClient` / `DeviceHandle` surface; semver dependency         |
 | `tv-rs-local`                    | **new**           | local EDID/connector probe, adapted from `plugin-display/hardware/probe.rs`        |
 | `tv-rs-media`                    | not adopted       | **No media library in tv-rs.** Signage keeps the media server and content          |
 | `tv-rs-dlna`                     | **new**           | DLNA transport: renderer discovery, AVTransport, GENA; no content store            |
@@ -218,7 +220,7 @@ These are review gates, not suggestions.
 7. **Thin IPC.** Tauri commands validate input, call one adapter, map errors and return DTOs. No protocol code in `commands.rs`.
 8. **No app types in `tv-rs`.** No `AppResult`, `DisplayLinkStatus`, `MediaItem`, `DatabaseManager`, `AppHandle` or `serde` shapes copied from the app.
 9. **Feature-gated platform code.** `tv-rs-local` isolates Windows/Linux platform `unsafe`; `tv-rs-core` keeps `forbid(unsafe_code)`.
-10. **Dependency policy.** Use the published `tv-rs = "0.1.0"` semver dependency; no git pin, fork or local path. Publish `tv-rs-local` and `tv-rs-dlna` when they exist. No floating branch.
+10. **Dependency policy.** Use the published `tv-rs = "0.2"` semver dependency; no git pin, fork or local path. `tv-rs-local` and `tv-rs-dlna` are published at `0.2.0`. No floating branch.
 11. **Every extraction deletes the old path.** A move is not complete while both implementations are reachable.
 12. **CI checks the boundary.** Add a grep/check that rejects the retired symbols and app-only dependencies in `tv-rs`.
 
@@ -228,18 +230,18 @@ These are review gates, not suggestions.
 
 ### U0 - Baseline, dependency and inventory
 
-**Current:** `tv-rs = "0.1.0"` is already a dependency of `plugin-samsung-remote`; the spec and `ROADMAP-DESKTOP.md` §12/§13 are the current plan.
+**Current:** `tv-rs = "0.2"` is already a dependency of `plugin-samsung-remote`; the spec and `ROADMAP-DESKTOP.md` §12/§13 are the current plan.
 
 **Target:**
 
-- Keep the published `tv-rs = "0.1.0"` semver dependency in the lane-owned manifest; no git pin or path override.
+- Keep the published `tv-rs = "0.2"` semver dependency in the lane-owned manifest; no git pin or path override.
 - Record `cargo tree`, license, MSRV and duplicate `tokio-tungstenite` lines.
 - Keep this spec linked from `ROADMAP-DESKTOP.md` §12/§13.
 - Inventory every protocol symbol in the app before deleting anything.
 
 **Acceptance (all green 2026-10-20):**
 
-- [x] `cargo tree -p plugin-samsung-remote -i tv-rs` resolves `tv-rs v0.1.0` + the seven
+- [x] `cargo tree -p plugin-samsung-remote -i tv-rs` resolves `tv-rs v0.2.0` + the seven
       protocol crates (`core`, `discovery`, `power`, `roku`, `tizen`, `transport`, `webos`).
 - [x] `cargo tree -i native-tls` → **empty**. The repo's rustls-only policy holds; tv-rs
       brings no native-tls.
@@ -253,7 +255,7 @@ These are review gates, not suggestions.
 
 | Fact         | Value                                                                                                                                                  |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Dependency   | `tv-rs = "0.1.0"` (crates.io) in `plugin-samsung-remote/Cargo.toml`                                                                                    |
+| Dependency   | `tv-rs = "0.2"` (crates.io) in `plugin-samsung-remote/Cargo.toml`                                                                                    |
 | Upstream     | `https://github.com/Zakarialabib/tv-rs.git`; spec SHA `fedbf07d0fafd9a927a155e98cfc44f4572329b2` (note: `origin/main` is 2 commits ahead at `030600d`) |
 | License      | MIT (workspace) — compatible with the app's `MIT OR Apache-2.0`                                                                                        |
 | MSRV         | `1.89` (app is `1.94` — no conflict)                                                                                                                   |
@@ -374,8 +376,8 @@ consumer benefit; the crate docs state the units. `ProbeInfo` is
 - `cargo test -p tv-rs-local`: 8 unit + 1 doctest pass; `cargo clippy` clean;
   `cargo package --allow-dirty` verifies.
 - App tauri-free harness: 8/8 link tests pass after the re-export.
-- Until `tv-rs-local 0.1.0` is published, the app uses a temporary sibling path
-  dependency. Switch to `tv-rs-local = "0.1.0"` at publish, as rule 10 requires.
+- `tv-rs-local 0.2.0` is published: use the semver dependency
+  (`tv-rs-local = "0.2"`), not a sibling path. The temporary path override is gone.
 
 **App adapter:** `plugin-display/src/hardware/link.rs` maps `ProbeInfo` into `DisplayLinkStatus`; the app keeps `display_id`, binding and `TvAssignment`.
 
@@ -583,7 +585,7 @@ pub async fn subscribe(renderer: &Renderer, callback: &str) -> Result<Subscripti
 6. **Credential abstraction.** Keep vendor-specific stores, or add a generic `PairingStore` trait in `tv-rs-core`. Start vendor-specific; generalize only if both Tizen and webOS need the same shape.
 7. **mDNS scope.** The current app mDNS is `_signagemaster._tcp`, not Cast/AirPlay. Only upstream a generic browser when D7 starts.
 8. **Agent adoption.** Do not adopt `tv-rs-agent` in this program. Revisit after U5 if the app wants fleet reconciliation.
-9. **Publication cadence.** Publish `tv-rs-local` and `tv-rs-dlna` separately when they exist. The facade is already on crates.io at `0.1.0`; use semver, not a git pin. Do not publish a media library crate.
+9. **Publication cadence.** Everything is on crates.io at `0.2.0` — the facade, the fourteen library crates and the two the app needed (`tv-rs-local`, `tv-rs-dlna`). Use semver, not a git pin. Do not publish a media library crate.
 
 ---
 

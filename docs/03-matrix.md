@@ -25,6 +25,20 @@ total — feature unification turns optional features on for the whole graph.
 | `tests/hardware_in_the_loop.rs` | opt-in | 7 (`--features hil`) | real devices, skipped when `TV_RS_HIL_*` is unset |
 | **Total (`cargo test --workspace`)** | | **237 across 29 binaries** | includes doctests and the three `-p tv-rs-media` suites |
 
+## Published (crates.io, 2026-10-20)
+
+| Crate | Version | Note |
+|---|---|---|
+| `tv-rs-core`, `tv-rs-transport`, `tv-rs-discovery`, `tv-rs-power` | `0.2.0` | |
+| `tv-rs-local`, `tv-rs-dlna` | `0.2.0` | first published today (were `0.1.0` for a few hours) |
+| `tv-rs-roku`, `tv-rs-tizen`, `tv-rs-webos` | `0.2.0` | |
+| `tv-rs` (facade), `tv-rs-media`, `tv-rs-agent`, `tv-rs-cec` | `0.2.0` | |
+| `tv-rs-mdc` | **unpublished** | merged; publishes after `tv-rs-core` gains the telemetry/brightness/reboot APIs on the registry |
+| `tv-rs-cli`, `xtask` | — | `publish = false` |
+
+Thirteen crates are installable; the fourteenth exists in git and will publish with the
+next core release.
+
 `cargo check --workspace --all-targets`, `cargo test --workspace`,
 `cargo clippy --workspace --all-targets -- -D warnings` and
 `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` all pass locally and

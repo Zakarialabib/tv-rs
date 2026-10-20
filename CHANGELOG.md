@@ -17,7 +17,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a timeout or a malformed reply drops the socket so the next command reconnects.
 
   This is a different protocol from the consumer Tizen channel in `tv-rs-tizen`: no
-  WebSocket, no TLS, no pairing — which is exactly why it exists.
+  WebSocket, no TLS, no pairing — which is exactly why it exists. Its `DeviceHandle`
+  adapter covers power, input, volume, **brightness**, **reboot** and a control-channel
+  **probe**, and it deliberately does not advertise `Telemetry`: MDC reports no
+  temperature, signal or uptime, so `as_telemetry()` stays `None`.
+- **Telemetry** (`tv-rs-core`): temperature, signal strength, signal quality and
+  uptime, each an `ObservedField` — a panel that stops answering is not cool and
+  well-fed, it is unknown. Plus the `TelemetryProvider` trait and the
+  `Brightness`/`Reboot`/`Telemetry` capabilities, with `BrightnessControl`,
+  `Rebootable` and `Probe` to drive them.
+- **Telemetry policy** (`tv-rs-agent`): `assess_telemetry()` turns a snapshot and
+  thresholds into `Healthy` / `Wait` / `Quarantine` as a pure function — no clock, no
+  counter, no "third reading" state machine. The runner skips a hot panel instead of
+  commanding it, quarantines a critical one, and a failed telemetry read never blocks
+  reconciliation.
+- **`DeviceOs::SamsungMdc`**, because an MDC panel is not "unknown": no pairing, no
+  WebSocket, a display id instead of a remote.
+
+### Changed
+
+- **`Remedy::Quarantine`** joins the taxonomy, and `StateError::Quarantined` maps to
+  it: the capability still exists, the device's condition forbids using it — which is
+  the difference from `Disable`.
+
+### Removed
+
+- **The specification documents** (`docs/spec/00-device-model.md`,
+  `docs/spec/01-reconciliation.md`). They described a model that shipped; the design
+  now lives in rustdoc, `docs/architecture.md` and this file, and `docs/06-plan.md` is
+  the only plan. The adoption contract moved to `docs/07-adoption.md`.
 
 ## [0.2.0] - 2026-10-20
 

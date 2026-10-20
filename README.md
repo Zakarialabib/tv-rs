@@ -9,11 +9,11 @@
 Find the televisions on your LAN and drive them from Rust — discovery, power,
 remote control, fleet reconciliation and media serving, behind one small facade.
 
-> **Version check.** `0.2.0` is on crates.io for all thirteen published crates. The
-> surface this page describes �?" `power_observation()`, the `quirks` feature, `TizenRemote`,
-> `tv-rs-local`, `tv-rs-dlna` �?" first appears in `0.2.0`; if you pin an older version,
-> check [docs.rs](https://docs.rs/tv-rs) for what that version actually has.
-> `tv-rs-mdc` is new on `main` and is not part of the `0.2.0` release.
+> **Version check.** `0.2.0` is on crates.io for thirteen crates; `tv-rs-mdc` is
+> merged in this repository but not yet published. The surface this page describes —
+> `power_observation()`, the `quirks` feature, `TizenRemote`, `tv-rs-local`,
+> `tv-rs-dlna` — first appears in `0.2.0`; if you pin an older version, check
+> [docs.rs](https://docs.rs/tv-rs) for what that version actually has.
 
 ```rust
 use tv_rs::discover;
@@ -83,7 +83,7 @@ it — [`docs/hil-results.md`](docs/hil-results.md) is the table, and it is empt
 
 ```toml
 [dependencies]
-tv-rs = "0.1"           # facade + the protocol crates it dispatches to
+tv-rs = "0.2"           # facade + the protocol crates it dispatches to
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
