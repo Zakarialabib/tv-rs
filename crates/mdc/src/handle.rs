@@ -223,7 +223,7 @@ mod tests {
             MdcClient::new("127.0.0.1").display(DisplayId::new(1).expect("valid display id"));
         let descriptor = DeviceDescriptor::new(
             DeviceId::new("mdc-test-1").expect("valid id"),
-            DeviceOs::Unknown,
+            DeviceOs::SamsungMdc,
             "127.0.0.1:1515",
         );
         let device = MdcDevice::new(client, descriptor);

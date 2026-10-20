@@ -16,10 +16,16 @@ tv-rs-mdc = "0.2"
 - Reads and writes power, input, volume, mute and brightness.
 - Reads the aggregated status command (`0x00`) with typed power, volume, mute,
   input and aspect fields.
-- Exposes `MdcDevice`, a `DeviceHandle` adapter with power, input and volume.
+- Exposes `MdcDevice`, a `DeviceHandle` adapter covering power, input, volume,
+  **brightness**, **reboot** and a **control-channel probe** (`ping()` returns the
+  round trip of a status query), plus identity as `DeviceOs::SamsungMdc`.
 
 ## What it refuses
 
+- **No telemetry.** MDC reports no temperature, signal strength or uptime, so the
+  adapter does not advertise `Capability::Telemetry` and `as_telemetry()` returns
+  `None`. A caller can therefore tell "this backend cannot measure" from "this reading
+  is currently unknown" — the two are different, and only the second is worth retrying.
 - It does not invent a wake path. Samsung documents Wake-on-LAN for a display
   that is off; a TCP MDC frame is not a wake transport, so `wake()` returns
   `Unsupported(Wake)`.
