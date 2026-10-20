@@ -1,16 +1,19 @@
 # Architecture
 
-The workspace is eight published crates plus a task runner, arranged in three
-layers. The layering is a property of the dependency graph, not of folders — every
-package lives at `crates/<dir>` and the shape below is what makes the graph valid.
+The workspace is eleven published crates, a reference CLI and a task runner,
+arranged in four layers. The layering is a property of the dependency graph, not of
+folders — every package lives at `crates/<dir>` and the shape below is what makes the
+graph valid.
 
 ## Layers
 
 | Layer | Crates | Paths | Responsibility |
 |---|---|---|---|
-| **Facade** | `tv-rs` | `crates/tv-rs` | the only multi-vendor-aware code: discovery orchestration, `identify_vendor`, `TvClient` dispatch, `TvError` aggregation |
-| **Protocol** | `tv-rs-discovery`, `tv-rs-power`, `tv-rs-tizen`, `tv-rs-webos`, `tv-rs-roku` | `crates/{discovery,power,tizen,webos,roku}` | one wire protocol each: SSDP, Wake-on-LAN, Tizen remote channel, LG SSAP, Roku ECP |
+| **Device model** | `tv-rs-core` | `crates/core` | capabilities, `DeviceHandle`, `CommandId`, confidence-tagged state, the error taxonomy, the mock backend, the conformance suite, the quirks table. **No tokio, in any configuration.** |
+| **Facade** | `tv-rs` | `crates/tv-rs` | the only multi-vendor-aware code: discovery orchestration, `identify_vendor`, `TvClient` dispatch (which implements `DeviceHandle`), quirk-driven port pinning |
+| **Protocol** | `tv-rs-discovery`, `tv-rs-power`, `tv-rs-tizen`, `tv-rs-webos`, `tv-rs-roku`, `tv-rs-cec` | `crates/{discovery,power,tizen,webos,roku,cec}` | one wire protocol each: SSDP, Wake-on-LAN, Tizen remote channel, LG SSAP, Roku ECP, and HDMI-CEC over `cec-client` |
 | **Support** | `tv-rs-transport`, `tv-rs-media` | `crates/{transport,media}` | shared plumbing: TLS policy + WebSocket frame reader; an independent HTTP `206`/HLS server |
+| **Reconciliation** | `tv-rs-agent` | `crates/agent` | desired state in, fleet converged: providers, `decide()`, the healer ladder, the JSONL audit log, the loop. Depends on `core` only |
 | **Tooling** | `tv-rs-cli`, `xtask` | `crates/cli`, `xtask` | reference consumer (`publish = false`), workspace automation (`publish = false`) |
 
 `discovery` and `power` are **protocol** crates, not support: SSDP and Wake-on-LAN
@@ -21,20 +24,26 @@ used to suggest otherwise and no longer exists (see
 ## Dependency rule
 
 ```
-            ┌───────────────────────────┐
-            │  tv-rs  (facade)          │  the only place that knows >1 vendor
-            └──┬───────┬───────┬────────┘
-               │       │       │
-     ┌─────────▼──┐ ┌──▼─────┐ ┌▼────────┐
-     │ tizen      │ │ webos  │ │ roku    │  protocol crates
-     └─────┬──────┘ └───┬────┘ └────┬────┘
-           │            │           │
-     ┌─────▼────────────▼───────────▼────┐
-     │ transport (TLS, frame reader)     │  support crate
-     └───────────────────────────────────┘
+            ┌───────────────────────────┐        ┌──────────────────────┐
+            │  tv-rs  (facade)          │◀───────│ tv-rs-agent          │
+            └──┬───────┬───────┬────────┘        │ decide() + loop      │
+               │       │       │                 └──────────┬───────────┘
+     ┌─────────▼──┐ ┌──▼─────┐ ┌▼────────┐                   │
+     │ tizen      │ │ webos  │ │ roku    │  protocol crates   │
+     └─────┬──────┘ └───┬────┘ └────┬────┘                   │
+           │            │           │                        │
+     ┌─────▼────────────▼───────────▼────┐                   │
+     │ transport (TLS, frame reader)     │                   │
+     └───────────────────┬───────────────┘                   │
+                         ▼                                   ▼
+     ┌────────────────────────────────────────────────────────────┐
+     │ tv-rs-core: capabilities, DeviceHandle, state, errors       │
+     │ no tokio — the CI gate fails the build if that changes      │
+     └────────────────────────────────────────────────────────────┘
 
   discovery, power  ── no dependency on any vendor crate
-  media             ── depends on nothing in the workspace
+  cec               ── shells out to cec-client; no workspace dependency
+  media             ── depends on nothing in the workspace (pulls axum)
 ```
 
 1. **Protocol crates never depend on each other.** Tizen does not know webOS
@@ -46,6 +55,12 @@ used to suggest otherwise and no longer exists (see
 4. **`media` must never appear in a protocol crate's graph.** It pulls `axum`; a
    control crate that pulled `axum` would ship a web server to consumers who only
    wanted a remote control.
+5. **`core` is tokio-free in every configuration**, and CI checks the graph rather
+   than the intent (`cargo tree -p tv-rs-core`). An application that wants only the
+   device model — a CMS building its own fleet layer — gets no runtime.
+6. **`cec` does not link libcec.** It spawns `cec-client`, which keeps `unsafe` and a
+   C toolchain out of the workspace; a missing binary is a typed `Unavailable`, not a
+   build failure.
 
 ## Module inventory
 
@@ -62,6 +77,9 @@ has that concept.
 | `roku` | ✓ ECP REST | ✓ `EcpRestClient` | ✓ XML views | ✓ `RokuKey`, paths | ✓ | — |
 | `transport` | — | — | — | ✓ `TlsPolicy` | ✓ `Unsupported` | — |
 | `media` | — | — | — | ✓ ranges/segments | — | — |
+| `core` | — | — | — | ✓ ids, capabilities, state | ✓ `TvError` + `Remedy` | — |
+| `agent` | — | — | ✓ desired-state JSON | ✓ `Decision`, `Outcome` | ✓ provider errors | — |
+| `cec` | ✓ `CecClient` (in `lib.rs`) | ✓ `cec-client` grammar | — | ✓ `CecAddress` | ✓ | — |
 
 **The auth rule.** An `auth.rs` exists only where the protocol performs a real
 credential handshake: Tizen issues a pairing token, webOS returns a `client-key`.
@@ -72,7 +90,10 @@ for exactly that reason.
 Additional files that exist where a protocol needs them, not by convention:
 `tizen/token_store.rs` (pairing persistence), `tizen/pool.rs` (one channel per TV),
 `tizen/discovery.rs` (Samsung's private SSDP target), `tizen/apps.rs` (app-id
-presets), `media/{range,hls,server}.rs` (the three things a TV player demands).
+presets), `media/{range,hls,server}.rs` (the three things a TV player demands),
+`core/{mock,conformance,quirks}.rs` (the parts that exist for tests and for the
+quirks table), `agent/{desired,healer,audit,reconciler,runner}.rs` (the loop and its
+pure core), `cec/transport.rs` (the `cec-client` invocation).
 
 ## Directory naming
 
@@ -112,4 +133,5 @@ of them each crate implements.
 | §6 Android TV ADB | — | not started |
 | §7–8 DLNA control, `206`, HLS | `tv-rs-media` (serving only) + not started (SOAP control) | range + HLS implemented; DLNA `AVTransport`/`RenderingControl` not started |
 | §9 Google Cast / AirPlay | — | not started |
+| HDMI-CEC (no playbook section) | `tv-rs-cec` | power on, standby, active source, over `cec-client` |
 | §10 undocumented auth | `tizen`, `webos` | deferred, surfaced as typed `Unsupported` errors |
