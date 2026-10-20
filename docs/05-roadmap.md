@@ -6,6 +6,28 @@ already admits — and what it would cost.
 
 Ordered by *value per unit of work*, which is why the boring ones are first.
 
+## Where these stand (2026-10-20)
+
+Checked against `main` the day `0.1.0` was published. "Landed" means a test or a gate
+would fail if the claim stopped being true; the proposal text below is left as it was
+written, so its reasoning is still readable.
+
+| | Proposal | Status |
+|---|---|---|
+| P0 | facade volume / mute / input / app list | **partly open** — `open_url()` landed; volume, mute, input and `apps()` exist only behind the vendor accessors |
+| P1 | errors that tell an app what to do | **landed in `tv-rs-core`** — six-variant `TvError` + `Remedy` routing; Roku's 403 already names the *Control by mobile apps* setting. The facade still returns vendor errors verbatim, so an app matching on `Remedy` must go through `DeviceHandle` |
+| P2 | `tv-rs doctor` | **open** |
+| P3 | fleet operations | **landed** — `tv-rs-agent`: providers, pure `decide()`, healer ladder, JSONL audit, 24-hour/50-device simulation |
+| P4 | device identity | **landed** — `DeviceId`, `DeviceDescriptor`, `DeviceOs` in `tv-rs-core`; `DeviceHandle::id()` |
+| P5 | event subscriptions | **open** — the agent polls, which is right at 60 s and wrong for an instant UI |
+| P6 | one credential store | **open** — tokens and `client-key`s are still per-crate |
+| P7 | panel control | **partly landed** — HDMI-CEC (`tv-rs-cec`) covers power and active source; no brightness/colour, which is vendor-specific everywhere |
+| P8 | DLNA server | **open here** — `tv-rs-media` serves `206`/HLS only |
+| P9 | more vendors | **open** — Android TV, Cast and AirPlay are each a separate trust model and crate |
+
+Two proposals in P0 and one in P1 are worth revisiting in that light: the facade's
+surface is now the *portable* subset, and everything vendor-shaped is deliberate.
+
 ---
 
 ## P0 — Finish the facade's vocabulary (small)

@@ -107,3 +107,59 @@ unless `--features hil` is on. Where: [`tests/hardware_in_the_loop.rs`](../crate
 dependencies resolvable on crates.io. Where: [`cargo xtask publish`](adr/001-crate-publication.md), [ADR-001](adr/001-crate-publication.md).
 
 **Gates** — fmt, clippy, tests, rustdoc. Where: [CONTRIBUTING](../CONTRIBUTING.md).
+
+## Device model (the v2 spec's vocabulary)
+
+**`Capability` / `CapabilitySet`** — what a *device* can do, independent of vendor:
+`PowerState`, `Wake`, `Key`, `AppLaunch`, `Foreground`, `Volume`, `InputSelect`.
+A `TvClient` advertises exactly the set its vendor supports, and the trait methods
+enforce it — asking outside the set is `TvError::Unsupported`, not a silent no-op.
+Where: `crates/core/src/capability.rs`.
+
+**`DeviceHandle`** — the erased handle a fleet holds: `Arc<dyn DeviceHandle>` plus the
+five capability traits (`PowerControl`, `KeyInput`, `AppLaunch`, `InputSelect`,
+`VolumeControl`). No generics, no vendor enum in the type. Where:
+`crates/core/src/capability.rs`, implemented for `TvClient` in `crates/tv-rs/src/handle.rs`.
+
+**`CommandId`** — the caller's correlation id for a command. The contract is explicit:
+backends do **not** deduplicate, so a retry is a second press unless the caller checks.
+Where: `crates/core/src/command.rs`.
+
+**`Confidence`** — how a value was learned: `High` (the device reported it), `Inferred`
+(a write was accepted, or a probe answered), `Unknown` (nothing, or the value aged
+out). `ObservedField<T>` carries it with `value` and `last_verified_at`.
+
+**`ObservedField` / `ObservedState`** — a confidence-tagged reading. The constructors
+are the discipline: `from_read` is the only one that yields `High`;
+`from_unverified_write` and `from_toggle` yield `Inferred`; `from_inference` is for
+side channels such as the TCP power probe. Where: `crates/core/src/state.rs`.
+
+**`power_observation()`** — the facade call that returns the power state *and* its
+confidence. `power_state()` is a projection of it, so the two cannot disagree.
+
+**`Quirk` / `QuirkAction`** — a model/firmware defect and what to do about it, as data
+(`quirks/default.toml`). `QuirkAction` decodes the row's `action` into something code
+can obey — `StartAtPort`, `ExpectAuthRequired`, `TrustDeviceInfoFlags`, `PromptUser` —
+and a test refuses any shipped action the crate cannot act on.
+
+**Pinned port** — `TizenClient::pinned_port` / `WebosClient::pinned_port`: use exactly
+one port, no ladder. The facade sets it from a quirk row, so a firmware that dropped
+8001 never costs a refused connection.
+
+**`decide()` / `Reconciler`** — the agent's pure core and its loop.
+`decide(desired, observed, capabilities) -> Decision` touches no I/O;
+`Reconciler::tick()` runs one pass over the fleet and `run(stop)` repeats it.
+Where: `crates/agent/src/`.
+
+**`Provider`** — where desired state comes from: `StaticFileProvider`,
+`HttpPollProvider` (feature `http`), `MqttSubscribeProvider` (feature `mqtt`). The
+library owns the loop; the product owns the source.
+
+**`HealerLadder` / `Remedy`** — the escalation from a failure to an action:
+`Retry`, `BackOff`, `Reprovision`, `Wait`, `Disable`, `ApplyQuirk`. A missing or
+expired credential is `Reprovision`, never `Retry`: retrying a dead token is how a
+fleet locks a device out.
+
+**Conformance suite** — the shared test every `DeviceHandle` must pass (capability and
+accessor agreement, unsupported routing, identity stability), behind the
+`conformance` feature. Where: `crates/core/src/conformance.rs`.
