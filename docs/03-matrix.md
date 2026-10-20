@@ -121,8 +121,14 @@ Rows are keyed on what discovery can actually supply. The UPnP descriptor gives
 
 ## Next
 
-| Task                          | Why                                                    | Size           |
-| ----------------------------- | ------------------------------------------------------ | -------------- |
-| mDNS listener                 | AirPlay/Cast devices are invisible to `discover()`     | small          |
-| More `SsapUri` variants       | input/source switching is the most requested webOS gap | small          |
-| Real-device verification pass | the only way to close limitation 1                     | needs hardware |
+Six items, and the live plan owns them: [`06-plan.md`](06-plan.md). The two that are
+*not* there, on purpose:
+
+| Task | Why it is not on the plan |
+|---|---|
+| mDNS listener | nothing consumes it yet; AirPlay/Cast would need their own crates first |
+| More `SsapUri` variants | input switching has no consumer demanding it, and every variant is a protocol claim that needs hardware to verify |
+
+Everything else — telemetry, MDC serial, Sony Bravia, native CEC, DDC/CI, the
+real-device verification pass, the next release — is sequenced there with exit
+criteria.

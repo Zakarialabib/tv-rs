@@ -287,7 +287,7 @@ the page that explains it.
 | [`docs/spec/00-device-model.md`](docs/spec/00-device-model.md)     | the device-model specification: capabilities, confidence, agent               |
 | [`docs/spec/01-reconciliation.md`](docs/spec/01-reconciliation.md) | the Phase 0 audit: every symbol's destination                                 |
 | [`docs/03-matrix.md`](docs/03-matrix.md)                           | what is done, what is deferred, verified test counts                          |
-| [`docs/05-roadmap.md`](docs/05-roadmap.md)                         | what to add next, with the evidence and the cost                              |
+| [`docs/06-plan.md`](docs/06-plan.md)                         | **the live plan**: only open work, with exit criteria          |
 | [`QUIRKS.md`](QUIRKS.md)                                           | how to submit a model/firmware defect                                         |
 | [`docs/02-external-refs.md`](docs/02-external-refs.md)             | protocol references and prior art                                             |
 
