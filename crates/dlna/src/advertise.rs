@@ -123,7 +123,10 @@ pub fn search_response(cfg: &AdvertiseConfig, st: &str) -> String {
     // device type keeps the responder one-packet and every receiver happy
     // (controllers dedupe by USN anyway).
     let (resp_st, usn) = if st.eq_ignore_ascii_case("ssdp:all") {
-        (cfg.device_type.clone(), format!("{}::{}", cfg.udn, cfg.device_type))
+        (
+            cfg.device_type.clone(),
+            format!("{}::{}", cfg.udn, cfg.device_type),
+        )
     } else {
         (st.to_string(), format!("{}::{}", cfg.udn, st))
     };
@@ -319,13 +322,25 @@ mod tests {
         let c = cfg();
         assert!(should_respond("ssdp:all", &c));
         assert!(should_respond("upnp:rootdevice", &c));
-        assert!(should_respond("urn:schemas-upnp-org:device:MediaServer:1", &c));
+        assert!(should_respond(
+            "urn:schemas-upnp-org:device:MediaServer:1",
+            &c
+        ));
         assert!(should_respond("SSDP:ALL", &c)); // header match is case-insensitive
-        // Other vendors' device types are somebody else's device: answering those
-        // would confuse their controllers.
-        assert!(!should_respond("urn:samsung-com:device:RemoteControlReceiver:1", &c));
-        assert!(!should_respond("urn:schemas-upnp-org:device:MediaRenderer:1", &c));
-        assert!(!should_respond("urn:schemas-upnp-org:service:ContentDirectory:1", &c));
+                                                 // Other vendors' device types are somebody else's device: answering those
+                                                 // would confuse their controllers.
+        assert!(!should_respond(
+            "urn:samsung-com:device:RemoteControlReceiver:1",
+            &c
+        ));
+        assert!(!should_respond(
+            "urn:schemas-upnp-org:device:MediaRenderer:1",
+            &c
+        ));
+        assert!(!should_respond(
+            "urn:schemas-upnp-org:service:ContentDirectory:1",
+            &c
+        ));
     }
 
     #[test]
@@ -335,10 +350,16 @@ mod tests {
         let mut c = cfg();
         c.device_type = "urn:example-com:device:CustomSignage:2".to_string();
         assert!(should_respond("urn:example-com:device:CustomSignage:2", &c));
-        assert!(should_respond("uuid:11111111-2222-3333-4444-555555555555", &c));
+        assert!(should_respond(
+            "uuid:11111111-2222-3333-4444-555555555555",
+            &c
+        ));
         // The MediaServer const branch stays: we ARE a MediaServer and generic
         // controllers search for exactly that ST.
-        assert!(should_respond("urn:schemas-upnp-org:device:MediaServer:1", &c));
+        assert!(should_respond(
+            "urn:schemas-upnp-org:device:MediaServer:1",
+            &c
+        ));
     }
 
     #[test]

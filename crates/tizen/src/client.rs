@@ -812,16 +812,12 @@ mod tests {
         assert_eq!(value["params"]["to"], "host");
         assert_eq!(value["params"]["data"]["appId"], "1110110");
         assert_eq!(value["params"]["data"]["action_type"], "DEEP_LINK");
-        assert_eq!(
-            value["params"]["data"]["metaTag"],
-            "https://example.test"
-        );
+        assert_eq!(value["params"]["data"]["metaTag"], "https://example.test");
     }
 
     #[test]
     fn legacy_launch_payload_keeps_old_wire_shape() {
-        let value = serde_json::to_value(build_legacy_launch_payload("1110110"))
-            .expect("to_value");
+        let value = serde_json::to_value(build_legacy_launch_payload("1110110")).expect("to_value");
         assert_eq!(value["event"], "ms.channel.launch");
         assert_eq!(value["data"], "1110110");
         assert_eq!(value["id"], 0);
@@ -839,7 +835,10 @@ mod tests {
             r#"{"event":"ms.channel.connect","data":{"deviceName":"  Kitchen TV  "}}"#,
         )
         .expect("parse");
-        assert_eq!(extract_tv_name(&device_named).as_deref(), Some("Kitchen TV"));
+        assert_eq!(
+            extract_tv_name(&device_named).as_deref(),
+            Some("Kitchen TV")
+        );
     }
 
     #[test]

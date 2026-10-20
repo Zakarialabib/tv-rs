@@ -18,7 +18,7 @@
 //!
 //! It is **not** a media server and holds no library: no `MediaItem`, no
 //! ContentDirectory, no HTTP file serving, no 206 range responses, no database
-//! handle, no content root. [`advertise`] announces whatever service the caller
+//! handle, no content root. [`advertise()`] announces whatever service the caller
 //! points `AdvertiseConfig::location` at, [`soap`] pushes whatever URI the
 //! caller hands in — whether that URI is backed by a media library is entirely
 //! the caller's business (see the Signage adoption spec, fixed boundary §2.2 —
@@ -42,16 +42,12 @@
 
 #![forbid(unsafe_code)]
 
-/// Error type for DLNA transport operations.
-pub mod error;
+/// SSDP advertisement for a MediaServer we host (alive/byebye + M-SEARCH responder).
+pub mod advertise;
 /// SSDP discovery of MediaRenderers + device-description parsing.
 pub mod discovery;
-/// transport state models (`Renderer`).
-pub mod models;
-/// DIDL-Lite metadata generation for `SetAVTransportURI`.
-pub mod metadata;
-/// AVTransport SOAP control (`SetAVTransportURI` / `Play` / `Pause` / `Stop` / `Seek`).
-pub mod soap;
+/// Error type for DLNA transport operations.
+pub mod error;
 /// UPnP GENA eventing: request builders, parsers, subscription lifetime.
 pub mod gena;
 /// GENA HTTP client: SUBSCRIBE / renew / UNSUBSCRIBE.
@@ -60,8 +56,12 @@ pub mod gena_client;
 pub mod gena_parse;
 /// GENA subscription registry + renewal scheduling (pure bookkeeping).
 pub mod gena_registry;
-/// SSDP advertisement for a MediaServer we host (alive/byebye + M-SEARCH responder).
-pub mod advertise;
+/// DIDL-Lite metadata generation for `SetAVTransportURI`.
+pub mod metadata;
+/// transport state models (`Renderer`).
+pub mod models;
+/// AVTransport SOAP control (`SetAVTransportURI` / `Play` / `Pause` / `Stop` / `Seek`).
+pub mod soap;
 
 pub use advertise::{
     advertise, alive_datagrams, byebye_datagrams, parse_msearch_st, search_response,
@@ -71,9 +71,9 @@ pub use discovery::{discover_renderers, discover_renderers_with_retries};
 pub use error::{DlnaError, Result};
 pub use gena::{
     parse_timeout_header, Subscription, TransportEvent, TransportState, AV_TRANSPORT_SERVICE,
-    REQUESTED_TIMEOUT_SECS, RENEW_MARGIN_FRACTION,
+    RENEW_MARGIN_FRACTION, REQUESTED_TIMEOUT_SECS,
 };
-pub use gena_client::{renew, subscribe_renderer, unsubscribe, subscribe as subscribe_raw};
+pub use gena_client::{renew, subscribe as subscribe_raw, subscribe_renderer, unsubscribe};
 pub use gena_parse::parse_notify_body;
 pub use gena_registry::{
     next_tick_delay as next_subscription_tick, plan_action, SubscriptionAction,
@@ -86,6 +86,6 @@ pub use soap::{
 };
 
 #[cfg(test)]
-mod gena_tests;
-#[cfg(test)]
 mod gena_registry_tests;
+#[cfg(test)]
+mod gena_tests;

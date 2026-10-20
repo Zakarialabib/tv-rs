@@ -38,7 +38,11 @@ pub async fn discover_renderers(timeout: Duration) -> Result<Vec<Renderer>, Dlna
     }
 
     let multicast: std::net::SocketAddr = SSDP_ADDR.parse().expect("valid SSDP addr");
-    if socket.send_to(SSDP_MSEARCH.as_bytes(), multicast).await.is_err() {
+    if socket
+        .send_to(SSDP_MSEARCH.as_bytes(), multicast)
+        .await
+        .is_err()
+    {
         return Err(DlnaError::MulticastBlocked);
     }
 
@@ -180,17 +184,14 @@ async fn fetch_device_description(location: &str) -> Result<Renderer, DlnaError>
         .unwrap_or_default();
 
     // Extract the AVTransport control URL so the device is immediately castable.
-    let av_transport_url =
-        crate::soap::extract_av_transport_control_url(&body, location).ok();
+    let av_transport_url = crate::soap::extract_av_transport_control_url(&body, location).ok();
 
     // And its eventSubURL, so the caller can SUBSCRIBE for state changes
     // without re-fetching the description. `.ok()` because eventing is optional: a
     // renderer may support control but not events, and that must not block casting.
     let event_sub_url = crate::gena::extract_event_sub_url(&body, location).ok();
 
-    let mut renderer = Renderer::new(
-        udn, friendly_name, manufacturer, model_name, ip, location,
-    );
+    let mut renderer = Renderer::new(udn, friendly_name, manufacturer, model_name, ip, location);
     renderer.av_transport_url = av_transport_url;
     renderer.event_sub_url = event_sub_url;
     Ok(renderer)
@@ -286,6 +287,9 @@ mod tests {
     #[test]
     fn extracts_xml_with_cdata() {
         let xml = "<modelName><![CDATA[OLED55C3]]></modelName>";
-        assert_eq!(extract_xml_text(xml, "modelName"), Some("OLED55C3".to_string()));
+        assert_eq!(
+            extract_xml_text(xml, "modelName"),
+            Some("OLED55C3".to_string())
+        );
     }
 }

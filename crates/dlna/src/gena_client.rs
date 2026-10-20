@@ -37,10 +37,7 @@ const HTTP_TIMEOUT: Duration = Duration::from_secs(5);
 /// `localhost`. The renderer opens a fresh TCP connection back to it, so a
 /// loopback callback silently yields a subscription that never delivers
 /// anything.
-pub async fn subscribe(
-    event_sub_url: &str,
-    callback_url: &str,
-) -> Result<Subscription, DlnaError> {
+pub async fn subscribe(event_sub_url: &str, callback_url: &str) -> Result<Subscription, DlnaError> {
     let client = build_client()?;
 
     let response = client
@@ -50,9 +47,7 @@ pub async fn subscribe(
         .header("TIMEOUT", timeout_header())
         .send()
         .await
-        .map_err(|e| {
-            DlnaError::SoapError(format!("SUBSCRIBE to {event_sub_url} failed: {e}"))
-        })?;
+        .map_err(|e| DlnaError::SoapError(format!("SUBSCRIBE to {event_sub_url} failed: {e}")))?;
 
     let status = response.status();
     if !status.is_success() {
@@ -88,15 +83,12 @@ pub async fn subscribe_renderer(
     renderer: &Renderer,
     callback_url: &str,
 ) -> Result<Subscription, DlnaError> {
-    let event_sub_url = renderer
-        .event_sub_url
-        .as_deref()
-        .ok_or_else(|| {
-            DlnaError::SoapError(format!(
-                "renderer {} offers no AVTransport eventing",
-                renderer.friendly_name
-            ))
-        })?;
+    let event_sub_url = renderer.event_sub_url.as_deref().ok_or_else(|| {
+        DlnaError::SoapError(format!(
+            "renderer {} offers no AVTransport eventing",
+            renderer.friendly_name
+        ))
+    })?;
     subscribe(event_sub_url, callback_url).await
 }
 

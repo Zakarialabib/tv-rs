@@ -15,7 +15,7 @@ tv-rs-core = { path = "crates/core", version = "0.1.0" }
 tv-rs-discovery = { path = "crates/discovery", version = "0.1.0" }
 tv-rs-power = { path = "crates/power", version = "0.1.0" }
 tv-rs-roku = { path = "crates/roku", version = "0.1.0" }
-tv-rs-tizen = { path = "crates/tizen", version = "0.1.0" }
+tv-rs-tizen = { path = "crates/tizen", version = "0.2.0" }
 tv-rs-webos = { path = "crates/webos", version = "0.1.0" }
 # Local display probe: no network, no TV control. Published separately.
 tv-rs-local = { path = "crates/local", version = "0.1.0" }

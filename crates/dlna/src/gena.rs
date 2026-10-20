@@ -20,6 +20,18 @@
 //! Pure request builders and response parsers live here, free of HTTP — the
 //! network calls are thin wrappers in [`crate::gena_client`].
 
+/// Decodes a text event and resolves XML entities.
+///
+/// `quick-xml` 0.41 split the old `unescape()` into decoding (bytes -> str) and
+/// entity resolution (`escape::unescape`). Malformed entities fall back to the empty
+/// string, which is what the previous single-call version did.
+fn text_of(t: &quick_xml::events::BytesText<'_>) -> String {
+    let decoded = t.decode().unwrap_or_default();
+    quick_xml::escape::unescape(&decoded)
+        .map(|unescaped| unescaped.into_owned())
+        .unwrap_or_default()
+}
+
 use std::time::{Duration, SystemTime};
 
 use crate::error::DlnaError;
@@ -252,7 +264,7 @@ pub fn extract_event_sub_url(description_xml: &str, base_url: &str) -> Result<St
                 if !in_service {
                     continue;
                 }
-                let text = t.unescape().unwrap_or_default().to_string();
+                let text = text_of(t);
                 match last_tag.to_ascii_lowercase().as_str() {
                     "servicetype" => service_type = text,
                     "eventsuburl" => event_url = text,
