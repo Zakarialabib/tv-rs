@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Graduated remediation ladder** (`tv-rs-agent::remedy`): the agent no longer stops
+  at a telemetry verdict. A panel that is hot but not critical is **dimmed**
+  (`Capability::Brightness`) and deferred; a panel whose temperature or link is
+  critical is **rebooted once** and quarantined either way, because a wedged panel
+  often answers after a restart; a live input whose player stopped can be
+  **restarted** (`Capability::Key`). Every rung is a pure function of (snapshot,
+  verdict, capabilities) and a rung whose capability is missing is skipped, never
+  faked — a panel that cannot dim is not "dimmed" by a log line. The audit entry names
+  the step that ran (`telemetry_dim`, `telemetry_restart`, `telemetry_reboot`) or the
+  verdict alone (`telemetry_wait`, `telemetry_quarantine`) when there was nothing to
+  do.
+
 ## [0.3.0] - 2026-10-21
 
 Fourteen crates. The telemetry lane lands (`tv-rs-core` telemetry + capabilities,

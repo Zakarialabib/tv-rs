@@ -41,6 +41,7 @@ pub mod http_provider;
 #[cfg(feature = "mqtt")]
 pub mod mqtt_provider;
 pub mod reconciler;
+pub mod remedy;
 pub mod runner;
 pub mod telemetry;
 
@@ -54,5 +55,6 @@ pub use http_provider::HttpPollProvider;
 #[cfg(feature = "mqtt")]
 pub use mqtt_provider::MqttSubscribeProvider;
 pub use reconciler::{decide, Decision};
+pub use remedy::{plan_remedy, symptom, RemedyPolicy, RemedyStep, Symptom};
 pub use runner::{Outcome, ReconcilePolicy, Reconciler};
 pub use telemetry::{assess_telemetry, TelemetryPolicy, TelemetryVerdict};

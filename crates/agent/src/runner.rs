@@ -8,12 +8,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::oneshot;
-use tv_rs_core::{Capability, DeviceHandle, ObservedField, ObservedState};
+use tv_rs_core::{Capability, CommandId, DeviceHandle, ObservedField, ObservedState, Telemetry};
 
 use crate::audit::{AuditEntry, AuditLog};
 use crate::desired::DesiredStateProvider;
 use crate::healer::{HealerAction, HealerLadder};
 use crate::reconciler::{decide, Decision};
+use crate::remedy::{plan_remedy, RemedyPolicy, RemedyStep};
 use crate::telemetry::{assess_telemetry, TelemetryPolicy, TelemetryVerdict};
 
 /// How hard the loop pushes.
@@ -25,6 +26,8 @@ pub struct ReconcilePolicy {
     pub max_failures: u32,
     /// Telemetry thresholds, or `None` to skip telemetry checks entirely.
     pub telemetry: Option<TelemetryPolicy>,
+    /// The numbers the remediation ladder needs (the dim target).
+    pub remedy: RemedyPolicy,
 }
 
 impl Default for ReconcilePolicy {
@@ -33,6 +36,7 @@ impl Default for ReconcilePolicy {
             tick: Duration::from_secs(60),
             max_failures: 3,
             telemetry: Some(TelemetryPolicy::default()),
+            remedy: RemedyPolicy::default(),
         }
     }
 }
@@ -147,13 +151,59 @@ impl Reconciler {
     /// A telemetry read failure is deliberately ignored: diagnostics must not turn a
     /// healthy screen into a failed reconciliation. The normal power probe still
     /// runs and will surface a genuinely unreachable device.
-    async fn telemetry_verdict(&self, handle: &dyn DeviceHandle) -> Option<TelemetryVerdict> {
+    async fn telemetry_assessment(
+        &self,
+        handle: &dyn DeviceHandle,
+    ) -> Option<(Telemetry, TelemetryVerdict)> {
         let policy = self.policy.telemetry.as_ref()?;
         let provider = handle.as_telemetry()?;
         match provider.telemetry().await {
-            Ok(telemetry) => Some(assess_telemetry(&telemetry, policy)),
+            Ok(telemetry) => {
+                let verdict = assess_telemetry(&telemetry, policy);
+                Some((telemetry, verdict))
+            }
             Err(_) => None,
         }
+    }
+
+    /// Applies the ladder's step for this verdict, when the device can take one.
+    ///
+    /// Returns the step that was attempted, so the caller can record what the agent
+    /// actually did rather than what it intended. A failed remedy is not a failed
+    /// reconciliation: the device is deferred or quarantined either way, and the
+    /// reason stays the telemetry verdict's.
+    async fn apply_remedy(
+        &self,
+        handle: &dyn DeviceHandle,
+        telemetry: &Telemetry,
+        verdict: TelemetryVerdict,
+    ) -> Option<(RemedyStep, Result<(), tv_rs_core::TvError>)> {
+        let policy = self.policy.telemetry.as_ref()?;
+        let step = plan_remedy(
+            telemetry,
+            verdict,
+            handle.capabilities(),
+            policy,
+            &self.policy.remedy,
+        )?;
+        let outcome = match step {
+            RemedyStep::DimBacklight { to } => match handle.as_brightness() {
+                Some(brightness) => brightness.set_brightness(to, CommandId::new()).await,
+                None => Err(tv_rs_core::TvError::Unsupported(Capability::Brightness)),
+            },
+            RemedyStep::RestartPlayback => match handle.as_key() {
+                Some(keys) => {
+                    keys.key_press(tv_rs_core::Key::Play, CommandId::new())
+                        .await
+                }
+                None => Err(tv_rs_core::TvError::Unsupported(Capability::Key)),
+            },
+            RemedyStep::RebootPanel => match handle.as_reboot() {
+                Some(reboot) => reboot.reboot(CommandId::new()).await,
+                None => Err(tv_rs_core::TvError::Unsupported(Capability::Reboot)),
+            },
+        };
+        Some((step, outcome))
     }
 
     async fn reconcile_one(&mut self, handle: &dyn DeviceHandle) -> Outcome {
@@ -183,39 +233,37 @@ impl Reconciler {
             }
         };
 
-        if let Some(verdict) = self.telemetry_verdict(handle).await {
+        if let Some((telemetry, verdict)) = self.telemetry_assessment(handle).await {
             match verdict {
                 TelemetryVerdict::Healthy => {}
                 TelemetryVerdict::Wait(reason) => {
-                    self.record(
-                        &key,
-                        &describe(&desired),
-                        "telemetry_wait",
-                        "deferred",
-                        "unknown",
-                    )
-                    .await;
+                    // Rung 1: a hot panel is dimmed before it is given up on. The
+                    // device is still deferred either way — the remedy buys it a
+                    // chance, it does not prove the panel recovered.
+                    let remedy = self.apply_remedy(handle, &telemetry, verdict).await;
+                    let (action, error) = describe_remedy("telemetry_wait", reason, remedy);
+                    self.record(&key, &describe(&desired), action, "deferred", "unknown")
+                        .await;
                     return Outcome {
                         device: key,
                         action: None,
                         result: "deferred",
-                        error: Some(reason.to_string()),
+                        error: Some(error),
                     };
                 }
                 TelemetryVerdict::Quarantine(reason) => {
-                    self.record(
-                        &key,
-                        &describe(&desired),
-                        "telemetry_quarantine",
-                        "quarantined",
-                        "unknown",
-                    )
-                    .await;
+                    // Rung 3, and the only one this path takes: a wedged panel often
+                    // answers after a restart, and a panel that stays critical is
+                    // quarantined regardless of whether the reboot helped.
+                    let remedy = self.apply_remedy(handle, &telemetry, verdict).await;
+                    let (action, error) = describe_remedy("telemetry_quarantine", reason, remedy);
+                    self.record(&key, &describe(&desired), action, "quarantined", "unknown")
+                        .await;
                     return Outcome {
                         device: key,
                         action: None,
                         result: "quarantined",
-                        error: Some(reason.to_string()),
+                        error: Some(error),
                     };
                 }
             }
@@ -333,13 +381,45 @@ fn describe(desired: &crate::desired::DesiredState) -> String {
     }
 }
 
+/// The audit label for a ladder step: what was *done*, not what was intended.
+fn remedy_label(step: RemedyStep) -> &'static str {
+    match step {
+        RemedyStep::DimBacklight { .. } => "telemetry_dim",
+        RemedyStep::RestartPlayback => "telemetry_restart",
+        RemedyStep::RebootPanel => "telemetry_reboot",
+    }
+}
+
+/// The audit label and error text for a telemetry pass, given what the ladder did.
+///
+/// `base` is used when the device could not take any step — an absent remedy is an
+/// honest "nothing this ladder can do", and the audit line should say exactly that
+/// rather than claim a rung that never ran.
+fn describe_remedy(
+    base: &'static str,
+    reason: &'static str,
+    remedy: Option<(RemedyStep, Result<(), tv_rs_core::TvError>)>,
+) -> (&'static str, String) {
+    match remedy {
+        None => (base, reason.to_string()),
+        Some((step, Ok(()))) => (
+            remedy_label(step),
+            format!("{reason}; applied {}", step.as_str()),
+        ),
+        Some((step, Err(error))) => (
+            remedy_label(step),
+            format!("{reason}; {} failed: {error}", step.as_str()),
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
     use tv_rs_core::capability::CapabilitySet;
     use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs};
-    use tv_rs_core::mock::{Failure, MockBackend};
+    use tv_rs_core::mock::{Action, Failure, MockBackend};
     use tv_rs_core::{Capability, Telemetry};
 
     use super::*;
@@ -410,6 +490,7 @@ mod tests {
                 tick: Duration::from_millis(1),
                 max_failures: 3,
                 telemetry: None,
+                remedy: RemedyPolicy::default(),
             },
         );
 
@@ -467,7 +548,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_hot_panel_is_deferred_without_a_command() {
+    async fn a_hot_panel_is_dimmed_and_deferred() {
         let (provider, dir) = provider_for(r#"{"tv-hot":{"power":"on","app":"netflix"}}"#).await;
         let mock =
             Arc::new(MockBackend::new(descriptor("tv-hot")).with_telemetry(telemetry_at(70)));
@@ -475,21 +556,68 @@ mod tests {
 
         let outcomes = reconciler.tick().await;
         assert_eq!(outcomes[0].result, "deferred", "{outcomes:?}");
-        assert_eq!(outcomes[0].error.as_deref(), Some("temperature is high"));
-        assert!(
-            mock.actions().is_empty(),
-            "a hot panel must not receive a launch or a power command"
+        assert_eq!(
+            outcomes[0].error.as_deref(),
+            Some("temperature is high; applied dim_backlight")
         );
+        // Rung 1 only: the panel is dimmed, never launched and never toggled.
+        assert_eq!(mock.actions(), [Action::SetBrightness(20)]);
 
         let outcomes = reconciler.tick().await;
         assert_eq!(outcomes[0].result, "deferred");
+        assert_eq!(
+            mock.actions(),
+            [Action::SetBrightness(20), Action::SetBrightness(20)],
+            "a panel that is still hot is dimmed again, not escalated"
+        );
+
+        tokio::fs::remove_dir_all(dir).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_hot_panel_that_cannot_dim_is_deferred_without_a_command() {
+        let (provider, dir) = provider_for(r#"{"tv-plain":{"power":"on","app":"netflix"}}"#).await;
+        // No brightness, no reboot: the ladder has nothing to offer, and an absent
+        // rung must not become a fake one in the log.
+        let capabilities = CapabilitySet::empty()
+            .with(Capability::PowerState)
+            .with(Capability::Telemetry);
+        let mock = Arc::new(
+            MockBackend::new(descriptor("tv-plain"))
+                .with_capabilities(capabilities)
+                .with_telemetry(telemetry_at(70)),
+        );
+        let mut reconciler = Reconciler::new(vec![mock.clone()], provider);
+
+        let outcomes = reconciler.tick().await;
+        assert_eq!(outcomes[0].result, "deferred", "{outcomes:?}");
+        assert_eq!(outcomes[0].error.as_deref(), Some("temperature is high"));
         assert!(mock.actions().is_empty());
 
         tokio::fs::remove_dir_all(dir).await.unwrap();
     }
 
     #[tokio::test]
-    async fn a_critical_panel_is_quarantined_immediately() {
+    async fn a_failed_remedy_is_reported_and_still_defers() {
+        let (provider, dir) = provider_for(r#"{"tv-stuck":{"power":"on","app":"netflix"}}"#).await;
+        let mock =
+            Arc::new(MockBackend::new(descriptor("tv-stuck")).with_telemetry(telemetry_at(70)));
+        mock.fail_next(Failure::TimeoutBeforeSend);
+        let mut reconciler = Reconciler::new(vec![mock.clone()], provider);
+
+        let outcomes = reconciler.tick().await;
+        // A remedy that could not be delivered is not a failed reconciliation: the
+        // panel is still deferred, and the audit says the dim did not land.
+        assert_eq!(outcomes[0].result, "deferred", "{outcomes:?}");
+        let error = outcomes[0].error.as_deref().unwrap_or_default();
+        assert!(error.contains("dim_backlight failed"), "{error}");
+        assert!(mock.actions().is_empty());
+
+        tokio::fs::remove_dir_all(dir).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_critical_panel_is_rebooted_once_and_quarantined() {
         let (provider, dir) =
             provider_for(r#"{"tv-critical":{"power":"on","app":"netflix"}}"#).await;
         let mock =
@@ -500,13 +628,37 @@ mod tests {
         assert_eq!(outcomes[0].result, "quarantined", "{outcomes:?}");
         assert_eq!(
             outcomes[0].error.as_deref(),
-            Some("temperature is critical")
+            Some("temperature is critical; applied reboot_panel")
         );
         assert_eq!(reconciler.quarantined(), ["tv-critical".to_string()]);
-        assert!(mock.actions().is_empty());
+        assert_eq!(
+            mock.actions(),
+            [Action::Reboot],
+            "the last rung runs once, and nothing else is commanded"
+        );
 
+        // A quarantined device is skipped from then on: the reboot is a single
+        // attempt, not a loop that keeps hammering a dead panel.
         let outcomes = reconciler.tick().await;
         assert_eq!(outcomes[0].result, "quarantined");
+        assert_eq!(mock.actions(), [Action::Reboot]);
+
+        tokio::fs::remove_dir_all(dir).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_reboot_that_fails_still_quarantines() {
+        let (provider, dir) = provider_for(r#"{"tv-dead":{"power":"on","app":"netflix"}}"#).await;
+        let mock =
+            Arc::new(MockBackend::new(descriptor("tv-dead")).with_telemetry(telemetry_at(90)));
+        mock.fail_next(Failure::TimeoutBeforeSend);
+        let mut reconciler = Reconciler::new(vec![mock.clone()], provider);
+
+        let outcomes = reconciler.tick().await;
+        assert_eq!(outcomes[0].result, "quarantined", "{outcomes:?}");
+        let error = outcomes[0].error.as_deref().unwrap_or_default();
+        assert!(error.contains("reboot_panel failed"), "{error}");
+        assert_eq!(reconciler.quarantined(), ["tv-dead".to_string()]);
         assert!(mock.actions().is_empty());
 
         tokio::fs::remove_dir_all(dir).await.unwrap();
@@ -530,7 +682,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn telemetry_verdicts_are_audited_without_device_actions() {
+    async fn telemetry_remedies_are_audited_with_the_step_that_ran() {
         let (provider, dir) = provider_for(
             r#"{"tv-hot":{"power":"on","app":"netflix"},"tv-critical":{"power":"on","app":"netflix"}}"#,
         )
@@ -547,13 +699,14 @@ mod tests {
 
         let outcomes = reconciler.tick().await;
         assert_eq!(outcomes.len(), 2);
-        assert!(hot.actions().is_empty());
-        assert!(critical.actions().is_empty());
+        assert_eq!(hot.actions(), [Action::SetBrightness(20)]);
+        assert_eq!(critical.actions(), [Action::Reboot]);
 
         let text = tokio::fs::read_to_string(log.path()).await.unwrap();
         assert_eq!(text.lines().count(), 2, "{text}");
-        assert!(text.contains("\"telemetry_wait\""), "{text}");
-        assert!(text.contains("\"telemetry_quarantine\""), "{text}");
+        // The label names the rung that ran, not the verdict that triggered it.
+        assert!(text.contains("\"telemetry_dim\""), "{text}");
+        assert!(text.contains("\"telemetry_reboot\""), "{text}");
         assert!(text.contains("\"deferred\""), "{text}");
         assert!(text.contains("\"quarantined\""), "{text}");
 
@@ -573,6 +726,7 @@ mod tests {
                 tick: Duration::from_millis(1),
                 max_failures: 3,
                 telemetry: None,
+                remedy: RemedyPolicy::default(),
             },
         );
 
