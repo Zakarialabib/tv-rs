@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-21
+
+Fourteen crates. The telemetry lane lands (`tv-rs-core` telemetry + capabilities,
+`tv-rs-agent` policy), `tv-rs-mdc` joins as the commercial-signage protocol, and
+`DeviceOs::SamsungMdc` plus `Remedy::Quarantine` make the 0.x-breaking bump to
+`0.3.0`. The specification documents are gone: rustdoc, `docs/architecture.md`
+and this file carry the design, and `docs/06-plan.md` is the only plan.
+
 ### Added
 
 - **`tv-rs-mdc`**: Samsung Multiple Display Control over TCP 1515 — the protocol
