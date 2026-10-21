@@ -357,6 +357,39 @@ fn bump_version(version: &str) -> Result<(), String> {
         return Err("no path-dependency version pins found in Cargo.toml".to_string());
     }
     std::fs::write(path, out).map_err(|error| error.to_string())?;
-    println!("version bumped ({replaced_deps} dependency pins)");
+
+    // Every published crate pins its own package version too: bump each crate
+    // manifest in sync (the workspace.dependencies pins above already carry the
+    // new version; crates with version.workspace=true inherit the workspace).
+    let mut crate_versions = 0_usize;
+    let entries =
+        std::fs::read_dir("crates").map_err(|error| format!("cannot read crates dir: {error}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("read crates dir: {error}"))?;
+        let toml = entry.path().join("Cargo.toml");
+        let text = std::fs::read_to_string(&toml)
+            .map_err(|error| format!("cannot read {toml:?}: {error}"))?;
+        if !text.contains("version = \"0.2.0\"") {
+            continue;
+        }
+        let mut next = String::with_capacity(text.len());
+        let mut replaced = 0_usize;
+        for line in text.lines() {
+            if line.trim_start().starts_with("version = \"0.2.0\"") && replaced == 0 {
+                next.push_str(&format!("version = \"{version}"));
+                next.push('\n');
+                replaced += 1;
+            } else {
+                next.push_str(line);
+                next.push('\n');
+            }
+        }
+        if replaced == 1 {
+            std::fs::write(&toml, next).map_err(|error| format!("write {toml:?}: {error}"))?;
+            crate_versions += 1;
+        }
+    }
+
+    println!("version bumped ({replaced_deps} dependency pins, {crate_versions} crate manifests)");
     Ok(())
 }

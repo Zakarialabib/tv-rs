@@ -5,3 +5,7 @@
 *.stackdump
 *.dmp
 .meta.json
+
+# carve-out: downloaded desktop helper binaries must never be committed
+claude*.exe
+node_modules
