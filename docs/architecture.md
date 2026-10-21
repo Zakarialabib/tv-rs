@@ -13,7 +13,7 @@ graph valid.
 | **Facade** | `tv-rs` | `crates/tv-rs` | the only multi-vendor-aware code: discovery orchestration, `identify_vendor`, `TvClient` dispatch (which implements `DeviceHandle`), quirk-driven port pinning |
 | **Protocol** | `tv-rs-discovery`, `tv-rs-power`, `tv-rs-tizen`, `tv-rs-webos`, `tv-rs-roku`, `tv-rs-mdc`, `tv-rs-cec` | `crates/{discovery,power,tizen,webos,roku,mdc,cec}` | one wire protocol each: SSDP, Wake-on-LAN, Tizen remote channel, LG SSAP, Roku ECP, Samsung MDC over TCP 1515, and HDMI-CEC over `cec-client` |
 | **Support** | `tv-rs-transport`, `tv-rs-media` | `crates/{transport,media}` | shared plumbing: TLS policy + WebSocket frame reader; an independent HTTP `206`/HLS server |
-| **Reconciliation** | `tv-rs-agent` | `crates/agent` | desired state in, fleet converged: providers, `decide()`, the healer ladder, the JSONL audit log, the loop. Depends on `core` only |
+| **Reconciliation** | `tv-rs-agent` | `crates/agent` | desired state in, fleet converged: providers, `decide()`, the healer ladder, the graduated remediation ladder (`remedy`), the JSONL audit log, the loop. Depends on `core` only |
 | **Tooling** | `tv-rs-cli`, `xtask` | `crates/cli`, `xtask` | reference consumer (`publish = false`), workspace automation (`publish = false`) |
 
 `discovery` and `power` are **protocol** crates, not support: SSDP and Wake-on-LAN
@@ -80,7 +80,7 @@ has that concept.
 | `transport` | — | — | — | ✓ `TlsPolicy` | ✓ `Unsupported` | — |
 | `media` | — | — | — | ✓ ranges/segments | — | — |
 | `core` | — | — | — | ✓ ids, capabilities, state, `Telemetry` | ✓ `TvError` + `Remedy` | — |
-| `agent` | — | ✓ telemetry policy (`assess_telemetry`) | ✓ desired-state JSON | ✓ `Decision`, `Outcome`, `TelemetryVerdict` | ✓ provider errors | — |
+| `agent` | — | ✓ telemetry policy (`assess_telemetry`) + remediation ladder (`plan_remedy`) | ✓ desired-state JSON | ✓ `Decision`, `Outcome`, `TelemetryVerdict`, `RemedyStep` | ✓ provider errors | — |
 | `cec` | ✓ `CecClient` (in `lib.rs`) | ✓ `cec-client` grammar | — | ✓ `CecAddress` | ✓ | — |
 
 **The auth rule.** An `auth.rs` exists only where the protocol performs a real
@@ -94,7 +94,7 @@ Additional files that exist where a protocol needs them, not by convention:
 `tizen/discovery.rs` (Samsung's private SSDP target), `tizen/apps.rs` (app-id
 presets), `media/{range,hls,server}.rs` (the three things a TV player demands),
 `core/{mock,conformance,quirks,telemetry}.rs` (tests, the quirks table, and what a
-panel reports about its own health), `agent/{desired,healer,audit,reconciler,runner,telemetry}.rs` (the loop and its pure core), `cec/transport.rs` (the `cec-client` invocation).
+panel reports about its own health), `agent/{desired,healer,audit,reconciler,runner,telemetry,remedy}.rs` (the loop and its pure core), `cec/transport.rs` (the `cec-client` invocation).
 
 ## Directory naming
 

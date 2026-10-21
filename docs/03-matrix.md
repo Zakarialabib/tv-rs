@@ -19,7 +19,7 @@ total — feature unification turns optional features on for the whole graph.
 | `tv-rs-roku` | done | 16 | ECP device-info, apps, keypress (with the 14.1 permission gate), launch, name→id resolution |
 | `tv-rs-mdc` | **new (U4)** | 17 + 5 tcp + 2 doc | Samsung MDC over TCP 1515: frame codec + checksum, display-ID addressing incl. broadcast, one socket per wall, power/input/volume/mute/brightness/status; a NAK returns its command and error code |
 | `tv-rs-media` | done | 25 | range parsing, `206`/`416` serving, HLS playlists |
-| `tv-rs-agent` | done (Phase 4) | 28 default / 36 with `http mqtt` | desired-state providers (file / HTTP / MQTT), pure decision function, healing ladder, JSONL audit log, `tick()`/`run()`, 24-hour fleet simulation |
+| `tv-rs-agent` | done (Phase 4) | 51 default / 59 with `http mqtt` | desired-state providers (file / HTTP / MQTT), pure decision function, healing ladder, graduated remediation ladder (dim → restart → reboot), JSONL audit log, `tick()`/`run()`, 24-hour fleet simulation |
 | `tv-rs-cec` | done (Phase 5a) | 6 default / 7 with `client` | CEC over a `cec-client` subprocess: power on, standby, active source |
 | `tv-rs-cli` | done (`publish = false`) | 17 | `discover`, `wake`, `power-off`, `key`, `launch`, `status` (power + confidence + capabilities), `ensure` |
 | `tests/hardware_in_the_loop.rs` | opt-in | 7 (`--features hil`) | real devices, skipped when `TV_RS_HIL_*` is unset |
