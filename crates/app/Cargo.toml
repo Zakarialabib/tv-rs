@@ -1,0 +1,22 @@
+[package]
+name = "tv-rs-app"
+description = "Package a supplied web/wasm payload as an installable TV app: Tizen .wgt manifests, webOS app directories and plain web bundles, with D-pad key mapping."
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["tizen", "webos", "smart-tv", "packaging", "signage"]
+categories = ["command-line-utilities", "development-tools::build-utils"]
+
+[features]
+default = []
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+
+[lints]
+workspace = true

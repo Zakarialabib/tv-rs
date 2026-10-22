@@ -104,6 +104,9 @@ jobs:
       - run: cargo check -p tv-rs-mdc
       - run: cargo check -p tv-rs-mdc --features supporting
       - run: cargo test -p tv-rs-mdc --features serial
+      # The app producer has no optional features; its tests are the substance --
+      # manifests, key mapping, and the ZIP a .wgt is.
+      - run: cargo test -p tv-rs-app
       - run: cargo check -p tv-rs
 
   msrv:

@@ -2103,6 +2103,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tv-rs-app"
+version = "0.3.0"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "tv-rs-cec"
 version = "0.3.0"
 dependencies = [
