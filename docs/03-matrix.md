@@ -1,107 +1,104 @@
 # State matrix
 
-What exists, what is deferred, and how it is tested. Measured on 2026-10-20 with
-`cargo test --workspace`; the numbers are the ones in the output, not estimates.
-Per-crate counts come from separate `-p` runs, so they do not sum to the workspace
+What exists, what is deferred, and how it is tested. The numbers below were
+measured on **2026-10-22**, each crate in an isolated `cargo test -p <crate>` run;
+the workspace total is its own `cargo test --workspace` run. The numbers are the
+ones in the output, not estimates. Per-crate counts do **not** sum to the workspace
 total — feature unification turns optional features on for the whole graph.
+Regression commands: `cargo test --workspace`, and per crate
+`cargo test -p <crate> [--features …]` as noted per row.
 
 ## Crates
 
-| Crate                                | Status                   | Tests                                                                      | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ------------------------------------ | ------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tv-rs` (facade)                     | done                     | 22                                                                         | `discover()`, `identify_vendor()`, `TvClient` dispatch, `power_observation()` (value + confidence), `TlsPolicy` re-export, quirk-driven port pinning                                                                                                                                                                                                                                                                                                                                              |
-| `tv-rs-core`                         | done (Phase 1a)          | 22 default / 45 with `mock-backend conformance quirks`                     | capability traits, `DeviceHandle`, `CommandId`, confidence-tagged `ObservedState`, routing `TvError`, LFD vocabulary + traits (`PanelLockControl`, `OrientationControl`, `PanelHealthProvider`, and behind `supporting`: `PanelHoursProvider`, `ScreenCapturer`), scriptable mock backend (`force_power` plus settable LFD state), conformance suite (truth table + `Unsupported` routing for all fifteen capabilities), quirks loader **and** `QuirkAction` decoding                             |
-| `tv-rs-discovery`                    | done                     | 7                                                                          | SSDP `M-SEARCH`, response parsing, UPnP descriptor, descriptor fetch                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `tv-rs-power`                        | done                     | 10                                                                         | magic packet, `MacAddress` parsing, `poll_power_state`                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `tv-rs-transport`                    | done                     | 14                                                                         | `TlsPolicy`, rustls/native-tls connector, budgeted frame reader, `Unsupported`, compiles without the `ws` feature                                                                                                                                                                                                                                                                                                                                                                                 |
-| `tv-rs-tizen`                        | done, **experimental**   | 43                                                                         | remote channel, DIAL, token store, connection pool, SSDP discovery, app presets, `pinned_port`                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `tv-rs-webos`                        | done                     | 18                                                                         | SSAP session, pairing, `client-key` persistence, volume/mute/launch/power, `pinned_port`                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `tv-rs-roku`                         | done                     | 16                                                                         | ECP device-info, apps, keypress (with the 14.1 permission gate), launch, name→id resolution                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `tv-rs-mdc`                          | **new (U4)**             | 18 lib + 7 tcp + 2 doc (19 lib / 8 tcp / 3 doc with `serial`+`supporting`) | Samsung MDC over TCP 1515 **or RS-232** (`serial`): one frame codec + checksum on both carriers, display-ID addressing incl. broadcast, one socket per wall, power/input/volume/mute/brightness/status, and the LFD subset — panel lock `0x5F`, content orientation `0xC8`/`0x82`, panel health `0x0D` (lamp, input-source error, temperature, fan), panel hours `0x83` behind `supporting`; screen capture is never advertised (no MDC command exists); a NAK returns its command and error code |
-| `tv-rs-media`                        | done                     | 25                                                                         | range parsing, `206`/`416` serving, HLS playlists                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `tv-rs-agent`                        | done (Phase 4)           | 51 default / 59 with `http mqtt`                                           | desired-state providers (file / HTTP / MQTT), pure decision function, healing ladder, graduated remediation ladder (dim → restart → reboot), JSONL audit log, `tick()`/`run()`, 24-hour fleet simulation                                                                                                                                                                                                                                                                                          |
-| `tv-rs-cec`                          | done (Phase 5a)          | 6 default / 7 with `client`                                                | CEC over a `cec-client` subprocess: power on, standby, active source                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `tv-rs-cli`                          | done (`publish = false`) | 17                                                                         | `discover`, `wake`, `power-off`, `key`, `launch`, `status` (power + confidence + capabilities), `ensure`                                                                                                                                                                                                                                                                                                                                                                                          |
-| `tests/hardware_in_the_loop.rs`      | opt-in                   | 7 (`--features hil`)                                                       | real devices, skipped when `TV_RS_HIL_*` is unset                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| **Total (`cargo test --workspace`)** |                          | **397 across 36 targets**                                                  | 21 test binaries + 15 doctest targets, default features; includes the three `-p tv-rs-media` suites                                                                                                                                                                                                                                                                                                                                                                                               |
+| Crate                                | Status                   | Tests                                                                  | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------ | ------------------------ | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tv-rs` (facade)                     | done                     | 22 (lib 21 + doctest; `--features hil` adds the 7-test HIL suite)      | `discover()`, `identify_vendor()`, `TvClient` dispatch, `power_observation()` (value + confidence), `TlsPolicy` re-export, quirk-driven port pinning, capability truth (below)                                                                                                                                                                                                                                                                                        |
+| `tv-rs-core`                         | done                     | 23 default / 48 with `mock-backend conformance quirks`                 | capability traits, `DeviceHandle`, `CommandId`, confidence-tagged `ObservedState`, routing `TvError` + `Remedy`, LFD vocabulary + traits (`PanelLockControl`, `OrientationControl`, `PanelHealthProvider`; behind `supporting`: `PanelHoursProvider`, `ScreenCapturer`), scriptable mock backend (`force_power` + settable LFD state), conformance suite (truth table + `Unsupported` routing for all fifteen capabilities), quirks loader and `QuirkAction` decoding |
+| `tv-rs-discovery`                    | done                     | 7                                                                      | SSDP `M-SEARCH`, response parsing, UPnP descriptor, descriptor fetch                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `tv-rs-power`                        | done                     | 10                                                                     | magic packet, `MacAddress` parsing, `poll_power_state`                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `tv-rs-local`                        | done                     | 9                                                                      | host-side EDID/connector/mode probe with a TV-likelihood score; Windows WMI, Linux DRM, macOS declared unsupported                                                                                                                                                                                                                                                                                                                                                    |
+| `tv-rs-dlna`                         | done                     | 79                                                                     | DLNA renderer transport: SSDP MediaRenderer discovery, AVTransport SOAP (`SetAVTransportURI`/`Play`/`Pause`/`Stop`/`Seek`), GENA subscribe/renew/unsubscribe with `LastChange` parsing, renewal registry, SSDP advertisement for a caller-hosted MediaServer, DIDL-Lite metadata                                                                                                                                                                                      |
+| `tv-rs-transport`                    | done                     | 14                                                                     | `TlsPolicy`, rustls/native-tls connector, budgeted frame reader, `Unsupported`, compiles without the `ws` feature                                                                                                                                                                                                                                                                                                                                                     |
+| `tv-rs-tizen`                        | done, **experimental**   | 56                                                                     | remote channel, DIAL, token store, connection pool, SSDP discovery, app presets, `pinned_port`, `TizenRemote` service                                                                                                                                                                                                                                                                                                                                                 |
+| `tv-rs-webos`                        | done                     | 18                                                                     | SSAP session, pairing, `client-key` persistence, volume/mute/launch/power/foreground/`open_url`, `pinned_port`                                                                                                                                                                                                                                                                                                                                                        |
+| `tv-rs-roku`                         | done                     | 16                                                                     | ECP device-info, apps, keypress (with the 14.1 permission gate), launch, name→id resolution                                                                                                                                                                                                                                                                                                                                                                           |
+| `tv-rs-mdc`                          | done, **unpublished**    | 27 = 18 lib + 7 tcp + 2 doc · 30 with `serial supporting` (19 / 8 / 3) | Samsung MDC over TCP 1515 **or RS-232** (`serial`): one frame codec + checksum on both carriers, display-ID addressing incl. broadcast, one socket per wall, power/input/volume/mute/brightness/status, the LFD subset (panel lock `0x5F`, orientation `0xC8`/`0x82`, panel health `0x0D`, panel hours `0x83` behind `supporting`); screen capture is never advertised (no MDC command exists); a NAK returns its command and error code and keeps the socket         |
+| `tv-rs-media`                        | done                     | 25 = 17 lib + 6 http + 2 doc                                           | range parsing, `206`/`416` serving, HLS playlists                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `tv-rs-agent`                        | done                     | 51 default / 59 with `http mqtt`                                       | desired-state providers (file / HTTP / MQTT), pure decision function, healing ladder, graduated remediation ladder (dim → restart → reboot), JSONL audit log, `tick()`/`run()`, 24-hour fleet simulation                                                                                                                                                                                                                                                              |
+| `tv-rs-cec`                          | done                     | 6 default / 7 with `client`                                            | CEC over a `cec-client` subprocess: power on, standby, active source                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `tv-rs-cli`                          | done (`publish = false`) | 17                                                                     | `discover`, `wake`, `power-off`, `key`, `launch`, `status` (power + confidence + capabilities), `ensure`                                                                                                                                                                                                                                                                                                                                                              |
+| `tests/hardware_in_the_loop.rs`      | opt-in                   | 7 (`--features hil`)                                                   | real devices, skipped when `TV_RS_HIL_*` is unset                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Total (`cargo test --workspace`)** |                          | **397 across 36 targets**                                              | 21 test binaries + 15 doctest targets, default features                                                                                                                                                                                                                                                                                                                                                                                                               |
 
-## Published (crates.io, 2026-10-20)
+## Capability truth
 
-| Crate                                                             | Version         | Note                                                                                            |
-| ----------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------- |
-| `tv-rs-core`, `tv-rs-transport`, `tv-rs-discovery`, `tv-rs-power` | `0.2.0`         |                                                                                                 |
-| `tv-rs-local`, `tv-rs-dlna`                                       | `0.2.0`         | first published today (were `0.1.0` for a few hours)                                            |
-| `tv-rs-roku`, `tv-rs-tizen`, `tv-rs-webos`                        | `0.2.0`         |                                                                                                 |
-| `tv-rs` (facade), `tv-rs-media`, `tv-rs-agent`, `tv-rs-cec`       | `0.2.0`         |                                                                                                 |
-| `tv-rs-mdc`                                                       | **unpublished** | merged; publishes after `tv-rs-core` gains the telemetry/brightness/reboot APIs on the registry |
-| `tv-rs-cli`, `xtask`                                              | —               | `publish = false`                                                                               |
+The one honest table: what each backend advertises today. The source of this
+section is code — `crates/tv-rs/src/handle.rs` (the facade's `DeviceHandle`
+impl), `crates/mdc/src/handle.rs` (`MdcDevice`) and
+`crates/core/src/capability.rs` (the fifteen-variant `Capability` enum). When a
+page elsewhere disagrees with this table, the table wins; fix the page.
 
-Thirteen crates are installable; the fourteenth exists in git and will publish with the
-next core release.
+| Backend            | power | wake | key | app | foreground | input | volume | panel lock | orientation | panel health |
+| ------------------ | ----- | ---- | --- | --- | ---------- | ----- | ------ | ---------- | ----------- | ------------ |
+| Tizen (`TvClient`) | ✓     | —    | ✓   | ✓   | —          | —     | —      | —          | —           | —            |
+| webOS (`TvClient`) | ✓     | —    | —   | ✓   | ✓          | —     | ✓      | —          | —           | —            |
+| Roku (`TvClient`)  | ✓     | —    | ✓   | ✓   | —          | —     | —      | —          | —           | —            |
+| MDC (`MdcDevice`)  | ✓     | —    | —   | —   | —          | ✓     | ✓      | ✓          | ✓           | ✓            |
+
+Why each dash is a fact, not a gap:
+
+- **`wake` is absent on every `TvClient`** because a discovered device carries no
+  MAC yet, and a wake without one is a lie. Wake lives in `tv-rs-power`, which
+  takes the MAC from the caller.
+- **`key` is absent on webOS** because SSAP has no remote-key endpoint — it wants
+  a pointer-input socket.
+- **`volume` is absent on Tizen and Roku** because both expose relative keys, not
+  an absolute level, so `set_volume` cannot be honoured.
+- **The LFD columns are absent on the consumer `TvClient` rows per protocol**:
+  the consumer remote channels (Tizen 8001/8002, SSAP, ECP) have no panel-lock,
+  orientation or health command. The MDC row says `Some` because the MDC
+  commands (`0x5F`, `0xC8`/`0x82`, `0x0D`) exist. Neither side invents data.
+- **`MdcDevice` also speaks what the table's columns do not show**: brightness,
+  reboot (the `0x11` power command carries it as a sub-code), a control-channel
+  probe;
+  panel hours (`0x83`) behind the core's `supporting` feature. It advertises no
+  aggregate **`Telemetry`** — MDC has no signal-strength history or uptime — and
+  **never** advertises `ScreenCapture`: no MDC command captures the panel's
+  picture. See [`06-plan.md`](06-plan.md#1-release-030--blocked-on-a-token)'s
+  rejected-list for the sources behind that refusal.
+
+**The rule the table enforces: an absent accessor means the protocol cannot do
+it** — knowable before any command is sent, and the same fact as the typed
+`Unsupported` error after one. UI gating derives from `CapabilitySet`; never
+probe at runtime to find out what a vendor can do.
+
+## Published (crates.io, verified 2026-10-22 against the registry API)
+
+| Crate                                                                                                                                                                                                   | Registry                | Note                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- |
+| `tv-rs-core`, `tv-rs-transport`, `tv-rs-discovery`, `tv-rs-power`, `tv-rs-local`, `tv-rs-dlna`, `tv-rs-roku`, `tv-rs-tizen`, `tv-rs-webos`, `tv-rs` (facade), `tv-rs-media`, `tv-rs-agent`, `tv-rs-cec` | `0.2.0`                 | thirteen crates installable today                                                                  |
+| `tv-rs-mdc`                                                                                                                                                                                             | **not on the registry** | merged in this repository; its first publish rides the `0.3.0` release ([plan item 1](06-plan.md)) |
+| `tv-rs-cli`, `xtask`                                                                                                                                                                                    | —                       | `publish = false`                                                                                  |
+
+The workspace is tagged `0.3.0` and blocked on a crates.io token with
+`publish-update` scope; until that publishes, `tv-rs = "0.2"` is what the
+registry serves. This is the most common rot vector in these docs: every
+published-version claim elsewhere must agree with this table.
 
 `cargo check --workspace --all-targets`, `cargo test --workspace`,
 `cargo clippy --workspace --all-targets -- -D warnings` and
 `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` all pass locally and
 in CI (Linux and Windows).
 
-## Per-crate detail
-
-**Facade.** `discover()` / `discover_with(&SsdpScanner)`; `identify_vendor()`
-over `SERVER`/`ST`/`USN` plus descriptor fields; `TvClient` with `power_off()`,
-`power_state()`, `launch_app()` and typed accessors. `power_state()` asks Roku
-outright and falls back to the TCP probe for Tizen/webOS. `TvClient` also
-implements the `tv-rs-core` `DeviceHandle` traits, advertising per vendor only
-what works: Tizen has power/key/app, webOS power/app/foreground/volume, Roku
-power/key/app — and none advertise wake (no MAC) or input selection (not
-implemented). None of them advertise the LFD subset either, and that is a
-protocol fact, not a gap: the consumer remote channels have no panel-lock,
-orientation or health command, so the facade says `None` where the MDC adapter
-says `Some` — commercial panels go through [`tv-rs-mdc`] and its
-`as_panel_lock()` / `as_orientation()` / `as_panel_health()`. Covers only
-operations every vendor has; anything else goes through the accessor.
-
-**Discovery.** Interface/bind overrides, timeout, USN/LOCATION dedup, descriptor
-fetch. mDNS/Bonjour and ARP are not implemented — the enum names them, the code
-does not.
-
-**Power.** 102-byte magic packet, broadcast override, `MacAddress` accepting
-colon/dash/bare-hex, TCP probe → `On`/`Standby`/`Off`/`Unknown`. WoWLAN wake
-reasons are not modelled.
-
-**Transport.** Two mutually exclusive TLS backends (`rustls` default,
-`native-tls` opt-in) enforced by `compile_error!`; certificate pinning
-(`Pinned` / `TrustOnFirstUse`); the bounded frame reader both vendor crates use;
-and `should_try_next_port()`, the rule that lets a client try the other port
-generation when — and only when — nothing answered.
-
-**Tizen.** 8001/8002 channel with token capture; DIAL launch; 22-key enum;
-`SamsungTokenStore` (quarantine + no-clobber upsert); `TizenConnectionPool` (one
-channel per TV, one reopen on a dead socket); `discover_samsung()` via the
-Samsung-specific search target; `resolve_app_id()` presets.
-
-**webOS.** Registration + pairing, `client-key` save/load, `SsapUri` enum,
-volume/mute/launch/power/foreground/**open_url**, port ladder 3001 → 3000 with the
-negotiated port cached. Input switching is additive work.
-
-**Roku.** Device-info/apps/keypress/launch with pure XML parsers; `query_app_id`
-resolves a name to an id; `<power-mode>` is parsed into `RokuPowerMode`
-(`PowerOn`/`Headless`/`Ready`/`DisplayOff`/`Unknown`), with the awake states mapped
-to `Standby` rather than `Off` so a working device never reads as dead. `roku:ecp` SSDP discovery is covered by the facade's
-scan, not a dedicated path.
-
-**Media.** Pure `parse_range` (open-ended, explicit, suffix, clamping, `416`);
-axum handler streaming the slice; HLS playlist from a directory of segments; path
-traversal rejected before any file open.
-
 ## Deferred
 
-- **Certificate pinning** for Samsung 8002 / LG 3001 — implemented as
-  `TlsPolicy::TrustOnFirstUse` (record) and `TlsPolicy::Pinned` (verify) in
-  `tv-rs-transport`, rustls only; a `native-tls` build returns
-  `TlsError::PinningUnavailable`. What is _not_ done is verifying it against a
-  real TV's certificate.
+- **Hardware verification of certificate pinning.** `TlsPolicy::TrustOnFirstUse`
+  (record) and `TlsPolicy::Pinned` (verify) are implemented, rustls only; a
+  `native-tls` build returns `TlsError::PinningUnavailable`. What is not done is
+  verifying them against a real TV's certificate — [plan item 5](06-plan.md).
 - **Enterprise token derivation** and **encrypted framing** on newer Samsung
-  firmware.
+  firmware — the evidence and the rules live in
+  [`internal/deferred-auth.md`](internal/deferred-auth.md).
 - **mDNS/Bonjour** discovery, **ARP** resolution, **WoWLAN** reasons.
 - **Android TV ADB**, **Google Cast**, **AirPlay** — separate trust models,
   separate crates, not started.
@@ -113,32 +110,35 @@ nothing pretends to work.
 
 ## Quirks: applied, not just stored
 
-`quirks/default.toml` is loaded by `tv-rs-core` and **acted on** by the facade: with
-the `quirks` feature, `TvClient::from_discovered` decodes the matching row's `action`
-(`QuirkAction`) and pins the port it names, so the generation a firmware dropped is
-never probed. Without the feature the ladder still negotiates — it just pays one
-refused connection to learn what the table already knew.
-
-Rows are keyed on what discovery can actually supply. The UPnP descriptor gives
-`modelName` but no firmware version, so each vendor has at least one model-scoped row
-(`QN9*`, not only `T-KTM*`); a firmware-scoped row is more specific and sits above it.
+`quirks/default.toml` is loaded by `tv-rs-core` and **acted on** by the facade:
+with the `quirks` feature, `TvClient::from_discovered` decodes the matching row's
+`action` (`QuirkAction`) and pins the port it names, so the generation a firmware
+dropped is never probed. Without the feature the ladder still negotiates — it
+just pays one refused connection to learn what the table already knew. Rows are
+keyed on what discovery can actually supply: the UPnP descriptor gives
+`modelName` but no firmware version, so each vendor has at least one
+model-scoped row; a firmware-scoped row is more specific and sits above it.
+Submitting a row: [`QUIRKS.md`](../QUIRKS.md).
 
 ## Known limits worth knowing before shipping
 
 1. **No hardware in CI.** The `hil` suite is the only thing that touches a real
    TV, and it is opt-in. An SSDP `M-SEARCH` probe from the development host
    (2026-10-19) returned 0 non-loopback responders, so the hardware pass is
-   still unrun — no claim below is device-verified. Every published claim about a device behaviour comes from
-   the protocol documents plus the pure-function tests.
-2. **Two TLS backends, one selected.** A consumer that needs `native-tls` must
+   still unrun — no device-behaviour claim in this repository is
+   device-verified. Every published claim comes from the protocol documents plus
+   the pure-function tests; the empty record is
+   [`hil-results.md`](hil-results.md).
+2. **Two TLS backends, one selected.** A consumer who needs `native-tls` must
    enable it explicitly; enabling both is a compile error, by design.
 3. **Vendor quirks are per model year.** The playbook describes the mainstream
    behaviour; a 2019 panel and a 2024 panel can disagree with it.
-4. **The media crate is not a DLNA control point.** It serves bytes and
-   playlists; UPnP `AVTransport`/`ContentDirectory` are out of scope.
+4. **The media crate is not a DLNA control point.** Serving bytes and playlists
+   is `tv-rs-media`; renderer control is `tv-rs-dlna`; UPnP
+   `ContentDirectory`/media-library stays application-owned.
 
 ## Next
 
 The live plan owns the open work, with an exit criterion per item:
-[`06-plan.md`](06-plan.md). This page describes what exists today; what landed over
-time is [`../CHANGELOG.md`](../CHANGELOG.md).
+[`06-plan.md`](06-plan.md). This page describes what exists today; what landed
+over time is [`../CHANGELOG.md`](../CHANGELOG.md).

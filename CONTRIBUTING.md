@@ -25,12 +25,12 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 CI runs four more jobs that are not branch protection but are still red builds you
 will be asked to fix:
 
-| Job | What it catches that a local `--workspace` run does not |
-|---|---|
-| `msrv (1.89.0)` | a `rust-version` nobody builds against, and code that needs a newer compiler |
-| `cargo-deny` | advisories, unknown sources, wildcard deps, licences outside `deny.toml` |
-| `per-crate features` | a crate that only compiles because a sibling turned a feature on |
-| `core (tokio-free + mock)` | tokio sneaking into `tv-rs-core`'s graph |
+| Job                        | What it catches that a local `--workspace` run does not                      |
+| -------------------------- | ---------------------------------------------------------------------------- |
+| `msrv (1.89.0)`            | a `rust-version` nobody builds against, and code that needs a newer compiler |
+| `cargo-deny`               | advisories, unknown sources, wildcard deps, licences outside `deny.toml`     |
+| `per-crate features`       | a crate that only compiles because a sibling turned a feature on             |
+| `core (tokio-free + mock)` | tokio sneaking into `tv-rs-core`'s graph                                     |
 
 The last one is the reason the `--workspace` runs are not enough: feature unification
 hides exactly the break that job exists to find.
@@ -97,18 +97,21 @@ quirk row, a new feature flag (off by default), a new field on a struct that is
 mapping lives in downstream retry code. Add a variant, add its remedy, add the
 exhaustiveness test case — in the same PR.
 
-All eleven crates are versioned together and published together: `cargo xtask publish
---version X.Y.Z` rewrites the pins. A partial release is worse than a late one.
+All fourteen crates are versioned together and published together: `cargo xtask
+publish --version X.Y.Z` rewrites the pins. A partial release is worse than a
+late one.
 
 ## Releasing
 
-Eight crates publish in dependency order via `cargo xtask publish`. crates.io
-yanks rather than deletes, so a partial publish burns the version — dry-run
-first:
+The crates publish in dependency order via `cargo xtask publish` — the order is
+`xtask/src/main.rs::ORDER`, recorded with its rationale in
+[`docs/adr/001-crate-publication.md`](docs/adr/001-crate-publication.md).
+crates.io yanks rather than deletes, so a partial publish burns the version —
+dry-run first:
 
 ```bash
 cargo xtask publish --dry-run
-cargo xtask publish --version 0.2.0
+cargo xtask publish --version 0.3.0
 ```
 
 ## Docs

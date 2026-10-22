@@ -1,9 +1,11 @@
 # Architecture
 
-The workspace is fourteen published crates, a reference CLI and a task runner,
-arranged in four layers. The layering is a property of the dependency graph, not of
-folders — every package lives at `crates/<dir>` and the shape below is what makes the
-graph valid.
+The workspace is fourteen crates, a reference CLI and a task runner, arranged in
+four layers. The layering is a property of the dependency graph, not of folders —
+every package lives at `crates/<dir>` and the shape below is what makes the graph
+valid. Thirteen of the fourteen are on crates.io at `0.2.0`; `tv-rs-mdc` is merged
+here and its first publish rides the `0.3.0` release (registry table in
+[`03-matrix.md`](03-matrix.md#published-cratesio-verified-2026-10-22-against-the-registry-api)).
 
 ## Layers
 
@@ -11,8 +13,8 @@ graph valid.
 | ------------------ | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Device model**   | `tv-rs-core`                                                                                           | `crates/core`                                       | capabilities (incl. the commercial LFD subset), `DeviceHandle`, `CommandId`, confidence-tagged state, the error taxonomy, the mock backend, the conformance suite, the quirks table. **No tokio, in any configuration.** |
 | **Facade**         | `tv-rs`                                                                                                | `crates/tv-rs`                                      | the only multi-vendor-aware code: discovery orchestration, `identify_vendor`, `TvClient` dispatch (which implements `DeviceHandle`), quirk-driven port pinning                                                           |
-| **Protocol**       | `tv-rs-discovery`, `tv-rs-power`, `tv-rs-tizen`, `tv-rs-webos`, `tv-rs-roku`, `tv-rs-mdc`, `tv-rs-cec` | `crates/{discovery,power,tizen,webos,roku,mdc,cec}` | one wire protocol each: SSDP, Wake-on-LAN, Tizen remote channel, LG SSAP, Roku ECP, Samsung MDC over TCP 1515, and HDMI-CEC over `cec-client`                                                                            |
-| **Support**        | `tv-rs-transport`, `tv-rs-media`                                                                       | `crates/{transport,media}`                          | shared plumbing: TLS policy + WebSocket frame reader; an independent HTTP `206`/HLS server                                                                                                                               |
+| **Protocol**       | `tv-rs-discovery`, `tv-rs-power`, `tv-rs-tizen`, `tv-rs-webos`, `tv-rs-roku`, `tv-rs-mdc`, `tv-rs-cec` | `crates/{discovery,power,tizen,webos,roku,mdc,cec}` | one wire protocol each: SSDP, Wake-on-LAN, Tizen remote channel, LG SSAP, Roku ECP, Samsung MDC over TCP 1515 or RS-232, and HDMI-CEC over `cec-client`                                                                  |
+| **Support**        | `tv-rs-transport`, `tv-rs-dlna`, `tv-rs-media`                                                         | `crates/{transport,dlna,media}`                     | shared plumbing and sender-side transports: TLS policy + WebSocket frame reader; DLNA MediaRenderer transport (SSDP + AVTransport SOAP + GENA); an independent HTTP `206`/HLS server                                     |
 | **Reconciliation** | `tv-rs-agent`                                                                                          | `crates/agent`                                      | desired state in, fleet converged: providers, `decide()`, the healer ladder, the graduated remediation ladder (`remedy`), the JSONL audit log, the loop. Depends on `core` only                                          |
 | **Tooling**        | `tv-rs-cli`, `xtask`                                                                                   | `crates/cli`, `xtask`                               | reference consumer (`publish = false`), workspace automation (`publish = false`)                                                                                                                                         |
 
@@ -44,6 +46,7 @@ used to suggest otherwise and no longer exists (see
   discovery, power  ── no dependency on any vendor crate
   mdc               ── TCP 1515 or RS-232 frames; depends on core, not on transport
   cec               ── shells out to cec-client; no workspace dependency
+  dlna              ── SSDP + SOAP + GENA renderer transport; no workspace dependency
   media             ── depends on nothing in the workspace (pulls axum)
 ```
 
@@ -82,6 +85,8 @@ has that concept.
 | `core`           | —                           | —                                                                            | —                         | ✓ ids, capabilities (incl. the LFD subset), state, `Telemetry` | ✓ `TvError` + `Remedy` | —               |
 | `agent`          | —                           | ✓ telemetry policy (`assess_telemetry`) + remediation ladder (`plan_remedy`) | ✓ desired-state JSON      | ✓ `Decision`, `Outcome`, `TelemetryVerdict`, `RemedyStep`      | ✓ provider errors      | —               |
 | `cec`            | ✓ `CecClient` (in `lib.rs`) | ✓ `cec-client` grammar                                                       | —                         | ✓ `CecAddress`                                                 | ✓                      | —               |
+| `local`          | —                           | —                                                                            | —                         | ✓ `ProbeInfo`, `Attachment` (single `lib.rs`)                  | ✓                      | —               |
+| `dlna`           | ✓ `SoapAvTransport`         | ✓ SSDP discovery/GENA request builders                                       | ✓ DIDL-Lite               | ✓ `Renderer`                                                   | ✓ `DlnaError`          | —               |
 
 **The auth rule.** An `auth.rs` exists only where the protocol performs a real
 credential handshake: Tizen issues a pairing token, webOS returns a `client-key`.
@@ -94,7 +99,13 @@ Additional files that exist where a protocol needs them, not by convention:
 `tizen/discovery.rs` (Samsung's private SSDP target), `tizen/apps.rs` (app-id
 presets), `media/{range,hls,server}.rs` (the three things a TV player demands),
 `core/{mock,conformance,quirks,telemetry}.rs` (tests, the quirks table, and what a
-panel reports about its own health), `agent/{desired,healer,audit,reconciler,runner,telemetry,remedy}.rs` (the loop and its pure core), `cec/transport.rs` (the `cec-client` invocation).
+panel reports about its own health), `agent/{desired,healer,audit,reconciler,runner,telemetry,remedy}.rs` (the loop and its pure core), `cec/transport.rs` (the `cec-client` invocation),
+`dlna/{soap,gena,gena_client,gena_parse,gena_registry,advertise,metadata}.rs` (renderer control on the wire and its eventing).
+
+The DLNA crate is the one deliberate departure from the fixed module vocabulary:
+its domain names (`soap.rs`, `gena*.rs`, `advertise.rs`) are the UPnP service
+names, and renaming them to `client.rs`/`protocol.rs` would erase the mapping the
+specification imposes.
 
 ## Directory naming
 
@@ -124,16 +135,15 @@ into its own crate rather than letting `transport` become a grab bag.
 The protocol facts live in [`01-playbook.md`](01-playbook.md); this is which part
 of them each crate implements.
 
-| Playbook section                    | Crate                                                     | State                                                                                                                           |
-| ----------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| §1 SSDP discovery + UPnP descriptor | `tv-rs-discovery`                                         | implemented (mDNS and ARP are _planned_)                                                                                        |
-| §2 Wake-on-LAN + power probing      | `tv-rs-power`                                             | implemented (WoWLAN reasons planned)                                                                                            |
-| §3 Samsung Tizen channel + DIAL     | `tv-rs-tizen`                                             | implemented to Phase 1; TLS handled by pinning (`Pinned`/`TrustOnFirstUse`), enterprise token math and AES-GCM framing deferred |
-| §4 LG webOS SSAP                    | `tv-rs-webos`                                             | implemented to Phase 1; 3001 TLS handled by pinning, richer `SsapUri` coverage deferred                                         |
-| §5 Roku ECP                         | `tv-rs-roku`                                              | implemented in full (ECP is unauthenticated)                                                                                    |
-| §6 Android TV ADB                   | —                                                         | not started                                                                                                                     |
-| §7–8 DLNA control, `206`, HLS       | `tv-rs-media` (serving only) + not started (SOAP control) | range + HLS implemented; DLNA `AVTransport`/`RenderingControl` not started                                                      |
-| §9 Google Cast / AirPlay            | —                                                         | not started                                                                                                                     |
-| HDMI-CEC (no playbook section)      | `tv-rs-cec`                                               | power on, standby, active source, over `cec-client`                                                                             |
-| MDC (no playbook section)           | `tv-rs-mdc`                                               | commercial Samsung panels: power, input, volume/mute, brightness, status; display-ID addressing over one socket per wall        |
-| §10 undocumented auth               | `tizen`, `webos`                                          | deferred, surfaced as typed `Unsupported` errors                                                                                |
+| Playbook section                    | Crate             | State                                                                                                                                                                                          |
+| ----------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| §1 SSDP discovery + UPnP descriptor | `tv-rs-discovery` | implemented (mDNS and ARP are _planned_)                                                                                                                                                       |
+| §2 Wake-on-LAN + power probing      | `tv-rs-power`     | implemented (WoWLAN reasons planned)                                                                                                                                                           |
+| §3 Samsung Tizen channel + DIAL     | `tv-rs-tizen`     | implemented; TLS handled by pinning (`Pinned`/`TrustOnFirstUse`), enterprise token math and AES-GCM framing deferred                                                                           |
+| §4 LG webOS SSAP                    | `tv-rs-webos`     | implemented; 3001 TLS handled by pinning, richer `SsapUri` coverage deferred                                                                                                                   |
+| §5 Roku ECP                         | `tv-rs-roku`      | implemented in full (ECP is unauthenticated)                                                                                                                                                   |
+| §6 Samsung MDC                      | `tv-rs-mdc`       | commercial Samsung panels: power, input, volume/mute, brightness, status, the LFD subset; display-ID addressing over one socket per wall, on TCP 1515 or RS-232                                |
+| §7 HDMI-CEC                         | `tv-rs-cec`       | power on, standby, active source, over `cec-client`                                                                                                                                            |
+| §8 DLNA renderer control            | `tv-rs-dlna`      | implemented: SSDP discovery, AVTransport SOAP (`SetAVTransportURI`/`Play`/`Pause`/`Stop`/`Seek`), GENA; advertisement for a caller-hosted MediaServer; NOT a media library or ContentDirectory |
+| §9 `206` + HLS serving              | `tv-rs-media`     | range + HLS implemented; HLS segmentation (cutting segments) not started                                                                                                                       |
+| Casting / Android TV (unnumbered)   | —                 | not started                                                                                                                                                                                    |

@@ -8,14 +8,15 @@ on its own. No Tauri, no database, no TV control, no network.
 
 ## Install
 
-Once published:
+`tv-rs-local` is on crates.io at `0.2.0` (the workspace's published set moves
+together):
 
 ```toml
 [dependencies]
-tv-rs-local = "0.1"
+tv-rs-local = "0.2"
 ```
 
-Until then, use the sibling path:
+Working inside this workspace, use the sibling path:
 
 ```toml
 [dependencies]
@@ -89,4 +90,4 @@ RUSTDOCFLAGS="-D warnings" cargo doc -p tv-rs-local --no-deps
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](../../LICENSE).

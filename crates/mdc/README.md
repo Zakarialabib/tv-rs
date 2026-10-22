@@ -7,6 +7,9 @@ Samsung Multiple Display Control (MDC) over TCP 1515 or RS-232.
 tv-rs-mdc = "0.3"
 ```
 
+`tv-rs-mdc` is new: it publishes with the `0.3.0` release and is not on the registry
+before that. Everything else in this workspace's published set is at `0.2.0` today.
+
 ## What it does
 
 - Encodes and checksums the documented frame:

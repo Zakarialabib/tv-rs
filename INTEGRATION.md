@@ -95,13 +95,13 @@ let observed = health.panel_health().await?;
 ```
 
 The rule these obey — and the one to copy in your own code — is: **an absent
-accessor means the protocol cannot do it**, which is knowable before any command
-is sent and is the same fact as `Unsupported` after one. The facade's Tizen/webOS/
-Roku clients return `None` for all three, because their channels have no such
-command; MDC returns `Some` and never lies the other way. Panel _hours_ and
-screen _capture_ are behind the `supporting` feature: `tv-rs-mdc` implements the
-hours query (`0x83`), screen capture exists nowhere on the wire and is advertised
-by nobody.
+accessor means the protocol cannot do it**, knowable before any command is sent
+and the same fact as `Unsupported` after one. Which backend advertises what is
+the one table in this repo:
+[`docs/03-matrix.md` §Capability truth](docs/03-matrix.md#capability-truth) —
+the consumer channels return `None`, MDC returns `Some`, and panel _hours_ and
+screen _capture_ ride the `supporting` feature there (screen capture exists
+nowhere on the wire and is advertised by nobody).
 
 ---
 
@@ -155,7 +155,7 @@ ladder entirely:
 
 ```toml
 [dependencies]
-tv-rs = { version = "0.1", features = ["quirks"] }
+tv-rs = { version = "0.2", features = ["quirks"] }
 ```
 
 With the feature on, `TvClient::from_discovered` consults `quirks/default.toml` and

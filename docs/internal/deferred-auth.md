@@ -6,13 +6,13 @@ would be needed to implement them.
 
 ## What is deferred
 
-| Gap | Vendor | What is missing | Why it blocks |
-|---|---|---|---|
-| TLS certificate pinning | Samsung (8002), LG (3001) | Neither TV presents a CA-signed certificate. A strict client fails the handshake; `TlsPolicy::AcceptInvalid` works but is not shippable. | Needs the exact certificate material or validation behaviour the vendor's own clients use. |
-| Token derivation | Samsung enterprise panels | Consumer sets return a token in `ms.channel.connect`; some commercial panels expect a token derived from the device identity plus a fixed secret. | Needs the derivation to be observed, not guessed. A wrong hash produces an auth failure that looks like a pairing denial. |
-| Encrypted payload framing | Samsung, 2024+ firmware | Some sets wrap WebSocket payloads in AES-GCM with a key agreed during pairing. | Needs the key-agreement sequence and the nonce layout. |
-| Undocumented payloads | Roku ECP, LG SSAP | Documented commands cover the common verbs; input switching and hidden apps are not in the public surface. | Needs captured traffic from the vendor app to correlate UI actions with payloads. |
-| Protobuf schemas | Google Cast | `.proto` definitions are not published, so a pure-Rust sender cannot be written. | Needs the field mappings recovered from a sender implementation. |
+| Gap                       | Vendor                    | What is missing                                                                                                                                                                                                                                                                                                                                                                                                                | Why it blocks                                                                                                                             |
+| ------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| TLS certificate pinning   | Samsung (8002), LG (3001) | **Shipping**: `TlsPolicy::TrustOnFirstUse` records the certificate a TV presents on first connect; `TlsPolicy::Pinned(fingerprint)` accepts exactly that certificate afterwards. Both need the `rustls` backend — a `native-tls` build fails those policies with `TlsError::PinningUnavailable`. The remaining gap is verification against real television certificates on hardware (plan item 5, [`06-plan.md`](../06-plan.md)). | Needs a real TV session: does the vendor client's landmark match TrustOnFirstUse, and does a pinned handshake survive a firmware renewal? |
+| Token derivation          | Samsung enterprise panels | Consumer sets return a token in `ms.channel.connect`; some commercial panels expect a token derived from the device identity plus a fixed secret.                                                                                                                                                                                                                                                                              | Needs the derivation to be observed, not guessed. A wrong hash produces an auth failure that looks like a pairing denial.                 |
+| Encrypted payload framing | Samsung, 2024+ firmware   | Some sets wrap WebSocket payloads in AES-GCM with a key agreed during pairing.                                                                                                                                                                                                                                                                                                                                                 | Needs the key-agreement sequence and the nonce layout.                                                                                    |
+| Undocumented payloads     | Roku ECP, LG SSAP         | Documented commands cover the common verbs; input switching and hidden apps are not in the public surface.                                                                                                                                                                                                                                                                                                                     | Needs captured traffic from the vendor app to correlate UI actions with payloads.                                                         |
+| Protobuf schemas          | Google Cast               | `.proto` definitions are not published, so a pure-Rust sender cannot be written.                                                                                                                                                                                                                                                                                                                                               | Needs the field mappings recovered from a sender implementation.                                                                          |
 
 ## How the code behaves today
 
@@ -20,9 +20,12 @@ Every one of these returns a typed `Unsupported` carrying a phase and a reason
 (`tv_rs_transport::Unsupported`). The rule is that library code never panics and
 never silently does the wrong thing — a caller can match the error and decide.
 
-`TlsPolicy::AcceptInvalid` exists as an explicit, named escape hatch for local
-experimentation. It is one function in `transport/src/tls.rs`, so deleting it
-when real pinning lands is a two-line change.
+`TlsPolicy::AcceptInvalid` survives as an explicit, named escape hatch for
+experimentation — pinning itself has landed (`TrustOnFirstUse` record on first
+connect, `Pinned` from then on), so the hatch is no longer the only way to talk
+to a self-signed television. Keeping it is bounded: one policy variant, one
+config branch, and the diagnostics rule that a pinned or TOFU session is
+preferred whenever one exists.
 
 ## If this work is ever picked up
 

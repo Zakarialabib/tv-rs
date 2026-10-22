@@ -23,12 +23,9 @@ telemetry capabilities, and the five LFD capability variants (`PanelLock`,
 `ScreenCapture`).
 
 `cargo xtask publish --version 0.3.0` rewrites every pin and publishes in dependency
-order — `tv-rs-core` first, then the protocol crates, `tv-rs-mdc` second-to-last among
-the leaves:
-
-`tv-rs-core -> tv-rs-transport -> tv-rs-discovery -> tv-rs-power -> tv-rs-local ->
-tv-rs-dlna -> tv-rs-roku -> tv-rs-mdc -> tv-rs-tizen -> tv-rs-webos -> tv-rs ->
-tv-rs-media -> tv-rs-agent -> tv-rs-cec`
+order — `tv-rs-core` first, `tv-rs-mdc` among the leaves before the crates that name
+it. The order is data, not prose: `xtask/src/main.rs::ORDER` is the single home,
+and [ADR-001](adr/001-crate-publication.md) records why it is shaped that way.
 
 **Exit:** fourteen crates at `0.3.0`, a fresh `cargo add tv-rs` consumer builds against
 `power_observation()` and `assess_telemetry`, docs.rs serves the new items, and the
@@ -88,5 +85,6 @@ crates, `tv-rs-mdc`, then the agent, media and facade. Under the policy in
 `CONTRIBUTING.md` the additions are a **minor** bump.
 
 **Exit:** all fourteen crates published at the same version; `docs/hil-results.md` has
-at least one real row; the vendor capability table states each vendor's absence rather
-than implying a capability it lacks.
+at least one real row; the vendor capability table
+([`03-matrix.md` §Capability truth](03-matrix.md#capability-truth)) states each
+vendor's absence rather than implying a capability it lacks.
