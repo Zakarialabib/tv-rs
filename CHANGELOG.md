@@ -16,6 +16,16 @@ and `docs/06-plan.md` is the only plan.
 
 ### Added
 
+- **`tv-rs-app` — a TV app producer**: package a supplied web/wasm payload as an
+  installable TV app. Tizen `config.xml` and webOS `appinfo.json` generation, the
+  bundle layout, a stored-entry ZIP writer (a `.wgt` **is** a ZIP, so the archive is
+  written here — no compression dependency, and byte-identical for the same input),
+  and the generated `tv-bridge.js` that maps the D-pad onto a payload's
+  `key_event(name, value)`. Vendor back/exit numbers are supplied by the deployment
+  rather than guessed, and a `.ipk` is never fabricated: the crate returns the webOS
+  app directory and the `ares-package` command. New crate, so it publishes with the
+  rest of the workspace.
+
 - **MDC over RS-232** (`tv-rs-mdc`, feature `serial`): the same frames, checksum and
   reply parsing as the TCP path, on a serial line — a wired video wall has no
   discovery, no DHCP and no TLS to argue about. `MdcClient::serial("/dev/ttyUSB0",

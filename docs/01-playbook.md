@@ -276,20 +276,10 @@ Requested by the SignageMaster refactor spec
 (`Simple-Signage/docs/specs/ARCHITECTURE-REFACTOR-SPEC.md`, cards E6 and E3b). None of
 it exists here yet; each item states what moves in, and the boundary it must keep.
 
-**TV app producer (E6)** — package a supplied wasm/web payload as an installable TV
-app: Tizen `.wgt`, webOS `.ipk`, and a plain web bundle. The source is
-`Simple-Signage/src-tauri/crates/platform-tv-wrapper/` (197-line `lib.rs`: wasm-bindgen
-glue with `boot()`/`tick(now_ms)`/`snapshot()`/`dispatch(json)`/`key_event(k, v)`, plus
-`build-tizen.sh`, `build-webos.sh`, `build-tv.sh`). It depends on
-`signage-master-host` and `signage-master-core-wasm` today; here it must take the
-payload **generically** — no SignageMaster types, no player logic, no schedule
-(see [NON_GOALS](../NON_GOALS.md): "not a CMS"). SignageMaster's no_std reducer becomes
-one payload among others (agent status UI, kiosk page, test pattern). D-pad key
-mapping and app-manifest generation (Tizen `config.xml`, webOS `appinfo.json`) belong
-here because they are TV-protocol knowledge. Artifacts are unsigned; signing and
-device install stay out of scope until a HIL row in
-[`hil-results.md`](hil-results.md) exists for them. Name proposed: `tv-rs-app`. Once it
-publishes, SignageMaster deletes its copy.
+**TV app producer (E6)** — builds a Tizen `.wgt` / webOS app directory / plain web
+bundle around a supplied payload. It is open work with its own exit criteria:
+[plan item 2](06-plan.md). The protocol facts it needs — manifest fields and the
+D-pad key codes — are in §3 (Tizen) and §4 (webOS) above.
 
 **Display probe merge (E3b)** — SignageMaster's `device-hardware/src/display/*`
 (~800 lines, EDID/connector enumeration) overlaps `tv-rs-local`. Compare the two;

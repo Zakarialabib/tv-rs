@@ -44,6 +44,7 @@ routes to everything that exists in `docs/` — nothing here, and nothing missin
 | `crates/{discovery,power,tizen,webos,roku,mdc,cec}` | one wire protocol each (SSDP, Wake-on-LAN, Tizen, webOS, Roku ECP, Samsung MDC, HDMI-CEC)                       |
 | `crates/local`                                      | the host's own display (EDID/mode probing)                                                                      |
 | `crates/{transport,dlna,media}`                     | support: TLS/frame reader; DLNA renderer transport; `206`/HLS server                                            |
+| `crates/app`                                        | the TV app producer: a supplied payload in, `.wgt` / webOS app directory / web bundle out                       |
 | `crates/agent`                                      | reconciliation: desired state in, fleet converged, audited                                                      |
 | `crates/cli`                                        | the reference consumer (`publish = false`)                                                                      |
 | `xtask`                                             | workspace automation: `cargo xtask publish`                                                                     |
