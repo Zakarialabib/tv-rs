@@ -8,6 +8,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Commercial LFD capability surfaces** (`tv-rs-core` + `tv-rs-mdc`): a 40-inch
+  wall panel is not a TV remote, and the vocabulary therefor is now in the device
+  model. `Capability` grows `PanelLock`, `Orientation` and `NoSignalStatus` as
+  always-on surfaces, plus `LampOrPanelHours` and `ScreenCapture` behind the new
+  **`supporting`** feature. Core ships `PanelLockControl`, `OrientationControl`,
+  `PanelHealthProvider` (`PanelHealth`: signal present, temperature, lamp fault)
+  and — behind `supporting` — `PanelHoursProvider` (`PanelHours`) and
+  `ScreenCapturer` (`ScreenFrame`). The mock backend advertises and answers all
+  of them from settable state, and the conformance suite covers truth table and
+  `Unsupported` routing for all five.
+- **The LFD subset on MDC**: `tv-rs-mdc` advertises and implements exactly what
+  its protocol speaks — panel lock (`0x5F`), content orientation
+  (`0xC8`/`0x82`; `MdcOrientation` maps onto `tv_rs_core::Orientation`),
+  panel health (`0x0D`: lamp fault, input-source error, panel temperature, fan)
+  and panel on-time (`0x83`, ten-minute units converted to hours, behind
+  `supporting`). Every surface has wire-frame tests, including the `0x02`
+  invalid-selection case of `0x0D`.
+- **A dishonest claim corrected**: `0x0D` also reports temperature and
+  input-source state, so the 0.3.0 entry's "MDC reports no temperature" was wrong
+  and is not carried forward — the MDC README now documents the health data, and
+  the adapter's telemetry _opt-out_ is restated honestly: no aggregate
+  `TelemetryProvider`, because MDC performs no structured telemetry reads.
+- **Tizen states its absence**: the consumer remote channel (8001/8002) exposes
+  none of the LFD subset, so `TvClient` advertises none of it — documented in the
+  facade's capability table and the state matrix rather than faked behind a
+  adapter that cannot work.
 - **Graduated remediation ladder** (`tv-rs-agent::remedy`): the agent no longer stops
   at a telemetry verdict. A panel that is hot but not critical is **dimmed**
   (`Capability::Brightness`) and deferred; a panel whose temperature or link is
@@ -43,6 +69,7 @@ and this file carry the design, and `docs/06-plan.md` is the only plan.
   adapter covers power, input, volume, **brightness**, **reboot** and a control-channel
   **probe**, and it deliberately does not advertise `Telemetry`: MDC reports no
   temperature, signal or uptime, so `as_telemetry()` stays `None`.
+
 - **Telemetry** (`tv-rs-core`): temperature, signal strength, signal quality and
   uptime, each an `ObservedField` — a panel that stops answering is not cool and
   well-fed, it is unknown. Plus the `TelemetryProvider` trait and the
@@ -103,7 +130,7 @@ remote service, and the facade learns what confidence and quirks mean.
   port at client construction: a `QN90*` Tizen panel is built on 8002 only, a webOS 23
   panel on 3001 only, so the dead generation is never probed. A test asserts every
   action shipped in `quirks/default.toml` decodes to known vocabulary.
-- **`power_observation()`**: the facade returns the power state *and* its confidence.
+- **`power_observation()`**: the facade returns the power state _and_ its confidence.
   Roku is `High` (it reports the mode); Tizen and webOS are `Inferred`, because an
   answering control port does not prove a picture is on. `power_state()` is a
   projection of it, so the two cannot disagree. `tv-rs-cli status` prints `CONFIDENCE`.

@@ -54,20 +54,20 @@ The rules the code follows:
 
 ## What it does
 
-|                   |                                                                                                                                                         |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Discover**      | SSDP `M-SEARCH` on UDP 1900, UPnP descriptor parsing, vendor identification                                                                             |
-| **Wake**          | Wake-on-LAN magic packet, plus a TCP probe that tells `On` / `Standby` / `Off` apart                                                                    |
-| **Samsung Tizen** | remote WebSocket channel (8001 plain, 8002 TLS, negotiated automatically), DIAL launch (8080), pairing-token store, per-TV connection pool              |
-| **Samsung MDC**   | serial-style command frames over TCP 1515: power, volume/mute, input, brightness and status; one socket can address a video wall by display ID          |
-| **LG webOS**      | SSAP over WebSocket (3000/3001, negotiated), pairing, `client-key` persistence, volume/mute/launch/power/foreground, `open_url` in the built-in browser |
-| **Roku**          | unauthenticated ECP REST (8060): device info, apps, key presses, launch, power mode                                                                     |
-| **Capabilities**  | per-vendor capability sets + `DeviceHandle` traits, so a fleet holds `Arc<dyn DeviceHandle>` with no generics                                           |
-| **Confidence**    | `power_observation()` reports the state *and* how it was learned — read (`High`) or probed (`Inferred`)                                                 |
-| **Quirks**        | firmware/model defects as TOML; with the `quirks` feature a matching row removes a dead port from the ladder                                            |
-| **Reconcile**     | desired state from a file, an HTTP manifest or MQTT; one pure decision function; healing ladder; JSONL audit log                                        |
-| **HDMI-CEC**      | power on / standby / active source over the cable, for panels the network cannot reach (optional)                                                       |
-| **Serve media**   | HTTP `206 Partial Content` for seeking, plus HLS playlists — the two things TV players insist on                                                        |
+|                   |                                                                                                                                                                                                                                                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Discover**      | SSDP `M-SEARCH` on UDP 1900, UPnP descriptor parsing, vendor identification                                                                                                                                                                                      |
+| **Wake**          | Wake-on-LAN magic packet, plus a TCP probe that tells `On` / `Standby` / `Off` apart                                                                                                                                                                             |
+| **Samsung Tizen** | remote WebSocket channel (8001 plain, 8002 TLS, negotiated automatically), DIAL launch (8080), pairing-token store, per-TV connection pool                                                                                                                       |
+| **Samsung MDC**   | commercial-panel commands over TCP 1515: power, volume/mute, input, brightness, status, panel lock, content orientation, panel health (no-signal/lamp/temperature), panel hours; one socket can address a video wall by display ID                               |
+| **LG webOS**      | SSAP over WebSocket (3000/3001, negotiated), pairing, `client-key` persistence, volume/mute/launch/power/foreground, `open_url` in the built-in browser                                                                                                          |
+| **Roku**          | unauthenticated ECP REST (8060): device info, apps, key presses, launch, power mode                                                                                                                                                                              |
+| **Capabilities**  | per-vendor capability sets + `DeviceHandle` traits, so a fleet holds `Arc<dyn DeviceHandle>` with no generics; the LFD subset (`as_panel_lock()`, `as_orientation()`, `as_panel_health()`) is honest per backend — MDC says yes, consumer channels return `None` |
+| **Confidence**    | `power_observation()` reports the state _and_ how it was learned — read (`High`) or probed (`Inferred`)                                                                                                                                                          |
+| **Quirks**        | firmware/model defects as TOML; with the `quirks` feature a matching row removes a dead port from the ladder                                                                                                                                                     |
+| **Reconcile**     | desired state from a file, an HTTP manifest or MQTT; one pure decision function; healing ladder; JSONL audit log                                                                                                                                                 |
+| **HDMI-CEC**      | power on / standby / active source over the cable, for panels the network cannot reach (optional)                                                                                                                                                                |
+| **Serve media**   | HTTP `206 Partial Content` for seeking, plus HLS playlists — the two things TV players insist on                                                                                                                                                                 |
 
 ## What it does not do
 
@@ -111,9 +111,9 @@ Want less? Depend on one crate:
 | `tv-rs-tizen`     | Samsung remote channel, DIAL, token store, connection pool                                                                              | largest protocol surface                                           |
 | `tv-rs-webos`     | LG SSAP                                                                                                                                 | different framing, different pairing                               |
 | `tv-rs-roku`      | Roku ECP                                                                                                                                | plain REST, no auth at all                                         |
-| `tv-rs-mdc`       | Samsung MDC over TCP 1515: power, volume/mute, input, brightness, status; shared socket for walls                                       | different wire protocol from Tizen; no WebSocket or TLS            |
+| `tv-rs-mdc`       | Samsung MDC over TCP 1515: power, volume/mute, input, brightness, status, panel lock/orientation/health; shared socket for walls        | different wire protocol from Tizen; no WebSocket or TLS            |
 | `tv-rs-transport` | TLS policy/pinning + budgeted WebSocket frame reader                                                                                    | one place for the TLS decision                                     |
-| `tv-rs-agent`     | providers, `decide()`, healer, graduated remediation ladder (dim → restart → reboot), audit log, run loop                                  | opinionated; the facade stays a library                            |
+| `tv-rs-agent`     | providers, `decide()`, healer, graduated remediation ladder (dim → restart → reboot), audit log, run loop                               | opinionated; the facade stays a library                            |
 | `tv-rs-cec`       | HDMI-CEC via `cec-client` (optional)                                                                                                    | needs an adapter most machines lack                                |
 | `tv-rs-media`     | `206` + HLS HTTP server                                                                                                                 | pulls `axum`; must never enter a protocol crate's graph            |
 | `tv-rs-cli`       | `discover`, `status`, `ensure`, `wake`, `power-off`, `key`, `launch`                                                                    | the facade's reference consumer (`publish = false`)                |
@@ -279,15 +279,15 @@ picks up where it stopped instead of failing on crate #1.
 New here? [`docs/glossary.md`](docs/glossary.md) is the map — every term links to
 the page that explains it.
 
-| Start with                                                         | If you want to                                                                |
-| ------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| [`docs/01-playbook.md`](docs/01-playbook.md)                       | the protocol facts: ports, handshakes, what each vendor exposes               |
-| [`docs/architecture.md`](docs/architecture.md)                     | the three layers, the dependency rule, where a new file belongs               |
-| [`INTEGRATION.md`](INTEGRATION.md)                                 | **put it in an application**: discovery, pinning, quirks, a fleet, media, CEC |
-| [`docs/03-matrix.md`](docs/03-matrix.md)                           | what is done, what is deferred, verified test counts                          |
-| [`docs/06-plan.md`](docs/06-plan.md)                         | **the live plan**: only open work, with exit criteria          |
-| [`QUIRKS.md`](QUIRKS.md)                                           | how to submit a model/firmware defect                                         |
-| [`docs/02-external-refs.md`](docs/02-external-refs.md)             | protocol references and prior art                                             |
+| Start with                                             | If you want to                                                                |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| [`docs/01-playbook.md`](docs/01-playbook.md)           | the protocol facts: ports, handshakes, what each vendor exposes               |
+| [`docs/architecture.md`](docs/architecture.md)         | the three layers, the dependency rule, where a new file belongs               |
+| [`INTEGRATION.md`](INTEGRATION.md)                     | **put it in an application**: discovery, pinning, quirks, a fleet, media, CEC |
+| [`docs/03-matrix.md`](docs/03-matrix.md)               | what is done, what is deferred, verified test counts                          |
+| [`docs/06-plan.md`](docs/06-plan.md)                   | **the live plan**: only open work, with exit criteria                         |
+| [`QUIRKS.md`](QUIRKS.md)                               | how to submit a model/firmware defect                                         |
+| [`docs/02-external-refs.md`](docs/02-external-refs.md) | protocol references and prior art                                             |
 
 ## Contributing
 

@@ -212,7 +212,7 @@ No `tv-rs` crate may depend on an app crate. The app may depend on `tv-rs`; neve
 These are review gates, not suggestions.
 
 1. **One TV protocol, one implementation.** SSDP/mDNS TV discovery, Tizen WS, token storage, TLS pinning and DLNA **transport** exist only in `tv-rs`. The app keeps exactly one server-side media library/media server (ContentDirectory, 206, SSDP advertise); that is not a TV control protocol and does not move.
-2. **One capability truth.** UI gating derives from `tv-rs-core::CapabilitySet`; `TvCapabilities` is a projection, not a second source.
+2. **One capability truth.** UI gating derives from `tv-rs-core::CapabilitySet`; `TvCapabilities` is a projection, not a second source. The commercial LFD surfaces (`PanelLock`, `Orientation`, `NoSignalStatus`, and behind the `supporting` feature `LampOrPanelHours`/`ScreenCapture`) follow the same projection rule: gate on the set, fetch with `as_panel_lock()` / `as_orientation()` / `as_panel_health()`, and treat `None` as "the protocol cannot" — MDC-backed handles say `Some`, the consumer channels say `None`, and neither invents data.
 3. **One error model.** Use `tv_rs_core::TvError::remedy()` for routing. The facade's aggregate `tv_rs::TvError` is mapped once in the app adapter.
 4. **One identity rule.** `TvClient::id()` is a host, not a stable device id. The app's `display_id` remains primary; `usn`/`serial_number`/MAC are evidence.
 5. **One credential path.** Tizen tokens and webOS `client-key`s are stored through the vendor store or an app secret adapter; never in `DisplayLinkStatus`, logs or events.
@@ -255,7 +255,7 @@ These are review gates, not suggestions.
 
 | Fact         | Value                                                                                                                                                  |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Dependency   | `tv-rs = "0.2"` (crates.io) in `plugin-samsung-remote/Cargo.toml`                                                                                    |
+| Dependency   | `tv-rs = "0.2"` (crates.io) in `plugin-samsung-remote/Cargo.toml`                                                                                      |
 | Upstream     | `https://github.com/Zakarialabib/tv-rs.git`; spec SHA `fedbf07d0fafd9a927a155e98cfc44f4572329b2` (note: `origin/main` is 2 commits ahead at `030600d`) |
 | License      | MIT (workspace) — compatible with the app's `MIT OR Apache-2.0`                                                                                        |
 | MSRV         | `1.89` (app is `1.94` — no conflict)                                                                                                                   |

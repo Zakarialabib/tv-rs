@@ -67,13 +67,41 @@ something outside it returns `TvError::Unsupported` with a reason.
 
 `power_observation()` returns the state **and how sure the crate is**:
 
-| backend | confidence | why |
-|---|---|---|
-| Roku | `High` | ECP reports the power mode |
+| backend      | confidence | why                                                                   |
+| ------------ | ---------- | --------------------------------------------------------------------- |
+| Roku         | `High`     | ECP reports the power mode                                            |
 | Tizen, webOS | `Inferred` | a TCP probe proves the control port answers, not that a picture is on |
 
 Use `power_state()` when you only need the value — it is the same call with the
 confidence dropped, so the two can never disagree.
+
+### Commercial panels: the LFD surfaces
+
+A 40-inch wall panel answers different questions than a consumer TV — _can nobody
+walk up and change the picture_, _which way is the content turned_, _is a signal
+even arriving_. On an MDC-backed handle (`tv_rs_mdc::MdcDevice`) those are real
+accessors:
+
+```rust,no_run
+use tv_rs::core::{DeviceHandle, PanelHealthProvider};
+
+# async fn example(handle: &dyn DeviceHandle) -> Result<(), tv_rs::core::TvError> {
+let lock = handle.as_panel_lock().expect("panel lock");   // or handle None first
+lock.set_panel_lock(true, tv_rs::core::CommandId::new()).await?;
+let health = handle.as_panel_health().expect("panel health");
+let observed = health.panel_health().await?;
+#     Ok(())
+# }
+```
+
+The rule these obey — and the one to copy in your own code — is: **an absent
+accessor means the protocol cannot do it**, which is knowable before any command
+is sent and is the same fact as `Unsupported` after one. The facade's Tizen/webOS/
+Roku clients return `None` for all three, because their channels have no such
+command; MDC returns `Some` and never lies the other way. Panel _hours_ and
+screen _capture_ are behind the `supporting` feature: `tv-rs-mdc` implements the
+hours query (`0x83`), screen capture exists nowhere on the wire and is advertised
+by nobody.
 
 ---
 
@@ -119,7 +147,7 @@ function in `tv-rs-transport`, which is the point.
 
 Tizen moved from `ws://:8001` to `wss://:8002`, webOS from `ws://:3000` to
 `wss://:3001`. Both crates negotiate: try the modern port, fall back only when the
-connection was *refused* (a certificate mismatch is an answer, not a reason to
+connection was _refused_ (a certificate mismatch is an answer, not a reason to
 downgrade to plaintext), and remember what worked.
 
 When the generation is already known, the quirks table removes the dead port from the
@@ -248,14 +276,15 @@ tested-against-mocks until that table has rows.
 
 ## 9. Where the seams are
 
-| You need | Reach for | Not |
-|---|---|---|
-| one operation on one screen | `TvClient` | the vendor crates directly |
-| the same operation on many | `DeviceHandle` traits | matching on `TvVendor` |
-| vendor-specific extras | `as_tizen()` / `as_webos()` / `as_roku()` | feature-detecting at runtime |
-| fleet policy | `tv-rs-agent` | a retry loop per device |
-| video | `tv-rs-media` | a hand-rolled range handler |
-| a panel with no IP | `tv-rs-cec` | pretending the network one is down |
+| You need                                                | Reach for                                                                            | Not                                            |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| one operation on one screen                             | `TvClient`                                                                           | the vendor crates directly                     |
+| the same operation on many                              | `DeviceHandle` traits                                                                | matching on `TvVendor`                         |
+| vendor-specific extras                                  | `as_tizen()` / `as_webos()` / `as_roku()`                                            | feature-detecting at runtime                   |
+| panel lock / orientation / health on a commercial panel | `as_panel_lock()` / `as_orientation()` / `as_panel_health()` on an MDC-backed handle | faking a read the consumer channel cannot make |
+| fleet policy                                            | `tv-rs-agent`                                                                        | a retry loop per device                        |
+| video                                                   | `tv-rs-media`                                                                        | a hand-rolled range handler                    |
+| a panel with no IP                                      | `tv-rs-cec`                                                                          | pretending the network one is down             |
 
 The facade holds no protocol logic; the vendor crates hold no policy; the agent holds
 no transport. Behaviour that does not fit one of those rows usually means the

@@ -16,7 +16,7 @@ accumulates ticks is a second changelog, and a worse one.
 > and a written hardware telemetry gate. Three are still open below. The graduated
 > ladder has landed (`crates/agent/src/remedy.rs`, in the CHANGELOG under
 > `Unreleased`), so its section is gone — that is this page's rule working, not an
-> item being dropped. Every remaining claim below is a *to-do*, not a *state*.
+> item being dropped. Every remaining claim below is a _to-do_, not a _state_.
 
 ---
 
@@ -36,6 +36,11 @@ accumulates ticks is a second changelog, and a worse one.
 - **The agent has a graduated remediation ladder** — a hot panel is dimmed, a
   critical one is rebooted once before it is quarantined, a stalled player can be
   restarted; every rung is skipped rather than faked when the device cannot take it.
+- **LFD capability surfaces have landed in core and MDC** — `PanelLock`,
+  `Orientation`, `NoSignalStatus` as always-on capabilities, `LampOrPanelHours`
+  and `ScreenCapture` behind the `supporting` feature; conformance covers all of
+  them; `tv-rs-mdc` implements what its protocol actually speaks. Tizen exposes
+  none of the subset and says so — see item 2 for what that leaves open.
 - **Hardware is still unverified.** `docs/hil-results.md` is empty and that is the one
   honest gap in the v0.2 definition of done.
 - **An external review of the workspace** (attached, 2026-10-21) confirmed the
@@ -70,19 +75,32 @@ updating an existing crate needs `publish-update`.
 **Exit:** fourteen crates at `0.3.0`, a fresh `cargo add tv-rs` consumer builds
 against `power_observation()` and `assess_telemetry`, docs.rs serves the new items,
 CHANGELOG and README agree with the registry, and `docs/hil-results.md` carries an
-explicit *not verified* line per vendor (the honest gap, not a guess).
+explicit _not verified_ line per vendor (the honest gap, not a guess).
 
 ## 2. Commercial LFD capability surfaces
 
-A 40+ inch commercial panel is not a TV remote: it needs `PanelLock` (prevent
-standby/awning), `Orientation` (rotate / portrait mode), `LampOrPanelHours`
-(thermal/asset reporting), `NoSignalStatus`, and `ScreenCapture` (a still frame for
-playout monitoring). Add them to the `Capability` enum with honest adapters on
-`DeviceHandle`; none exist today.
+The vocabulary and the commercial adapter are done. `Capability` carries `PanelLock`,
+`Orientation` and `NoSignalStatus` as always-on surfaces plus `LampOrPanelHours` and
+`ScreenCapture` behind the `supporting` feature; the conformance suite covers all
+five (truth table and `Unsupported` routing); `tv-rs-mdc` implements exactly what its
+protocol speaks — panel lock `0x5F`, content orientation `0xC8`/`0x82`, panel health
+`0x0D` (lamp fault, input-source error, temperature, fan), and panel on-time `0x83`
+under `supporting` — with wire-frame tests for every one of them.
 
-**Exit:** conformance suite covers the new variants; `tv-rs-mdc` and `tv-rs-tizen`
-expose at least the common subset (`PanelLock`, `Orientation`, `NoSignalStatus`);
-`supporting` variants compile out behind a feature.
+Two things keep this item open:
+
+1. **Tizen cannot speak the LFD subset, and that is now documented rather than
+   faked.** The consumer remote channel (8001/8002) has no panel-lock, orientation
+   or health command, so `TvClient` advertises none of them; the exit criterion
+   "MDC and Tizen expose the common subset" is resolved as _MDC exposes it, Tizen
+   states its absence_.
+2. **`ScreenCapture` still has no wire path anywhere.** The vocabulary exists and
+   compiles out cleanly, but no shipped protocol carries a capture frame — MDC
+   honestly returns `None` from `as_screen_capturer()` in every configuration. A
+   capture backend lands when a protocol path exists, not before.
+
+**Exit:** a `ScreenCapture` backend for a protocol that actually carries one (or a
+documented third-party path); the Tizen honesty stays as written.
 
 ## 3. MDC over RS-232
 
@@ -114,7 +132,7 @@ and no new botched error paths.
 
 ## 6. DDC/CI in `tv-rs-local`
 
-Brightness and input for the display the machine is *attached to*, over `/dev/i2c`
+Brightness and input for the display the machine is _attached to_, over `/dev/i2c`
 (`VCP 0x10`, `VCP 0x60`). It belongs in `tv-rs-local` because that crate already owns
 "this host's panel", and it must never be confused with controlling a remote panel.
 
@@ -146,7 +164,7 @@ traits.
 The review's Capability additions (`PanelLock`, `Orientation`, `LampOrPanelHours`,
 `NoSignalStatus`, `ScreenCapture`), the agent's remediation ladder and every open item
 above. Under the policy in `CONTRIBUTING.md` that is a **minor** bump, shipped in the
-order of the plan *before* it: `tv-rs-core`, protocol crates, `tv-rs-mdc`, then the
+order of the plan _before_ it: `tv-rs-core`, protocol crates, `tv-rs-mdc`, then the
 agent, media and facade.
 
 **Exit:** the new capabilities pass conformance on MDC and Tizen; the agent ladder is
@@ -159,14 +177,14 @@ published at the same version.
 
 Recorded so they do not come back as "suggestions" a year from now:
 
-| Idea | Why not |
-| --- | --- |
+| Idea                                                      | Why not                                                                                                                          |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `PowerState::PoweringOn/PoweringOff` as observable states | no consumer panel reports them; a TCP probe cannot tell "warming up" from "off", so the enum would turn an inference into a fact |
-| `trait PowerControl: TvDevice` with `&mut self` | kills `Arc<dyn DeviceHandle>` and forces one lock per call; connection lifecycle belongs inside the backend |
-| Stringly-typed errors (`AuthFailed(String)`) | removes `Remedy`, which is the only reason a caller can branch on what to *do* |
-| `create_device(...) -> Box<dyn TvDevice>` with `todo!()` | unimplemented factory in a public API; the facade already dispatches on vendor |
-| `type Percentage = u8` as a "bounded" type | an alias enforces nothing; a brightness control needs a validating newtype |
-| A CMS/scheduler inside this workspace | `NON_GOALS.md`; the agent converges a device, it does not decide what plays |
+| `trait PowerControl: TvDevice` with `&mut self`           | kills `Arc<dyn DeviceHandle>` and forces one lock per call; connection lifecycle belongs inside the backend                      |
+| Stringly-typed errors (`AuthFailed(String)`)              | removes `Remedy`, which is the only reason a caller can branch on what to _do_                                                   |
+| `create_device(...) -> Box<dyn TvDevice>` with `todo!()`  | unimplemented factory in a public API; the facade already dispatches on vendor                                                   |
+| `type Percentage = u8` as a "bounded" type                | an alias enforces nothing; a brightness control needs a validating newtype                                                       |
+| A CMS/scheduler inside this workspace                     | `NON_GOALS.md`; the agent converges a device, it does not decide what plays                                                      |
 
 ## Definition of done for `0.3.0`
 
