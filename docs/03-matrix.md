@@ -139,14 +139,6 @@ Rows are keyed on what discovery can actually supply. The UPnP descriptor gives
 
 ## Next
 
-Six items, and the live plan owns them: [`06-plan.md`](06-plan.md). The two that are
-_not_ there, on purpose:
-
-| Task                    | Why it is not on the plan                                                                                         |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| mDNS listener           | nothing consumes it yet; AirPlay/Cast would need their own crates first                                           |
-| More `SsapUri` variants | input switching has no consumer demanding it, and every variant is a protocol claim that needs hardware to verify |
-
-Everything else — the `0.3.0` publish, Sony Bravia, native CEC, DDC/CI, the
-real-device verification pass, media caching and multi-screen sync, the next release —
-is sequenced there with exit criteria.
+The live plan owns the open work, with an exit criterion per item:
+[`06-plan.md`](06-plan.md). This page describes what exists today; what landed over
+time is [`../CHANGELOG.md`](../CHANGELOG.md).

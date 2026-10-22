@@ -10,13 +10,12 @@ failure behind a panic. These pages are the long version of that.
 | 0 | [`glossary.md`](glossary.md) | **The map.** Every term, and the page or file that explains it. Start here if you only have five minutes. |
 | 1 | [`01-playbook.md`](01-playbook.md) | The protocol facts: ports, handshakes, discovery, media, and what each vendor exposes. |
 | 2 | [`architecture.md`](architecture.md) | The layers, the dependency rule, the module inventory per crate, the auth rule, and the playbook → crate map. |
-| 3 | [`03-matrix.md`](03-matrix.md) | State: what is implemented, what is deferred, verified test counts, remaining gaps. |
+| 3 | [`03-matrix.md`](03-matrix.md) | State: what each crate implements today, the verified test counts, the published versions, and the honest gaps. |
 | 4 | [`02-external-refs.md`](02-external-refs.md) | Protocol references, prior art, and the crates this workspace learned from. |
 | 5 | [`04-rust-package-standard.md`](04-rust-package-standard.md) | The engineering standard the whole workspace follows — reusable outside this repo. |
-| 6 | [`06-plan.md`](06-plan.md) | **The live plan.** Only open work: the `0.3.0` publish, Sony, native CEC, DDC/CI, hardware, media caching, the next release. |
+| 6 | [`06-plan.md`](06-plan.md) | **The live plan.** Open work only: the `0.3.0` publish, Sony, native CEC, DDC/CI, hardware, media caching, the next release. Landed work lives in the CHANGELOG. |
 | — | [`../INTEGRATION.md`](../INTEGRATION.md) | **Putting it in an application**: discovery, TLS pinning, quirks, a fleet, media, CEC, the pre-ship checklist. |
 | — | [`07-adoption.md`](07-adoption.md) | The contract for adopting this workspace inside a signage application (U0–U4): what the app owns, what the crate owns. |
-| — | [`05-roadmap.md`](05-roadmap.md) | Archive: the P0–P9 proposals and how each one actually resolved. |
 | — | [`hil-results.md`](hil-results.md) | What has actually run against a physical TV. Today: nothing. |
 | — | [`adr/`](adr/) | [001 — crate publication](adr/001-crate-publication.md), [002 — workspace layout](adr/002-workspace-layout.md). |
 
@@ -35,9 +34,12 @@ failure behind a panic. These pages are the long version of that.
 
 | Path | Contents |
 |---|---|
+| `crates/core` | the device model: capability traits, the erased `DeviceHandle`, `CommandId`, observed state, the error taxonomy |
 | `crates/tv-rs` | facade: discovery orchestration, vendor identification, `TvClient` |
-| `crates/{discovery,power,tizen,webos,roku}` | one wire protocol each |
-| `crates/{transport,media}` | support: TLS/frame reader; `206`/HLS server |
+| `crates/{discovery,power,tizen,webos,roku,mdc,cec}` | one wire protocol each (SSDP, Wake-on-LAN, Tizen, webOS, Roku ECP, Samsung MDC, HDMI-CEC) |
+| `crates/local` | the host's own display (EDID/mode probing) |
+| `crates/{transport,dlna,media}` | support: TLS/frame reader; DLNA renderer transport; `206`/HLS server |
+| `crates/agent` | reconciliation: desired state in, fleet converged, audited |
 | `crates/cli` | the reference consumer (`publish = false`) |
 | `xtask` | workspace automation: `cargo xtask publish` |
 | `docs/` | these pages |

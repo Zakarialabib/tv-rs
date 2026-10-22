@@ -4,14 +4,22 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-10-22
+
+Fourteen crates. The telemetry lane lands (`tv-rs-core` telemetry + capabilities,
+`tv-rs-agent` policy and its graduated remediation ladder), `tv-rs-mdc` joins as the
+commercial-signage protocol and speaks RS-232 as well as TCP, the LFD capability
+surfaces arrive in core and MDC, and `DeviceOs::SamsungMdc`, `Remedy::Quarantine` and
+five new capability variants make the 0.x-breaking bump to `0.3.0`. The specification
+documents are gone: rustdoc, `docs/architecture.md` and this file carry the design,
+and `docs/06-plan.md` is the only plan.
 
 ### Added
 
 - **MDC over RS-232** (`tv-rs-mdc`, feature `serial`): the same frames, checksum and
   reply parsing as the TCP path, on a serial line — a wired video wall has no
   discovery, no DHCP and no TLS to argue about. `MdcClient::serial("/dev/ttyUSB0",
-9600)` opens it; the request loop is carrier-agnostic and a test drives it over an
+  `9600`) opens it; the request loop is carrier-agnostic and a test drives it over an
   in-memory channel to prove the codec is shared rather than copied. `serial` is off
   by default, so a cloud agent that only talks to networked panels compiles no serial
   stack, and an absent device is a typed `MdcError::Io` rather than a hang.
@@ -31,12 +39,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   panel health (`0x0D`: lamp fault, input-source error, panel temperature, fan)
   and panel on-time (`0x83`, ten-minute units converted to hours, behind
   `supporting`). Every surface has wire-frame tests, including the `0x02`
-  invalid-selection case of `0x0D`.
-- **A dishonest claim corrected**: `0x0D` also reports temperature and
-  input-source state, so the 0.3.0 entry's "MDC reports no temperature" was wrong
-  and is not carried forward — the MDC README now documents the health data, and
-  the adapter's telemetry _opt-out_ is restated honestly: no aggregate
-  `TelemetryProvider`, because MDC performs no structured telemetry reads.
+  invalid-selection case of `0x0D`. That `0x0D` reply also carries panel temperature
+  and input-source state, which is why the health surface exists: MDC does report
+  those two, and an earlier draft of this file said it did not.
 - **Tizen states its absence**: the consumer remote channel (8001/8002) exposes
   none of the LFD subset, so `TvClient` advertises none of it — documented in the
   facade's capability table and the state matrix rather than faked behind a
@@ -53,16 +58,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   verdict alone (`telemetry_wait`, `telemetry_quarantine`) when there was nothing to
   do.
 
-## [0.3.0] - 2026-10-21
-
-Fourteen crates. The telemetry lane lands (`tv-rs-core` telemetry + capabilities,
-`tv-rs-agent` policy), `tv-rs-mdc` joins as the commercial-signage protocol, and
-`DeviceOs::SamsungMdc` plus `Remedy::Quarantine` make the 0.x-breaking bump to
-`0.3.0`. The specification documents are gone: rustdoc, `docs/architecture.md`
-and this file carry the design, and `docs/06-plan.md` is the only plan.
-
-### Added
-
 - **`tv-rs-mdc`**: Samsung Multiple Display Control over TCP 1515 — the protocol
   commercial signage panels actually expose (RJ45; the same frames travel over RS-232).
   Frame encoding with checksum validation, display-ID addressing including the
@@ -73,9 +68,11 @@ and this file carry the design, and `docs/06-plan.md` is the only plan.
 
   This is a different protocol from the consumer Tizen channel in `tv-rs-tizen`: no
   WebSocket, no TLS, no pairing — which is exactly why it exists. Its `DeviceHandle`
-  adapter covers power, input, volume, **brightness**, **reboot** and a control-channel
-  **probe**, and it deliberately does not advertise `Telemetry`: MDC reports no
-  temperature, signal or uptime, so `as_telemetry()` stays `None`.
+  adapter covers power, input, volume, **brightness**, **reboot**, a control-channel
+  **probe** and the LFD surfaces above. It does not advertise aggregate `Telemetry`:
+  MDC reports panel temperature and input-source state (exposed as `PanelHealth`) but
+  no signal-strength history and no uptime, so a `TelemetryProvider` would have to
+  invent two of its four fields.
 
 - **Telemetry** (`tv-rs-core`): temperature, signal strength, signal quality and
   uptime, each an `ObservedField` — a panel that stops answering is not cool and
