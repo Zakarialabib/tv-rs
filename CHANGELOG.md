@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **MDC over RS-232** (`tv-rs-mdc`, feature `serial`): the same frames, checksum and
+  reply parsing as the TCP path, on a serial line — a wired video wall has no
+  discovery, no DHCP and no TLS to argue about. `MdcClient::serial("/dev/ttyUSB0",
+9600)` opens it; the request loop is carrier-agnostic and a test drives it over an
+  in-memory channel to prove the codec is shared rather than copied. `serial` is off
+  by default, so a cloud agent that only talks to networked panels compiles no serial
+  stack, and an absent device is a typed `MdcError::Io` rather than a hang.
 - **Commercial LFD capability surfaces** (`tv-rs-core` + `tv-rs-mdc`): a 40-inch
   wall panel is not a TV remote, and the vocabulary therefor is now in the device
   model. `Capability` grows `PanelLock`, `Orientation` and `NoSignalStatus` as

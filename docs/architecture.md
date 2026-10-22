@@ -42,7 +42,7 @@ used to suggest otherwise and no longer exists (see
      └────────────────────────────────────────────────────────────┘
 
   discovery, power  ── no dependency on any vendor crate
-  mdc               ── TCP 1515 frames; depends on core, not on transport
+  mdc               ── TCP 1515 or RS-232 frames; depends on core, not on transport
   cec               ── shells out to cec-client; no workspace dependency
   media             ── depends on nothing in the workspace (pulls axum)
 ```
@@ -76,7 +76,7 @@ has that concept.
 | `tizen`          | ✓ channel/session           | ✓ `WebSocketHandshake`, `DialLauncher`                                       | ✓ channel frames          | ✓ keys/ports                                                   | ✓                      | ✓ pairing token |
 | `webos`          | ✓ SSAP session              | ✓ `SsapController`                                                           | ✓ JSON-RPC frames         | ✓ `SsapUri`                                                    | ✓                      | ✓ `client-key`  |
 | `roku`           | ✓ ECP REST                  | ✓ `EcpRestClient`                                                            | ✓ XML views               | ✓ `RokuKey`, paths                                             | ✓                      | —               |
-| `mdc`            | ✓ `MdcClient` + `MdcDevice` | ✓ frame codec + checksum + LFD commands                                      | ✓ `Status`, `ErrorStatus` | ✓ `DisplayId`, `InputSource`, `MdcOrientation`, `MdcPower`     | ✓ `MdcError`           | —               |
+| `mdc`            | ✓ `MdcClient` + `MdcDevice` | ✓ one frame codec + checksum on two carriers (TCP, RS-232) + LFD commands    | ✓ `Status`, `ErrorStatus` | ✓ `DisplayId`, `InputSource`, `MdcOrientation`, `MdcPower`     | ✓ `MdcError`           | —               |
 | `transport`      | —                           | —                                                                            | —                         | ✓ `TlsPolicy`                                                  | ✓ `Unsupported`        | —               |
 | `media`          | —                           | —                                                                            | —                         | ✓ ranges/segments                                              | —                      | —               |
 | `core`           | —                           | —                                                                            | —                         | ✓ ids, capabilities (incl. the LFD subset), state, `Telemetry` | ✓ `TvError` + `Remedy` | —               |

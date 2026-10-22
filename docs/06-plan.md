@@ -10,13 +10,14 @@ Rule for this page: an item exists here only while it is **not** done. When it l
 it moves to the CHANGELOG and the matrix, and its section is deleted. A plan that
 accumulates ticks is a second changelog, and a worse one.
 
-> **How this page was updated (2026-10-22):** the two fronts the 2026-10-21 review
-> asked for have both closed. The graduated agent ladder landed
-> (`crates/agent/src/remedy.rs`) and the commercial LFD capability surfaces landed in
-> core and `tv-rs-mdc`; their sections are gone, as this page's rule requires. The one
-> piece of the LFD work that no protocol can carry — `ScreenCapture` — is recorded in
-> _Explicitly rejected_ with the sources that were checked, so it does not come back
-> as a suggestion. Every remaining claim below is a _to-do_, not a _state_.
+> **How this page was updated (2026-10-22):** the fronts the 2026-10-21 review asked
+> for have all closed. The graduated agent ladder landed
+> (`crates/agent/src/remedy.rs`), the commercial LFD capability surfaces landed in
+> core and `tv-rs-mdc`, and MDC now speaks RS-232 as well as TCP behind the `serial`
+> feature; their sections are gone, as this page's rule requires. The one piece of the
+> LFD work that no protocol can carry — `ScreenCapture` — is recorded in _Explicitly
+> rejected_ with the sources that were checked, so it does not come back as a
+> suggestion. Every remaining claim below is a _to-do_, not a _state_.
 
 ---
 
@@ -36,6 +37,10 @@ accumulates ticks is a second changelog, and a worse one.
 - **The agent has a graduated remediation ladder** — a hot panel is dimmed, a
   critical one is rebooted once before it is quarantined, a stalled player can be
   restarted; every rung is skipped rather than faked when the device cannot take it.
+- **`tv-rs-mdc` speaks two carriers** — TCP 1515 by default and RS-232 behind the
+  `serial` feature, over one frame codec: a wired wall is the same protocol on a
+  different wire, and the request loop is carrier-agnostic (proved by a test that
+  drives it over an in-memory channel).
 - **LFD capability surfaces have landed** — `PanelLock`, `Orientation`,
   `NoSignalStatus` as always-on capabilities, `LampOrPanelHours` and `ScreenCapture`
   behind the `supporting` feature; the conformance suite covers all five; `tv-rs-mdc`
@@ -78,16 +83,7 @@ against `power_observation()` and `assess_telemetry`, docs.rs serves the new ite
 CHANGELOG and README agree with the registry, and `docs/hil-results.md` carries an
 explicit _not verified_ line per vendor (the honest gap, not a guess).
 
-## 2. MDC over RS-232
-
-The same frame codec as the TCP path, over a serial port, behind a `serial` feature
-(`tokio-serial`). A wired video wall has no discovery, no DHCP and no TLS to argue
-about.
-
-**Exit:** the codec is shared, not copied; `serial` is off by default so a cloud agent
-does not compile a serial stack; the TCP path is unchanged.
-
-## 3. `tv-rs-sony` — Bravia REST + IRCC
+## 2. `tv-rs-sony` — Bravia REST + IRCC
 
 Sony's consumer and pro panels expose a documented JSON-REST API plus IRCC-IP for key
 presses, authenticated with a pre-shared key. It is the smallest remaining vendor
@@ -96,7 +92,7 @@ integration: power, input, volume, app launch, and key codes.
 **Exit:** passes the conformance suite; capability set is honest (no absolute volume
 if the API only takes steps); pairing failure maps to `Auth` with `Remedy::Reprovision`.
 
-## 4. Native CEC — only after a measurement
+## 3. Native CEC — only after a measurement
 
 `tv-rs-cec` shells out to `cec-client`. That is a deliberate trade (no `unsafe`, no C
 toolchain), and it is fine until someone shows the subprocess latency hurts. If that
@@ -106,7 +102,7 @@ confined to one module; keep the subprocess adapter as the default.
 **Exit:** a number, not an opinion — p50/p95 for a standby command through each path,
 and no new botched error paths.
 
-## 5. DDC/CI in `tv-rs-local`
+## 4. DDC/CI in `tv-rs-local`
 
 Brightness and input for the display the machine is _attached to_, over `/dev/i2c`
 (`VCP 0x10`, `VCP 0x60`). It belongs in `tv-rs-local` because that crate already owns
@@ -115,7 +111,7 @@ Brightness and input for the display the machine is _attached to_, over `/dev/i2
 **Exit:** Linux-only, feature-gated, reads VCP codes on a real monitor, and returns a
 typed error where i2c is unavailable.
 
-## 6. Hardware verification — the only unmet gate
+## 5. Hardware verification — the only unmet gate
 
 `cargo xtask hw-test --write-doc` fills `docs/hil-results.md` the moment a television
 answers SSDP. Until then every protocol claim in this repository is documented-and-mocked.
@@ -124,7 +120,7 @@ answers SSDP. Until then every protocol claim in this repository is documented-a
 what was commanded and what came back — or an explicit "not verified" line, which is
 also a result.
 
-## 7. Local media caching and multi-screen sync
+## 6. Local media caching and multi-screen sync
 
 `tv-rs-media` serves a remote panel's stream; the review asked for the same node to
 cache to local disk and to sync several panels from one producer without buffering
@@ -135,7 +131,7 @@ coordinator on `tv-rs-media`.
 double network transfer for a shared source; no regression in the existing `Media`
 traits.
 
-## 8. Release `0.4.0`
+## 7. Release `0.4.0`
 
 The LFD capabilities, the agent's remediation ladder and every open item above. Under
 the policy in `CONTRIBUTING.md` that is a **minor** bump, shipped in the order of the
@@ -167,7 +163,7 @@ Recorded so they do not come back as "suggestions" a year from now:
 
 1. `Remedy::Quarantine`, `DeviceOs::SamsungMdc`, and the three new capabilities land in
    core; the agent's `assess_telemetry` policy ships.
-2. `tv-rs-mdc` published, plus RS-232 behind a feature.
+2. `tv-rs-mdc` published (RS-232 is already behind the `serial` feature).
 3. `tv-rs-sony` merged and conformance-passing.
 4. Every crate published at the same version; no new `unsafe` outside the two
    documented modules (`tv-rs-local`'s Windows FFI, and `tv-rs-cec` if native lands).
