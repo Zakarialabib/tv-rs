@@ -147,6 +147,6 @@ _not_ there, on purpose:
 | mDNS listener           | nothing consumes it yet; AirPlay/Cast would need their own crates first                                           |
 | More `SsapUri` variants | input switching has no consumer demanding it, and every variant is a protocol claim that needs hardware to verify |
 
-Everything else — telemetry, MDC serial, Sony Bravia, native CEC, DDC/CI, the
-real-device verification pass, the next release — is sequenced there with exit
-criteria.
+Everything else — the `0.3.0` publish, MDC over RS-232, Sony Bravia, native CEC,
+DDC/CI, the real-device verification pass, media caching and multi-screen sync, the
+next release — is sequenced there with exit criteria.

@@ -13,7 +13,7 @@ failure behind a panic. These pages are the long version of that.
 | 3 | [`03-matrix.md`](03-matrix.md) | State: what is implemented, what is deferred, verified test counts, remaining gaps. |
 | 4 | [`02-external-refs.md`](02-external-refs.md) | Protocol references, prior art, and the crates this workspace learned from. |
 | 5 | [`04-rust-package-standard.md`](04-rust-package-standard.md) | The engineering standard the whole workspace follows — reusable outside this repo. |
-| 6 | [`06-plan.md`](06-plan.md) | **The live plan.** Only open work: telemetry, MDC serial, Sony, native CEC, DDC/CI, hardware, the next release. |
+| 6 | [`06-plan.md`](06-plan.md) | **The live plan.** Only open work: the `0.3.0` publish, MDC serial, Sony, native CEC, DDC/CI, hardware, media caching, the next release. |
 | — | [`../INTEGRATION.md`](../INTEGRATION.md) | **Putting it in an application**: discovery, TLS pinning, quirks, a fleet, media, CEC, the pre-ship checklist. |
 | — | [`07-adoption.md`](07-adoption.md) | The contract for adopting this workspace inside a signage application (U0–U4): what the app owns, what the crate owns. |
 | — | [`05-roadmap.md`](05-roadmap.md) | Archive: the P0–P9 proposals and how each one actually resolved. |

@@ -10,13 +10,13 @@ Rule for this page: an item exists here only while it is **not** done. When it l
 it moves to the CHANGELOG and the matrix, and its section is deleted. A plan that
 accumulates ticks is a second changelog, and a worse one.
 
-> **How this page was updated (2026-10-21):** a structural review of the v0.2.0
-> workspace (attached review) asked for four new fronts — a graduated agent remedy
-> ladder, commercial LFD capability surfaces, local media caching/multi-screen sync,
-> and a written hardware telemetry gate. Three are still open below. The graduated
-> ladder has landed (`crates/agent/src/remedy.rs`, in the CHANGELOG under
-> `Unreleased`), so its section is gone — that is this page's rule working, not an
-> item being dropped. Every remaining claim below is a _to-do_, not a _state_.
+> **How this page was updated (2026-10-22):** the two fronts the 2026-10-21 review
+> asked for have both closed. The graduated agent ladder landed
+> (`crates/agent/src/remedy.rs`) and the commercial LFD capability surfaces landed in
+> core and `tv-rs-mdc`; their sections are gone, as this page's rule requires. The one
+> piece of the LFD work that no protocol can carry — `ScreenCapture` — is recorded in
+> _Explicitly rejected_ with the sources that were checked, so it does not come back
+> as a suggestion. Every remaining claim below is a _to-do_, not a _state_.
 
 ---
 
@@ -36,16 +36,17 @@ accumulates ticks is a second changelog, and a worse one.
 - **The agent has a graduated remediation ladder** — a hot panel is dimmed, a
   critical one is rebooted once before it is quarantined, a stalled player can be
   restarted; every rung is skipped rather than faked when the device cannot take it.
-- **LFD capability surfaces have landed in core and MDC** — `PanelLock`,
-  `Orientation`, `NoSignalStatus` as always-on capabilities, `LampOrPanelHours`
-  and `ScreenCapture` behind the `supporting` feature; conformance covers all of
-  them; `tv-rs-mdc` implements what its protocol actually speaks. Tizen exposes
-  none of the subset and says so — see item 2 for what that leaves open.
+- **LFD capability surfaces have landed** — `PanelLock`, `Orientation`,
+  `NoSignalStatus` as always-on capabilities, `LampOrPanelHours` and `ScreenCapture`
+  behind the `supporting` feature; the conformance suite covers all five; `tv-rs-mdc`
+  implements what its protocol actually speaks (panel lock `0x5F`, content
+  orientation `0xC8`/`0x82`, panel health `0x0D`, panel on-time `0x83`). Tizen,
+  webOS and Roku expose none of the subset and say so per protocol.
 - **Hardware is still unverified.** `docs/hil-results.md` is empty and that is the one
   honest gap in the v0.2 definition of done.
 - **An external review of the workspace** (attached, 2026-10-21) confirmed the
-  architecture's strengths and requested the four fronts above; two are still open
-  here, as items 2 and 8.
+  architecture's strengths and requested four fronts; all four have now closed —
+  three by landing, one by a documented negative.
 
 ---
 
@@ -77,32 +78,7 @@ against `power_observation()` and `assess_telemetry`, docs.rs serves the new ite
 CHANGELOG and README agree with the registry, and `docs/hil-results.md` carries an
 explicit _not verified_ line per vendor (the honest gap, not a guess).
 
-## 2. Commercial LFD capability surfaces
-
-The vocabulary and the commercial adapter are done. `Capability` carries `PanelLock`,
-`Orientation` and `NoSignalStatus` as always-on surfaces plus `LampOrPanelHours` and
-`ScreenCapture` behind the `supporting` feature; the conformance suite covers all
-five (truth table and `Unsupported` routing); `tv-rs-mdc` implements exactly what its
-protocol speaks — panel lock `0x5F`, content orientation `0xC8`/`0x82`, panel health
-`0x0D` (lamp fault, input-source error, temperature, fan), and panel on-time `0x83`
-under `supporting` — with wire-frame tests for every one of them.
-
-Two things keep this item open:
-
-1. **Tizen cannot speak the LFD subset, and that is now documented rather than
-   faked.** The consumer remote channel (8001/8002) has no panel-lock, orientation
-   or health command, so `TvClient` advertises none of them; the exit criterion
-   "MDC and Tizen expose the common subset" is resolved as _MDC exposes it, Tizen
-   states its absence_.
-2. **`ScreenCapture` still has no wire path anywhere.** The vocabulary exists and
-   compiles out cleanly, but no shipped protocol carries a capture frame — MDC
-   honestly returns `None` from `as_screen_capturer()` in every configuration. A
-   capture backend lands when a protocol path exists, not before.
-
-**Exit:** a `ScreenCapture` backend for a protocol that actually carries one (or a
-documented third-party path); the Tizen honesty stays as written.
-
-## 3. MDC over RS-232
+## 2. MDC over RS-232
 
 The same frame codec as the TCP path, over a serial port, behind a `serial` feature
 (`tokio-serial`). A wired video wall has no discovery, no DHCP and no TLS to argue
@@ -111,7 +87,7 @@ about.
 **Exit:** the codec is shared, not copied; `serial` is off by default so a cloud agent
 does not compile a serial stack; the TCP path is unchanged.
 
-## 4. `tv-rs-sony` — Bravia REST + IRCC
+## 3. `tv-rs-sony` — Bravia REST + IRCC
 
 Sony's consumer and pro panels expose a documented JSON-REST API plus IRCC-IP for key
 presses, authenticated with a pre-shared key. It is the smallest remaining vendor
@@ -120,7 +96,7 @@ integration: power, input, volume, app launch, and key codes.
 **Exit:** passes the conformance suite; capability set is honest (no absolute volume
 if the API only takes steps); pairing failure maps to `Auth` with `Remedy::Reprovision`.
 
-## 5. Native CEC — only after a measurement
+## 4. Native CEC — only after a measurement
 
 `tv-rs-cec` shells out to `cec-client`. That is a deliberate trade (no `unsafe`, no C
 toolchain), and it is fine until someone shows the subprocess latency hurts. If that
@@ -130,7 +106,7 @@ confined to one module; keep the subprocess adapter as the default.
 **Exit:** a number, not an opinion — p50/p95 for a standby command through each path,
 and no new botched error paths.
 
-## 6. DDC/CI in `tv-rs-local`
+## 5. DDC/CI in `tv-rs-local`
 
 Brightness and input for the display the machine is _attached to_, over `/dev/i2c`
 (`VCP 0x10`, `VCP 0x60`). It belongs in `tv-rs-local` because that crate already owns
@@ -139,7 +115,7 @@ Brightness and input for the display the machine is _attached to_, over `/dev/i2
 **Exit:** Linux-only, feature-gated, reads VCP codes on a real monitor, and returns a
 typed error where i2c is unavailable.
 
-## 7. Hardware verification — the only unmet gate
+## 6. Hardware verification — the only unmet gate
 
 `cargo xtask hw-test --write-doc` fills `docs/hil-results.md` the moment a television
 answers SSDP. Until then every protocol claim in this repository is documented-and-mocked.
@@ -148,7 +124,7 @@ answers SSDP. Until then every protocol claim in this repository is documented-a
 what was commanded and what came back — or an explicit "not verified" line, which is
 also a result.
 
-## 8. Local media caching and multi-screen sync
+## 7. Local media caching and multi-screen sync
 
 `tv-rs-media` serves a remote panel's stream; the review asked for the same node to
 cache to local disk and to sync several panels from one producer without buffering
@@ -159,17 +135,17 @@ coordinator on `tv-rs-media`.
 double network transfer for a shared source; no regression in the existing `Media`
 traits.
 
-## 9. Release `0.4.0`
+## 8. Release `0.4.0`
 
-The review's Capability additions (`PanelLock`, `Orientation`, `LampOrPanelHours`,
-`NoSignalStatus`, `ScreenCapture`), the agent's remediation ladder and every open item
-above. Under the policy in `CONTRIBUTING.md` that is a **minor** bump, shipped in the
-order of the plan _before_ it: `tv-rs-core`, protocol crates, `tv-rs-mdc`, then the
-agent, media and facade.
+The LFD capabilities, the agent's remediation ladder and every open item above. Under
+the policy in `CONTRIBUTING.md` that is a **minor** bump, shipped in the order of the
+plan _before_ it: `tv-rs-core`, protocol crates, `tv-rs-mdc`, then the agent, media and
+facade.
 
-**Exit:** the new capabilities pass conformance on MDC and Tizen; the agent ladder is
-live end to end; `docs/hil-results.md` has at least one real row; all fourteen crates
-published at the same version.
+**Exit:** the new capabilities pass conformance on MDC (and the other vendors state
+their absence in the capability table); the agent ladder is live end to end;
+`docs/hil-results.md` has at least one real row; all fourteen crates published at the
+same version.
 
 ---
 
@@ -185,6 +161,7 @@ Recorded so they do not come back as "suggestions" a year from now:
 | `create_device(...) -> Box<dyn TvDevice>` with `todo!()`  | unimplemented factory in a public API; the facade already dispatches on vendor                                                   |
 | `type Percentage = u8` as a "bounded" type                | an alias enforces nothing; a brightness control needs a validating newtype                                                       |
 | A CMS/scheduler inside this workspace                     | `NON_GOALS.md`; the agent converges a device, it does not decide what plays                                                      |
+| A `ScreenCapture` backend from a vendor control protocol  | checked 2026-10-22 and none carries a capture frame: Samsung MDC has no capture command, Roku's documented ECP command list has none, LG states no screen-capture API is provided, and Samsung's remote channel plus `api/v2` expose none. The capability stays in the vocabulary (behind `supporting`) so a future protocol can implement it; no backend advertises it today, and inventing a frame to fill the gap is exactly what this repository refuses to do |
 
 ## Definition of done for `0.3.0`
 
@@ -198,7 +175,8 @@ Recorded so they do not come back as "suggestions" a year from now:
 
 ## Definition of done for `0.4.0`
 
-1. The five new capabilities conform on MDC and Tizen.
+1. The new capabilities conform on MDC; every other vendor's absence is stated in the
+   capability table rather than implied.
 2. The agent's graded ladder is live end to end (dim → restart/input → reboot/PDU).
 3. `docs/hil-results.md` has at least one real row, or an explicit per-vendor
    "not verified" statement.
