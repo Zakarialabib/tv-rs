@@ -98,6 +98,12 @@ jobs:
       - run: cargo check -p tv-rs-cec
       - run: cargo check -p tv-rs-cec --features client
       - run: cargo check -p tv-rs-agent
+      # MDC is the one crate with a carrier choice: TCP by default, RS-232 behind
+      # `serial`. Both configurations are built, and the serial one is tested so the
+      # shared codec is exercised on the second carrier too.
+      - run: cargo check -p tv-rs-mdc
+      - run: cargo check -p tv-rs-mdc --features supporting
+      - run: cargo test -p tv-rs-mdc --features serial
       - run: cargo check -p tv-rs
 
   msrv:

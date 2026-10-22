@@ -16,10 +16,16 @@ categories = ["api-bindings", "network-programming"]
 # so only the hours surface is gated here.
 supporting = ["tv-rs-core/supporting"]
 
+# RS-232 as well as TCP. A wired video wall has no discovery, no DHCP and no TLS to
+# argue about, so the same frames travel over a serial line; off by default so a
+# cloud agent does not compile a serial stack.
+serial = ["dep:tokio-serial"]
+
 [dependencies]
 async-trait.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tokio-serial = { workspace = true, optional = true }
 tv-rs-core.workspace = true
 
 [dev-dependencies]

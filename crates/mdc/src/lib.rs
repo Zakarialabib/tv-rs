@@ -46,6 +46,7 @@ pub mod error;
 pub mod handle;
 pub mod payload;
 pub mod protocol;
+mod transport;
 pub mod types;
 
 pub use client::{MdcClient, MdcOptions};

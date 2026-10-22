@@ -14,7 +14,10 @@ use crate::payload::{panel_hours_from_payload, ErrorStatus, Status};
 use crate::protocol::{
     commands, subcommands, Frame, Response, HEADER, MDC_TCP_PORT, RESPONSE_COMMAND, TERMINATOR,
 };
+use crate::transport::Transport;
 use crate::types::{DisplayId, InputSource, MdcOrientation, MdcPower};
+#[cfg(feature = "serial")]
+use tokio_serial::SerialPortBuilderExt;
 
 /// Connection and framing options for [`MdcClient`].
 #[derive(Debug, Clone)]
@@ -47,10 +50,35 @@ impl MdcOptions {
     }
 }
 
+/// How a client reaches its display.
+#[derive(Debug, Clone, Copy)]
+enum Link {
+    /// TCP to `host:port` — the default, and what every networked panel speaks.
+    Tcp,
+    /// An RS-232 line, where `host` holds the device path.
+    #[cfg(feature = "serial")]
+    Serial {
+        /// Line speed.
+        baud: u32,
+    },
+}
+
+impl Link {
+    /// A short carrier name for diagnostics.
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Tcp => "tcp",
+            #[cfg(feature = "serial")]
+            Self::Serial { .. } => "serial",
+        }
+    }
+}
+
 struct Inner {
     host: String,
     options: MdcOptions,
-    socket: Mutex<Option<TcpStream>>,
+    link: Link,
+    socket: Mutex<Option<Transport>>,
 }
 
 /// A Samsung MDC connection addressed to one display.
@@ -81,6 +109,7 @@ impl fmt::Debug for MdcClient {
         formatter
             .debug_struct("MdcClient")
             .field("host", &self.inner.host)
+            .field("carrier", &self.inner.link.as_str())
             .field("port", &self.inner.options.port)
             .field("display_id", &self.display_id)
             .finish()
@@ -97,10 +126,38 @@ impl MdcClient {
     /// Creates a client with explicit connection options.
     #[must_use]
     pub fn with_options(host: impl Into<String>, options: MdcOptions) -> Self {
+        Self::with_link(host, options, Link::Tcp)
+    }
+
+    /// Creates a client for an RS-232 line (`serial` feature).
+    ///
+    /// `path` is the device — `/dev/ttyUSB0`, `COM3` — and `baud` is the line speed
+    /// the panel expects. The frames, the checksum and the reply parsing are the same
+    /// code the TCP path runs: a wired wall is the same protocol on a different
+    /// carrier, and the crate keeps it that way rather than forking the codec.
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "serial")]
+    /// # async fn run() -> Result<(), tv_rs_mdc::MdcError> {
+    /// use tv_rs_mdc::MdcClient;
+    ///
+    /// let wall = MdcClient::serial("/dev/ttyUSB0", 9600);
+    /// wall.power_on().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[cfg(feature = "serial")]
+    #[must_use]
+    pub fn serial(path: impl Into<String>, baud: u32) -> Self {
+        Self::with_link(path, MdcOptions::default(), Link::Serial { baud })
+    }
+
+    fn with_link(host: impl Into<String>, options: MdcOptions, link: Link) -> Self {
         Self {
             inner: Arc::new(Inner {
                 host: host.into(),
                 options,
+                link,
                 socket: Mutex::new(None),
             }),
             display_id: DisplayId::DIRECT,
@@ -520,18 +577,48 @@ impl MdcClient {
         Ok(self.request(command, &[]).await?.data)
     }
 
-    async fn connect_socket(&self) -> Result<TcpStream, MdcError> {
-        let target = (self.inner.host.as_str(), self.inner.options.port);
-        let socket = timeout(self.inner.options.timeout, TcpStream::connect(target))
-            .await
-            .map_err(|_| MdcError::Timeout)??;
-        let _ = socket.set_nodelay(true);
-        Ok(socket)
+    async fn connect_socket(&self) -> Result<Transport, MdcError> {
+        match self.inner.link {
+            Link::Tcp => {
+                let target = (self.inner.host.as_str(), self.inner.options.port);
+                let socket = timeout(self.inner.options.timeout, TcpStream::connect(target))
+                    .await
+                    .map_err(|_| MdcError::Timeout)??;
+                let _ = socket.set_nodelay(true);
+                Ok(Transport::Tcp(socket))
+            }
+            #[cfg(feature = "serial")]
+            Link::Serial { baud } => {
+                // Opening a serial device is a local syscall, not a network round
+                // trip: there is nothing to time out, and an absent device is an
+                // immediate typed error rather than a hang.
+                let stream = tokio_serial::new(self.inner.host.clone(), baud)
+                    .open_native_async()
+                    // `tokio_serial::Error` wraps an io error; carrying it as an
+                    // `io::Error` keeps one error surface for "the carrier is gone".
+                    .map_err(|error| MdcError::Io(std::io::Error::other(error.to_string())))?;
+                Ok(Transport::Serial(Box::new(stream)))
+            }
+        }
+    }
+
+    /// Builds a client over an in-memory channel, so the request loop can be driven
+    /// without a socket. Test-only: the point is that the loop is carrier-agnostic.
+    #[cfg(test)]
+    pub(crate) fn with_duplex(stream: tokio::io::DuplexStream) -> Self {
+        let client = Self::with_link("duplex", MdcOptions::default(), Link::Tcp);
+        client
+            .inner
+            .socket
+            .try_lock()
+            .expect("fresh client")
+            .replace(Transport::Duplex(Box::new(stream)));
+        client
     }
 }
 
 async fn write_frame(
-    socket: &mut TcpStream,
+    socket: &mut Transport,
     bytes: &[u8],
     line_terminator: bool,
     budget: Duration,
@@ -548,7 +635,7 @@ async fn write_frame(
 }
 
 async fn read_response(
-    socket: &mut TcpStream,
+    socket: &mut Transport,
     expected_id: DisplayId,
     expected_command: u8,
     budget: Duration,
@@ -571,7 +658,7 @@ async fn read_response(
     Ok(response)
 }
 
-async fn read_response_frame(socket: &mut TcpStream) -> Result<Response, MdcError> {
+async fn read_response_frame(socket: &mut Transport) -> Result<Response, MdcError> {
     let mut header = [0u8; 4];
     let mut discarded = 0usize;
     loop {
@@ -660,5 +747,61 @@ mod tests {
         ));
         assert_eq!(level_from_payload(&[0xFF], "volume", 100).unwrap(), None);
         assert_eq!(level_from_payload(&[50], "volume", 100).unwrap(), Some(50));
+    }
+
+    /// The request loop is carrier-agnostic: driven over an in-memory channel it
+    /// still emits the documented MDC frame and still parses the reply with the same
+    /// code the TCP path runs. This is the "codec is shared, not copied" claim as a
+    /// test rather than a comment.
+    #[tokio::test]
+    async fn the_request_loop_is_not_tcp_specific() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        use crate::protocol::{commands, HEADER, RESPONSE_COMMAND};
+
+        let (client_side, mut panel_side) = tokio::io::duplex(256);
+        let client = super::MdcClient::with_duplex(client_side);
+
+        let panel = tokio::spawn(async move {
+            let mut request = [0u8; 6];
+            panel_side.read_exact(&mut request).await.unwrap();
+
+            // ACK, echoed command, echoed data — the shape a real panel returns.
+            let mut body = vec![0x41, commands::POWER, 0x01];
+            let mut response = vec![HEADER, RESPONSE_COMMAND, 0x00, body.len() as u8];
+            response.append(&mut body);
+            let checksum = response[1..]
+                .iter()
+                .fold(0u16, |sum, byte| sum + u16::from(*byte))
+                & 0xFF;
+            response.push(checksum as u8);
+            panel_side.write_all(&response).await.unwrap();
+            request
+        });
+
+        client.power_on().await.unwrap();
+        assert_eq!(
+            panel.await.unwrap(),
+            [0xAA, 0x11, 0x00, 0x01, 0x01, 0x13],
+            "the serial and TCP carriers share this frame"
+        );
+        assert!(client.is_connected().await);
+    }
+
+    /// A serial device that is not there is a typed error, not a panic and not a
+    /// hang: the port is opened locally, so there is nothing to time out.
+    #[cfg(feature = "serial")]
+    #[tokio::test]
+    async fn an_absent_serial_device_is_a_typed_error() {
+        #[cfg(windows)]
+        let path = "COM99";
+        #[cfg(not(windows))]
+        let path = "/dev/definitely-not-a-serial-port";
+
+        let client = super::MdcClient::serial(path, 9600);
+        assert!(
+            matches!(client.connect().await, Err(MdcError::Io(_))),
+            "an absent serial device must surface as MdcError::Io"
+        );
     }
 }
