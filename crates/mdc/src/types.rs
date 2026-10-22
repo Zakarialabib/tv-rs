@@ -308,3 +308,68 @@ mod tests {
         );
     }
 }
+
+/// The four content orientations MDC reports for command `0xC8`/`0x82`.
+///
+/// The codes are the panel's own vocabulary (`LANDSCAPE_0`, `PORTRAIT_270`,
+/// `LANDSCAPE_180`, `PORTRAIT_90`) and map one-to-one onto
+/// [`tv_rs_core::Orientation`]; keeping them separate means the wire value is
+/// documented where it is decoded rather than inferred at the call site.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MdcOrientation {
+    /// Upright landscape (`0x00`).
+    Landscape,
+    /// Landscape rotated 180° (`0x02`).
+    LandscapeFlipped,
+    /// Portrait rotated 90° (`0x03`).
+    Portrait,
+    /// Portrait rotated 180° (`0x01`).
+    PortraitFlipped,
+}
+
+impl MdcOrientation {
+    /// Decodes the wire code.
+    #[must_use]
+    pub fn from_code(code: u8) -> Option<Self> {
+        match code {
+            0x00 => Some(Self::Landscape),
+            0x01 => Some(Self::PortraitFlipped),
+            0x02 => Some(Self::LandscapeFlipped),
+            0x03 => Some(Self::Portrait),
+            _ => None,
+        }
+    }
+
+    /// The wire code.
+    #[must_use]
+    pub fn code(self) -> u8 {
+        match self {
+            Self::Landscape => 0x00,
+            Self::PortraitFlipped => 0x01,
+            Self::LandscapeFlipped => 0x02,
+            Self::Portrait => 0x03,
+        }
+    }
+}
+
+impl From<MdcOrientation> for tv_rs_core::Orientation {
+    fn from(value: MdcOrientation) -> Self {
+        match value {
+            MdcOrientation::Landscape => Self::Landscape,
+            MdcOrientation::LandscapeFlipped => Self::LandscapeFlipped,
+            MdcOrientation::Portrait => Self::Portrait,
+            MdcOrientation::PortraitFlipped => Self::PortraitFlipped,
+        }
+    }
+}
+
+impl From<tv_rs_core::Orientation> for MdcOrientation {
+    fn from(value: tv_rs_core::Orientation) -> Self {
+        match value {
+            tv_rs_core::Orientation::Landscape => Self::Landscape,
+            tv_rs_core::Orientation::LandscapeFlipped => Self::LandscapeFlipped,
+            tv_rs_core::Orientation::Portrait => Self::Portrait,
+            tv_rs_core::Orientation::PortraitFlipped => Self::PortraitFlipped,
+        }
+    }
+}

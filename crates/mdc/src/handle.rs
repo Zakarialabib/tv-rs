@@ -5,18 +5,24 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use tv_rs_core::{
     BrightnessControl, Capability, CapabilitySet, CommandId, DeviceDescriptor, DeviceHandle,
-    DeviceId, Input, InputSelect, PowerControl, PowerState, Probe, ProtocolError, Rebootable,
-    TvError, VolumeControl,
+    DeviceId, Input, InputSelect, Orientation, OrientationControl, PanelHealth,
+    PanelHealthProvider, PanelLockControl, PowerControl, PowerState, Probe, ProtocolError,
+    Rebootable, TvError, VolumeControl,
 };
+#[cfg(feature = "supporting")]
+use tv_rs_core::{PanelHours, PanelHoursProvider};
 
 use crate::client::MdcClient;
 use crate::payload::Status;
-use crate::types::{InputSource, MdcPower};
+use crate::types::{InputSource, MdcOrientation, MdcPower};
 
 /// An MDC display exposed through the vendor-neutral device model.
 ///
 /// The underlying [`MdcClient`] remains available for raw frames; the shared traits
-/// cover power, input, volume, brightness, reboot and a control-channel probe.
+/// cover power, input, volume, brightness, reboot, the LFD subset — panel key lock
+/// (`0x5F`), content orientation (`0xC8`/`0x82`), signal state and panel health
+/// (`0x0D`), and panel hours (`0x83`, behind the `supporting` feature) — and a
+/// control-channel probe.
 pub struct MdcDevice {
     client: MdcClient,
     descriptor: DeviceDescriptor,
@@ -61,6 +67,73 @@ impl MdcDevice {
     /// transport, protocol or `NAK` error.
     pub async fn set_brightness(&self, level: u8) -> Result<(), TvError> {
         Ok(self.client.set_brightness(level).await?)
+    }
+
+    /// Reads whether the panel's own keys are locked.
+    ///
+    /// # Errors
+    ///
+    /// Returns the MDC error mapped into [`TvError`].
+    pub async fn panel_lock(&self) -> Result<Option<bool>, TvError> {
+        Ok(Some(self.client.panel_lock().await?))
+    }
+
+    /// Locks or unlocks the panel's own keys.
+    ///
+    /// # Errors
+    ///
+    /// Returns the MDC error mapped into [`TvError`].
+    pub async fn set_panel_lock(&self, locked: bool) -> Result<(), TvError> {
+        Ok(self.client.set_panel_lock(locked).await?)
+    }
+
+    /// Reads the orientation the panel displays its source content in.
+    ///
+    /// # Errors
+    ///
+    /// Returns the MDC error mapped into [`TvError`].
+    pub async fn orientation(&self) -> Result<Option<Orientation>, TvError> {
+        Ok(Some(Orientation::from(self.client.orientation().await?)))
+    }
+
+    /// Sets the orientation the panel displays its source content in.
+    ///
+    /// # Errors
+    ///
+    /// Returns the MDC error mapped into [`TvError`].
+    pub async fn set_orientation(&self, orientation: Orientation) -> Result<(), TvError> {
+        Ok(self
+            .client
+            .set_orientation(MdcOrientation::from(orientation))
+            .await?)
+    }
+
+    /// Reads the panel's signal state and health (`0x0D`).
+    ///
+    /// # Errors
+    ///
+    /// Returns the MDC error mapped into [`TvError`].
+    pub async fn panel_health(&self) -> Result<Option<PanelHealth>, TvError> {
+        let status = self.client.error_status().await?;
+        Ok(Some(PanelHealth {
+            signal_present: !status.signal_error,
+            temperature_celsius: Some(i16::from(status.temperature_celsius)),
+            lamp_error: status.lamp_error,
+        }))
+    }
+
+    /// Reads how many hours the panel has been powered on (`0x83`).
+    ///
+    /// # Errors
+    ///
+    /// Returns the MDC error mapped into [`TvError`].
+    #[cfg(feature = "supporting")]
+    pub async fn panel_hours(&self) -> Result<Option<PanelHours>, TvError> {
+        let hours = self.client.panel_hours().await?;
+        Ok(Some(PanelHours {
+            panel_hours: hours,
+            lamp_hours: None,
+        }))
     }
 }
 
@@ -139,6 +212,59 @@ impl Rebootable for MdcDevice {
 }
 
 #[async_trait]
+impl PanelLockControl for MdcDevice {
+    async fn panel_lock(&self) -> Result<Option<bool>, TvError> {
+        Ok(Some(self.client.panel_lock().await?))
+    }
+
+    async fn set_panel_lock(&self, locked: bool, _cmd: CommandId) -> Result<(), TvError> {
+        Ok(self.client.set_panel_lock(locked).await?)
+    }
+}
+
+#[async_trait]
+impl OrientationControl for MdcDevice {
+    async fn orientation(&self) -> Result<Option<Orientation>, TvError> {
+        Ok(Some(Orientation::from(self.client.orientation().await?)))
+    }
+
+    async fn set_orientation(
+        &self,
+        orientation: Orientation,
+        _cmd: CommandId,
+    ) -> Result<(), TvError> {
+        Ok(self
+            .client
+            .set_orientation(MdcOrientation::from(orientation))
+            .await?)
+    }
+}
+
+#[async_trait]
+impl PanelHealthProvider for MdcDevice {
+    async fn panel_health(&self) -> Result<Option<PanelHealth>, TvError> {
+        let status = self.client.error_status().await?;
+        Ok(Some(PanelHealth {
+            signal_present: !status.signal_error,
+            temperature_celsius: Some(i16::from(status.temperature_celsius)),
+            lamp_error: status.lamp_error,
+        }))
+    }
+}
+
+#[cfg(feature = "supporting")]
+#[async_trait]
+impl PanelHoursProvider for MdcDevice {
+    async fn panel_hours(&self) -> Result<Option<PanelHours>, TvError> {
+        let hours = self.client.panel_hours().await?;
+        Ok(Some(PanelHours {
+            panel_hours: hours,
+            lamp_hours: None,
+        }))
+    }
+}
+
+#[async_trait]
 impl Probe for MdcDevice {
     async fn ping(&self) -> Result<Duration, TvError> {
         let started = Instant::now();
@@ -157,12 +283,22 @@ impl DeviceHandle for MdcDevice {
     }
 
     fn capabilities(&self) -> CapabilitySet {
-        CapabilitySet::empty()
+        let set = CapabilitySet::empty()
             .with(Capability::PowerState)
             .with(Capability::InputSelect)
             .with(Capability::Volume)
             .with(Capability::Brightness)
             .with(Capability::Reboot)
+            .with(Capability::PanelLock)
+            .with(Capability::Orientation)
+            .with(Capability::NoSignalStatus);
+        // Under `supporting`: MDC documents panel on-time on `0x83`. Screen
+        // capture stays unadvertised in every configuration — no MDC command
+        // exists, and advertising a fake would be worse than telling the
+        // caller "not here".
+        #[cfg(feature = "supporting")]
+        let set = set.with(Capability::LampOrPanelHours);
+        set
     }
 
     fn as_power(&self) -> Option<&dyn PowerControl> {
@@ -201,6 +337,31 @@ impl DeviceHandle for MdcDevice {
         self.capabilities()
             .contains(Capability::Reboot)
             .then_some(self as &dyn Rebootable)
+    }
+
+    fn as_panel_lock(&self) -> Option<&dyn PanelLockControl> {
+        self.capabilities()
+            .contains(Capability::PanelLock)
+            .then_some(self as &dyn PanelLockControl)
+    }
+
+    fn as_orientation(&self) -> Option<&dyn OrientationControl> {
+        self.capabilities()
+            .contains(Capability::Orientation)
+            .then_some(self as &dyn OrientationControl)
+    }
+
+    fn as_panel_health(&self) -> Option<&dyn PanelHealthProvider> {
+        self.capabilities()
+            .contains(Capability::NoSignalStatus)
+            .then_some(self as &dyn PanelHealthProvider)
+    }
+
+    #[cfg(feature = "supporting")]
+    fn as_panel_hours(&self) -> Option<&dyn PanelHoursProvider> {
+        self.capabilities()
+            .contains(Capability::LampOrPanelHours)
+            .then_some(self as &dyn PanelHoursProvider)
     }
 
     fn as_probe(&self) -> Option<&dyn Probe> {

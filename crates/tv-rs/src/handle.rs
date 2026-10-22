@@ -9,17 +9,22 @@
 //!
 //! [`TvClient`] advertises only what it can actually do today, per vendor:
 //!
-//! | Vendor | power | wake | key | app | foreground | input | volume |
-//! |---|---|---|---|---|---|---|---|
-//! | Tizen | ✓ | — | ✓ | ✓ | — | — | — |
-//! | webOS | ✓ | — | — | ✓ | ✓ | — | ✓ |
-//! | Roku | ✓ | — | ✓ | ✓ | — | — | — |
+//! | Vendor | power | wake | key | app | foreground | input | volume | panel lock | orientation | panel health |
+//! |---|---|---|---|---|---|---|---|---|---|---|
+//! | Tizen | ✓ | — | ✓ | ✓ | — | — | — | — | — | — |
+//! | webOS | ✓ | — | — | ✓ | ✓ | — | ✓ | — | — | — |
+//! | Roku | ✓ | — | ✓ | ✓ | — | — | — | — | — | — |
 //!
 //! `wake` is absent because a discovered device does not carry its MAC yet, and a
 //! wake without one is a lie. `key` is absent on webOS because SSAP has no remote
 //! key endpoint — it wants a pointer-input socket. `volume` is absent on Tizen and
 //! Roku because both expose relative keys, not an absolute level, so `set_volume`
-//! cannot be honoured.
+//! cannot be honoured. The LFD columns are absent everywhere **per protocol**: the
+//! consumer remote channels (Tizen 8001/8002, SSAP, ECP) have no panel-lock,
+//! orientation or health command — a commercial panel is driven over MDC
+//! (`as_panel_lock()` / `as_orientation()` / `as_panel_health()` are honest on
+//! MDC-backed handles, `None` here), and the facade opts out by omission, the
+//! same way the MDC adapter opts out of screen capture.
 
 use async_trait::async_trait;
 

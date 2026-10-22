@@ -36,6 +36,18 @@ pub enum Capability {
     Reboot,
     /// Read diagnostic telemetry such as temperature and signal quality.
     Telemetry,
+    /// Lock the panel's own keys so nobody can walk up and change the picture.
+    PanelLock,
+    /// Read and set the orientation the panel displays content in.
+    Orientation,
+    /// Read whether the panel's input actually has a signal, and its health.
+    NoSignalStatus,
+    /// Read how long the panel (or its lamp) has been running.
+    #[cfg(feature = "supporting")]
+    LampOrPanelHours,
+    /// Grab a still frame of what the panel is showing.
+    #[cfg(feature = "supporting")]
+    ScreenCapture,
 }
 
 impl Capability {
@@ -53,6 +65,13 @@ impl Capability {
             Self::Brightness => "brightness",
             Self::Reboot => "reboot",
             Self::Telemetry => "telemetry",
+            Self::PanelLock => "panel_lock",
+            Self::Orientation => "orientation",
+            Self::NoSignalStatus => "no_signal_status",
+            #[cfg(feature = "supporting")]
+            Self::LampOrPanelHours => "lamp_or_panel_hours",
+            #[cfg(feature = "supporting")]
+            Self::ScreenCapture => "screen_capture",
         }
     }
 }
@@ -110,7 +129,7 @@ impl CapabilitySet {
     }
 }
 
-const ALL_CAPABILITIES: [Capability; 10] = [
+const ALL_CAPABILITIES: &[Capability] = &[
     Capability::PowerState,
     Capability::Wake,
     Capability::Key,
@@ -121,6 +140,13 @@ const ALL_CAPABILITIES: [Capability; 10] = [
     Capability::Brightness,
     Capability::Reboot,
     Capability::Telemetry,
+    Capability::PanelLock,
+    Capability::Orientation,
+    Capability::NoSignalStatus,
+    #[cfg(feature = "supporting")]
+    Capability::LampOrPanelHours,
+    #[cfg(feature = "supporting")]
+    Capability::ScreenCapture,
 ];
 
 const fn capability_index(capability: Capability) -> u16 {
@@ -135,6 +161,13 @@ const fn capability_index(capability: Capability) -> u16 {
         Capability::Brightness => 7,
         Capability::Reboot => 8,
         Capability::Telemetry => 9,
+        Capability::PanelLock => 10,
+        Capability::Orientation => 11,
+        Capability::NoSignalStatus => 12,
+        #[cfg(feature = "supporting")]
+        Capability::LampOrPanelHours => 13,
+        #[cfg(feature = "supporting")]
+        Capability::ScreenCapture => 14,
     }
 }
 
@@ -415,6 +448,137 @@ pub trait Probe: Send + Sync {
     async fn ping(&self) -> Result<Duration, TvError>;
 }
 
+/// The orientation a panel displays its content in.
+///
+/// Commercial panels are mounted portrait as often as landscape, and a wall built
+/// from rotated panels needs the content rotated with it. The flipped variants exist
+/// because a panel can be physically mounted upside down in a ceiling rig.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Orientation {
+    /// Upright landscape (the default).
+    Landscape,
+    /// Landscape rotated 180° — a panel hanging upside down.
+    LandscapeFlipped,
+    /// Portrait, rotated 90°.
+    Portrait,
+    /// Portrait rotated 180°.
+    PortraitFlipped,
+}
+
+impl Orientation {
+    /// A stable snake_case label for logs and diagnostics.
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Landscape => "landscape",
+            Self::LandscapeFlipped => "landscape_flipped",
+            Self::Portrait => "portrait",
+            Self::PortraitFlipped => "portrait_flipped",
+        }
+    }
+
+    /// Whether the content is taller than it is wide.
+    #[must_use]
+    pub fn is_portrait(&self) -> bool {
+        matches!(self, Self::Portrait | Self::PortraitFlipped)
+    }
+}
+
+/// What a panel reports about its input signal and its own health.
+///
+/// This is the answer to the question a playout monitor actually asks: *is anything
+/// arriving, and is the panel well?* A panel with no signal is not broken — the
+/// source is — and a report that conflated the two would send someone to the wrong
+/// screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PanelHealth {
+    /// Whether the active input carries a signal the panel can lock onto.
+    pub signal_present: bool,
+    /// Panel temperature in Celsius, when the panel reports one.
+    pub temperature_celsius: Option<i16>,
+    /// Whether the panel reports a lamp (backlight) fault.
+    pub lamp_error: bool,
+}
+
+/// How long a panel has been running.
+///
+/// Asset and thermal planning needs the number, not a guess: a panel at 40 000 hours
+/// is a panel to plan a replacement for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PanelHours {
+    /// Total hours the panel has been powered on.
+    pub panel_hours: u32,
+    /// Total lamp hours, when the panel reports them separately from panel hours.
+    pub lamp_hours: Option<u32>,
+}
+
+/// The encoding of a captured frame.
+#[cfg(feature = "supporting")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrameFormat {
+    /// JPEG.
+    Jpeg,
+    /// PNG.
+    Png,
+}
+
+/// A still frame captured from a panel.
+#[cfg(feature = "supporting")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScreenFrame {
+    /// How [`ScreenFrame::bytes`] are encoded.
+    pub format: FrameFormat,
+    /// The encoded image.
+    pub bytes: Vec<u8>,
+}
+
+/// Panel key lock — the "nobody walks up and changes the picture" surface.
+#[async_trait]
+pub trait PanelLockControl: Send + Sync {
+    /// Whether the panel's own keys are locked, when the panel can say.
+    async fn panel_lock(&self) -> Result<Option<bool>, TvError>;
+
+    /// Locks or unlocks the panel's own keys.
+    async fn set_panel_lock(&self, locked: bool, cmd: CommandId) -> Result<(), TvError>;
+}
+
+/// The orientation a panel displays its content in.
+#[async_trait]
+pub trait OrientationControl: Send + Sync {
+    /// The current content orientation, when the panel can report it.
+    async fn orientation(&self) -> Result<Option<Orientation>, TvError>;
+
+    /// Sets the content orientation.
+    async fn set_orientation(
+        &self,
+        orientation: Orientation,
+        cmd: CommandId,
+    ) -> Result<(), TvError>;
+}
+
+/// Input-signal state and panel health.
+#[async_trait]
+pub trait PanelHealthProvider: Send + Sync {
+    /// Reads the panel's signal state and health, when the protocol exposes it.
+    async fn panel_health(&self) -> Result<Option<PanelHealth>, TvError>;
+}
+
+/// Panel or lamp running hours.
+#[cfg(feature = "supporting")]
+#[async_trait]
+pub trait PanelHoursProvider: Send + Sync {
+    /// Reads how long the panel has been running, when the protocol exposes it.
+    async fn panel_hours(&self) -> Result<Option<PanelHours>, TvError>;
+}
+
+/// Still-frame capture from a panel.
+#[cfg(feature = "supporting")]
+#[async_trait]
+pub trait ScreenCapturer: Send + Sync {
+    /// Captures one frame, when the protocol exposes it.
+    async fn capture(&self) -> Result<Option<ScreenFrame>, TvError>;
+}
+
 /// An erased television.
 ///
 /// The fleet reason this trait exists: `Vec<Arc<dyn DeviceHandle>>` compiles, and a
@@ -465,6 +629,36 @@ pub trait DeviceHandle: Send + Sync {
         None
     }
 
+    /// Panel key lock, or `None`.
+    ///
+    /// Defaulted to `None` so existing backends compile unchanged; a backend that
+    /// advertises [`Capability::PanelLock`] must override it.
+    fn as_panel_lock(&self) -> Option<&dyn PanelLockControl> {
+        None
+    }
+
+    /// Content orientation, or `None`.
+    fn as_orientation(&self) -> Option<&dyn OrientationControl> {
+        None
+    }
+
+    /// Input-signal state and panel health, or `None`.
+    fn as_panel_health(&self) -> Option<&dyn PanelHealthProvider> {
+        None
+    }
+
+    /// Panel or lamp hours, or `None`.
+    #[cfg(feature = "supporting")]
+    fn as_panel_hours(&self) -> Option<&dyn PanelHoursProvider> {
+        None
+    }
+
+    /// Still-frame capture, or `None`.
+    #[cfg(feature = "supporting")]
+    fn as_screen_capturer(&self) -> Option<&dyn ScreenCapturer> {
+        None
+    }
+
     /// Control-plane latency measurement, or `None`.
     fn as_probe(&self) -> Option<&dyn Probe> {
         None
@@ -500,7 +694,7 @@ mod tests {
     #[test]
     fn capability_flags_do_not_collide() {
         let mut seen = std::collections::HashSet::new();
-        for capability in ALL_CAPABILITIES {
+        for capability in ALL_CAPABILITIES.iter().copied() {
             assert!(
                 seen.insert(1u16 << capability_index(capability)),
                 "duplicate bit for {capability}"

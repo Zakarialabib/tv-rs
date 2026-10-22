@@ -22,7 +22,7 @@
 //!
 //! [`ObservedState`]: crate::ObservedState
 
-use crate::capability::{AppRef, Capability, DeviceHandle, Input, Key};
+use crate::capability::{AppRef, Capability, DeviceHandle, Input, Key, Orientation};
 use crate::command::CommandId;
 use crate::error::TvError;
 
@@ -70,6 +70,22 @@ fn capability_accessors(handle: &dyn DeviceHandle, violations: &mut Vec<Violatio
         (Capability::Brightness, handle.as_brightness().is_some()),
         (Capability::Reboot, handle.as_reboot().is_some()),
         (Capability::Telemetry, handle.as_telemetry().is_some()),
+        (Capability::PanelLock, handle.as_panel_lock().is_some()),
+        (Capability::Orientation, handle.as_orientation().is_some()),
+        (
+            Capability::NoSignalStatus,
+            handle.as_panel_health().is_some(),
+        ),
+        #[cfg(feature = "supporting")]
+        (
+            Capability::LampOrPanelHours,
+            handle.as_panel_hours().is_some(),
+        ),
+        #[cfg(feature = "supporting")]
+        (
+            Capability::ScreenCapture,
+            handle.as_screen_capturer().is_some(),
+        ),
     ];
 
     for (capability, accessor) in pairs {
@@ -155,6 +171,71 @@ async fn unsupported_routing(handle: &dyn DeviceHandle, violations: &mut Vec<Vio
                 other => violations.push(Violation::new(
                     "unsupported_routing",
                     format!("telemetry without Telemetry returned {other:?}"),
+                )),
+            }
+        }
+    }
+
+    if !set.contains(Capability::PanelLock) {
+        if let Some(lock) = handle.as_panel_lock() {
+            match lock.set_panel_lock(true, CommandId::new()).await {
+                Err(TvError::Unsupported(Capability::PanelLock)) => {}
+                other => violations.push(Violation::new(
+                    "unsupported_routing",
+                    format!("set_panel_lock without PanelLock returned {other:?}"),
+                )),
+            }
+        }
+    }
+
+    if !set.contains(Capability::Orientation) {
+        if let Some(orientation) = handle.as_orientation() {
+            match orientation
+                .set_orientation(Orientation::Portrait, CommandId::new())
+                .await
+            {
+                Err(TvError::Unsupported(Capability::Orientation)) => {}
+                other => violations.push(Violation::new(
+                    "unsupported_routing",
+                    format!("set_orientation without Orientation returned {other:?}"),
+                )),
+            }
+        }
+    }
+
+    if !set.contains(Capability::NoSignalStatus) {
+        if let Some(health) = handle.as_panel_health() {
+            match health.panel_health().await {
+                Err(TvError::Unsupported(Capability::NoSignalStatus)) => {}
+                other => violations.push(Violation::new(
+                    "unsupported_routing",
+                    format!("panel_health without NoSignalStatus returned {other:?}"),
+                )),
+            }
+        }
+    }
+
+    #[cfg(feature = "supporting")]
+    if !set.contains(Capability::LampOrPanelHours) {
+        if let Some(hours) = handle.as_panel_hours() {
+            match hours.panel_hours().await {
+                Err(TvError::Unsupported(Capability::LampOrPanelHours)) => {}
+                other => violations.push(Violation::new(
+                    "unsupported_routing",
+                    format!("panel_hours without LampOrPanelHours returned {other:?}"),
+                )),
+            }
+        }
+    }
+
+    #[cfg(feature = "supporting")]
+    if !set.contains(Capability::ScreenCapture) {
+        if let Some(capturer) = handle.as_screen_capturer() {
+            match capturer.capture().await {
+                Err(TvError::Unsupported(Capability::ScreenCapture)) => {}
+                other => violations.push(Violation::new(
+                    "unsupported_routing",
+                    format!("capture without ScreenCapture returned {other:?}"),
                 )),
             }
         }

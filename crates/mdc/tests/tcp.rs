@@ -5,7 +5,11 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
-use tv_rs_core::{Capability, CommandId, DeviceDescriptor, DeviceHandle, DeviceId, DeviceOs};
+#[cfg(feature = "supporting")]
+use tv_rs_core::PanelHours;
+use tv_rs_core::{
+    Capability, CommandId, DeviceDescriptor, DeviceHandle, DeviceId, DeviceOs, Orientation,
+};
 use tv_rs_mdc::{
     commands, DisplayId, InputSource, MdcClient, MdcDevice, MdcError, MdcOptions, MdcPower, Status,
 };
@@ -335,7 +339,7 @@ async fn device_adapters_speak_the_same_wire() {
     assert!(device.capabilities().contains(Capability::Reboot));
     assert!(
         !device.capabilities().contains(Capability::Telemetry),
-        "MDC reports no temperature, signal or uptime"
+        "the aggregate telemetry trait stays unadvertised; MDC's health data is exposed as panel health instead"
     );
     assert!(
         device.as_telemetry().is_none(),
@@ -368,6 +372,209 @@ async fn device_adapters_speak_the_same_wire() {
     assert!(
         rtt > Duration::ZERO,
         "a round trip that took no time is not a measurement"
+    );
+
+    server.await.expect("server");
+}
+
+/// The LFD subset must speak the same wire the handoff documented.
+///
+/// Exact frames for `0x5F` (panel lock read/set), `0xC8`/`0x82` (orientation
+/// read/set), and the `0x0D` health parse including the `0x02` invalid-selection
+/// case. Screen capture is asserted *absent* — no MDC command exists for it.
+#[tokio::test]
+async fn the_lfd_subset_speaks_the_documented_wire() {
+    let (listener, port) = listener().await;
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.expect("accept");
+
+        // panel_lock() — query 0x5F. Checksum = command + id + length.
+        assert_eq!(
+            read_request(&mut socket).await,
+            vec![0xAA, 0x5F, 0x01, 0x00, 0x60]
+        );
+        socket
+            .write_all(&response(1, true, 0x5F, &[0x00]))
+            .await
+            .expect("ack panel lock query");
+
+        // set_panel_lock(true).
+        assert_eq!(
+            read_request(&mut socket).await,
+            vec![0xAA, 0x5F, 0x01, 0x01, 0x01, 0x62]
+        );
+        socket
+            .write_all(&response(1, true, 0x5F, &[0x01]))
+            .await
+            .expect("ack panel lock set");
+
+        // orientation() — 0xC8 subcommand 0x82.
+        assert_eq!(
+            read_request(&mut socket).await,
+            vec![0xAA, 0xC8, 0x01, 0x01, 0x82, 0x4C]
+        );
+        socket
+            .write_all(&response(1, true, 0xC8, &[0x03]))
+            .await
+            .expect("ack orientation query");
+
+        // set_orientation(Portrait) — code 0x03.
+        assert_eq!(
+            read_request(&mut socket).await,
+            vec![0xAA, 0xC8, 0x01, 0x02, 0x82, 0x03, 0x50]
+        );
+        socket
+            .write_all(&response(1, true, 0xC8, &[0x82, 0x03]))
+            .await
+            .expect("ack orientation set");
+
+        // panel_health() — 0x0D: lamp ok, temperature ok, input-source ok,
+        // brightness-sensor slot, temperature 38 °C, fan ok.
+        assert_eq!(
+            read_request(&mut socket).await,
+            vec![0xAA, 0x0D, 0x01, 0x00, 0x0E]
+        );
+        socket
+            .write_all(&response(
+                1,
+                true,
+                0x0D,
+                &[0x00, 0x00, 0x00, 0x00, 38, 0x00],
+            ))
+            .await
+            .expect("ack health ok");
+
+        // Second query: lamp fault and input-source 0x02 (invalid selection),
+        // which is a signal problem — nothing is being displayed.
+        assert_eq!(
+            read_request(&mut socket).await,
+            vec![0xAA, 0x0D, 0x01, 0x00, 0x0E]
+        );
+        socket
+            .write_all(&response(
+                1,
+                true,
+                0x0D,
+                &[0x01, 0x00, 0x00, 0x02, 41, 0x00],
+            ))
+            .await
+            .expect("ack health faulted");
+    });
+
+    let client = MdcClient::with_options(
+        "127.0.0.1",
+        MdcOptions {
+            port,
+            timeout: Duration::from_secs(2),
+            ..MdcOptions::default()
+        },
+    )
+    .display(DisplayId::new(1).expect("display id"));
+    let descriptor = DeviceDescriptor::new(
+        DeviceId::new("gallery-panel").expect("device id"),
+        DeviceOs::SamsungMdc,
+        "127.0.0.1".to_string(),
+    );
+    let device = MdcDevice::new(client, descriptor);
+
+    assert!(device.capabilities().contains(Capability::PanelLock));
+    assert!(device.capabilities().contains(Capability::Orientation));
+    assert!(device.capabilities().contains(Capability::NoSignalStatus));
+    #[cfg(feature = "supporting")]
+    assert!(
+        !device.capabilities().contains(Capability::ScreenCapture),
+        "no MDC command exists for screen capture; advertising it would be a lie"
+    );
+
+    let lock = device.as_panel_lock().expect("panel lock adapter");
+    assert_eq!(
+        lock.panel_lock().await.expect("read panel lock"),
+        Some(false)
+    );
+    lock.set_panel_lock(true, CommandId::new())
+        .await
+        .expect("set panel lock");
+
+    let orientation = device.as_orientation().expect("orientation adapter");
+    assert_eq!(
+        orientation.orientation().await.expect("read orientation"),
+        Some(Orientation::Portrait)
+    );
+    assert!(Orientation::Portrait.is_portrait());
+    orientation
+        .set_orientation(Orientation::Portrait, CommandId::new())
+        .await
+        .expect("set orientation");
+
+    let health = device.as_panel_health().expect("health adapter");
+    assert_eq!(
+        health.panel_health().await.expect("read health"),
+        Some(tv_rs_core::PanelHealth {
+            signal_present: true,
+            temperature_celsius: Some(38),
+            lamp_error: false,
+        })
+    );
+    assert_eq!(
+        health.panel_health().await.expect("read health again"),
+        Some(tv_rs_core::PanelHealth {
+            signal_present: false,
+            temperature_celsius: Some(41),
+            lamp_error: true,
+        })
+    );
+
+    server.await.expect("server");
+}
+
+/// `0x83` reports panel on-time in units of ten minutes; the hours conversion
+/// belongs to the adapter, not to the caller. Gated behind `supporting`.
+#[cfg(feature = "supporting")]
+#[tokio::test]
+async fn panel_hours_are_converted_from_ten_minute_units() {
+    let (listener, port) = listener().await;
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.expect("accept");
+        // 0x83 on-time query. Checksum = command + id + length.
+        assert_eq!(
+            read_request(&mut socket).await,
+            vec![0xAA, 0x83, 0x01, 0x00, 0x84]
+        );
+        // 600 ten-minute units = 100 hours, encoded big-endian on the wire.
+        socket
+            .write_all(&response(1, true, 0x83, &[0x02, 0x58]))
+            .await
+            .expect("ack panel on time");
+    });
+
+    let client = MdcClient::with_options(
+        "127.0.0.1",
+        MdcOptions {
+            port,
+            timeout: Duration::from_secs(2),
+            ..MdcOptions::default()
+        },
+    )
+    .display(DisplayId::new(1).expect("display id"));
+    let descriptor = DeviceDescriptor::new(
+        DeviceId::new("depot-panel").expect("device id"),
+        DeviceOs::SamsungMdc,
+        "127.0.0.1".to_string(),
+    );
+    let device = MdcDevice::new(client, descriptor);
+
+    assert!(device.capabilities().contains(Capability::LampOrPanelHours));
+    assert_eq!(
+        device
+            .as_panel_hours()
+            .expect("panel hours adapter")
+            .panel_hours()
+            .await
+            .expect("read panel hours"),
+        Some(PanelHours {
+            panel_hours: 100,
+            lamp_hours: None,
+        })
     );
 
     server.await.expect("server");

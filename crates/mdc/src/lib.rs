@@ -6,11 +6,15 @@
 //! * frame encoding and checksum validation;
 //! * display-id addressing, including a broadcast address for video walls;
 //! * one shared socket for every display in a wall;
-//! * power, input, volume, mute, brightness and aggregated status.
+//! * power, input, volume, mute, brightness and aggregated status;
+//! * the LFD subset a signage panel needs: panel key lock (`0x5F`), content
+//!   orientation (`0xC8`/`0x82`), signal state and panel health (`0x0D`), and
+//!   panel on-time (`0x83`, behind the `supporting` feature).
 //!
 //! It deliberately does not guess: a `NAK` is returned with the command and error
 //! code, and the socket is kept open because the wire is still in sync. A timeout
-//! or malformed reply drops the socket so the next command reconnects.
+//! or malformed reply drops the socket so the next command reconnects. Screen
+//! capture has no MDC command, so the adapter never advertises it.
 //!
 //! # Example
 //!
@@ -47,8 +51,8 @@ pub mod types;
 pub use client::{MdcClient, MdcOptions};
 pub use error::MdcError;
 pub use handle::MdcDevice;
-pub use payload::Status;
+pub use payload::{ErrorStatus, Status};
 pub use protocol::{
     commands, Frame, Response, ACK, HEADER, MDC_TCP_PORT, NAK, RESPONSE_COMMAND, TERMINATOR,
 };
-pub use types::{DisplayId, InputSource, MdcPower};
+pub use types::{DisplayId, InputSource, MdcOrientation, MdcPower};

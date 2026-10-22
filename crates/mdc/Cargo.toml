@@ -10,6 +10,12 @@ repository.workspace = true
 keywords = ["samsung", "mdc", "signage", "display", "tcp"]
 categories = ["api-bindings", "network-programming"]
 
+[features]
+# The supporting-tier LFD surfaces. `LampOrPanelHours` maps to MDC `0x83`
+# (panel on-time); `ScreenCapture` has no MDC command and is never advertised,
+# so only the hours surface is gated here.
+supporting = ["tv-rs-core/supporting"]
+
 [dependencies]
 async-trait.workspace = true
 thiserror.workspace = true

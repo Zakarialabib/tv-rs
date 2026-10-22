@@ -50,8 +50,11 @@ pub mod telemetry;
 
 pub use capability::{
     AppLaunch, AppRef, BrightnessControl, Capability, CapabilitySet, DeviceHandle, Input,
-    InputSelect, Key, KeyInput, PowerControl, Probe, Rebootable, VolumeControl,
+    InputSelect, Key, KeyInput, Orientation, OrientationControl, PanelHealth, PanelHealthProvider,
+    PanelHours, PanelLockControl, PowerControl, Probe, Rebootable, VolumeControl,
 };
+#[cfg(feature = "supporting")]
+pub use capability::{FrameFormat, PanelHoursProvider, ScreenCapturer, ScreenFrame};
 pub use command::CommandId;
 pub use descriptor::{DeviceDescriptor, DeviceId, DeviceOs, PowerState};
 pub use error::{AuthError, ProtocolError, QuirkId, Remedy, StateError, TransportError, TvError};

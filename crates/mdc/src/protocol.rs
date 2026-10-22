@@ -40,6 +40,25 @@ pub mod commands {
     pub const INPUT: u8 = 0x14;
     /// Brightness (`0x25`).
     pub const BRIGHTNESS: u8 = 0x25;
+    /// Panel key lock (`0x5F`).
+    pub const PANEL_LOCK: u8 = 0x5F;
+    /// Lamp, temperature and input-source error status (`0x0D`).
+    pub const ERROR_STATUS: u8 = 0x0D;
+    /// Panel on-time, in units of ten minutes (`0x83`).
+    pub const PANEL_ON_TIME: u8 = 0x83;
+    /// Content/OSD orientation, addressed by sub-command (`0xC8`).
+    pub const CONTENT_ORIENTATION: u8 = 0xC8;
+}
+
+/// Sub-command bytes used by this crate.
+///
+/// MDC reuses one command byte for a family of settings; the sub-command selects
+/// which one. Only the source-content orientation is used here: it is the one that
+/// matches a wall built from rotated panels, as opposed to the panel's OSD menus.
+pub mod subcommands {
+    /// Source-content orientation within the `0xC8` family
+    /// (`crate::commands::CONTENT_ORIENTATION`).
+    pub const SOURCE_CONTENT_ORIENTATION: u8 = 0x82;
 }
 
 /// A request frame before it reaches the socket.

@@ -19,6 +19,10 @@ mock-backend = []
 # The conformance suite every backend must pass (`tv_rs_core::conformance`).
 conformance = []
 
+# The LFD surfaces that most deployments never touch: panel/lamp hours and still-frame
+# capture. Off by default so a cloud agent does not carry an image path it never calls.
+supporting = []
+
 # The quirks table (`tv_rs_core::quirks`), parsed from TOML.
 quirks = ["dep:toml"]
 

@@ -12,8 +12,11 @@ use async_trait::async_trait;
 
 use crate::capability::{
     AppLaunch, AppRef, BrightnessControl, Capability, CapabilitySet, DeviceHandle, Input,
-    InputSelect, Key, KeyInput, PowerControl, Probe, Rebootable, VolumeControl,
+    InputSelect, Key, KeyInput, Orientation, OrientationControl, PanelHealth, PanelHealthProvider,
+    PanelLockControl, PowerControl, Probe, Rebootable, VolumeControl,
 };
+#[cfg(feature = "supporting")]
+use crate::capability::{FrameFormat, PanelHours, PanelHoursProvider, ScreenCapturer, ScreenFrame};
 use crate::command::CommandId;
 use crate::descriptor::{DeviceDescriptor, DeviceId, PowerState};
 use crate::error::{AuthError, ProtocolError, StateError, TransportError, TvError};
@@ -65,6 +68,10 @@ pub enum Action {
     SetBrightness(u8),
     /// The device was rebooted.
     Reboot,
+    /// The panel key lock was set.
+    SetPanelLock(bool),
+    /// The content orientation was set.
+    SetOrientation(Orientation),
 }
 
 /// A television that exists only in tests.
@@ -82,6 +89,13 @@ pub struct MockBackend {
     actions: Mutex<Vec<Action>>,
     next_failure: Mutex<Option<Failure>>,
     next_telemetry_failure: Mutex<Option<Failure>>,
+    panel_lock: Mutex<Option<bool>>,
+    orientation: Mutex<Option<Orientation>>,
+    panel_health: Mutex<PanelHealth>,
+    #[cfg(feature = "supporting")]
+    panel_hours: Mutex<PanelHours>,
+    #[cfg(feature = "supporting")]
+    frame: Mutex<Option<ScreenFrame>>,
 }
 
 impl MockBackend {
@@ -100,6 +114,13 @@ impl MockBackend {
             Capability::Brightness,
             Capability::Reboot,
             Capability::Telemetry,
+            Capability::PanelLock,
+            Capability::Orientation,
+            Capability::NoSignalStatus,
+            #[cfg(feature = "supporting")]
+            Capability::LampOrPanelHours,
+            #[cfg(feature = "supporting")]
+            Capability::ScreenCapture,
         ] {
             capabilities.insert(capability);
         }
@@ -117,6 +138,23 @@ impl MockBackend {
             actions: Mutex::new(Vec::new()),
             next_failure: Mutex::new(None),
             next_telemetry_failure: Mutex::new(None),
+            panel_lock: Mutex::new(Some(false)),
+            orientation: Mutex::new(Some(Orientation::Landscape)),
+            panel_health: Mutex::new(PanelHealth {
+                signal_present: true,
+                temperature_celsius: Some(38),
+                lamp_error: false,
+            }),
+            #[cfg(feature = "supporting")]
+            panel_hours: Mutex::new(PanelHours {
+                panel_hours: 12_345,
+                lamp_hours: None,
+            }),
+            #[cfg(feature = "supporting")]
+            frame: Mutex::new(Some(ScreenFrame {
+                format: FrameFormat::Jpeg,
+                bytes: vec![0xFF, 0xD8, 0xFF, 0xD9],
+            })),
         }
     }
 
@@ -293,6 +331,38 @@ impl DeviceHandle for MockBackend {
             .then_some(self as &dyn Rebootable)
     }
 
+    fn as_panel_lock(&self) -> Option<&dyn PanelLockControl> {
+        self.capabilities
+            .contains(Capability::PanelLock)
+            .then_some(self as &dyn PanelLockControl)
+    }
+
+    fn as_orientation(&self) -> Option<&dyn OrientationControl> {
+        self.capabilities
+            .contains(Capability::Orientation)
+            .then_some(self as &dyn OrientationControl)
+    }
+
+    fn as_panel_health(&self) -> Option<&dyn PanelHealthProvider> {
+        self.capabilities
+            .contains(Capability::NoSignalStatus)
+            .then_some(self as &dyn PanelHealthProvider)
+    }
+
+    #[cfg(feature = "supporting")]
+    fn as_panel_hours(&self) -> Option<&dyn PanelHoursProvider> {
+        self.capabilities
+            .contains(Capability::LampOrPanelHours)
+            .then_some(self as &dyn PanelHoursProvider)
+    }
+
+    #[cfg(feature = "supporting")]
+    fn as_screen_capturer(&self) -> Option<&dyn ScreenCapturer> {
+        self.capabilities
+            .contains(Capability::ScreenCapture)
+            .then_some(self as &dyn ScreenCapturer)
+    }
+
     fn as_probe(&self) -> Option<&dyn Probe> {
         Some(self)
     }
@@ -458,6 +528,80 @@ impl TelemetryProvider for MockBackend {
             return Err(error_for(failure));
         }
         Ok(self.telemetry.lock().expect("mock lock").clone())
+    }
+}
+
+#[async_trait]
+impl PanelLockControl for MockBackend {
+    async fn panel_lock(&self) -> Result<Option<bool>, TvError> {
+        if !self.capabilities.contains(Capability::PanelLock) {
+            return Err(self.unsupported(Capability::PanelLock));
+        }
+        Ok(*self.panel_lock.lock().expect("mock lock"))
+    }
+
+    async fn set_panel_lock(&self, locked: bool, _cmd: CommandId) -> Result<(), TvError> {
+        if !self.capabilities.contains(Capability::PanelLock) {
+            return Err(self.unsupported(Capability::PanelLock));
+        }
+        self.perform(Action::SetPanelLock(locked))?;
+        *self.panel_lock.lock().expect("mock lock") = Some(locked);
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl OrientationControl for MockBackend {
+    async fn orientation(&self) -> Result<Option<Orientation>, TvError> {
+        if !self.capabilities.contains(Capability::Orientation) {
+            return Err(self.unsupported(Capability::Orientation));
+        }
+        Ok(*self.orientation.lock().expect("mock lock"))
+    }
+
+    async fn set_orientation(
+        &self,
+        orientation: Orientation,
+        _cmd: CommandId,
+    ) -> Result<(), TvError> {
+        if !self.capabilities.contains(Capability::Orientation) {
+            return Err(self.unsupported(Capability::Orientation));
+        }
+        self.perform(Action::SetOrientation(orientation))?;
+        *self.orientation.lock().expect("mock lock") = Some(orientation);
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl PanelHealthProvider for MockBackend {
+    async fn panel_health(&self) -> Result<Option<PanelHealth>, TvError> {
+        if !self.capabilities.contains(Capability::NoSignalStatus) {
+            return Err(self.unsupported(Capability::NoSignalStatus));
+        }
+        Ok(Some(*self.panel_health.lock().expect("mock lock")))
+    }
+}
+
+#[cfg(feature = "supporting")]
+#[async_trait]
+impl PanelHoursProvider for MockBackend {
+    async fn panel_hours(&self) -> Result<Option<PanelHours>, TvError> {
+        if !self.capabilities.contains(Capability::LampOrPanelHours) {
+            return Err(self.unsupported(Capability::LampOrPanelHours));
+        }
+        Ok(Some(*self.panel_hours.lock().expect("mock lock")))
+    }
+}
+
+#[cfg(feature = "supporting")]
+#[async_trait]
+impl ScreenCapturer for MockBackend {
+    async fn capture(&self) -> Result<Option<ScreenFrame>, TvError> {
+        if !self.capabilities.contains(Capability::ScreenCapture) {
+            return Err(self.unsupported(Capability::ScreenCapture));
+        }
+        Ok(self.frame.lock().expect("mock lock").clone())
     }
 }
 

@@ -4,7 +4,7 @@ Samsung Multiple Display Control (MDC) over TCP 1515.
 
 ```toml
 [dependencies]
-tv-rs-mdc = "0.2"
+tv-rs-mdc = "0.3"
 ```
 
 ## What it does
@@ -16,16 +16,26 @@ tv-rs-mdc = "0.2"
 - Reads and writes power, input, volume, mute and brightness.
 - Reads the aggregated status command (`0x00`) with typed power, volume, mute,
   input and aspect fields.
+- Speaks the LFD subset a signage panel actually needs: panel key lock (`0x5F`),
+  content orientation (`0xC8`/`0x82`), signal state and panel health (`0x0D` —
+  lamp fault, input-source error, panel temperature, fan), and panel on-time
+  (`0x83` behind the `supporting` feature).
 - Exposes `MdcDevice`, a `DeviceHandle` adapter covering power, input, volume,
-  **brightness**, **reboot** and a **control-channel probe** (`ping()` returns the
-  round trip of a status query), plus identity as `DeviceOs::SamsungMdc`.
+  **brightness**, **reboot**, the **LFD subset above** and a
+  **control-channel probe** (`ping()` returns the round trip of a status query),
+  plus identity as `DeviceOs::SamsungMdc`.
 
 ## What it refuses
 
-- **No telemetry.** MDC reports no temperature, signal strength or uptime, so the
-  adapter does not advertise `Capability::Telemetry` and `as_telemetry()` returns
-  `None`. A caller can therefore tell "this backend cannot measure" from "this reading
-  is currently unknown" — the two are different, and only the second is worth retrying.
+- It does not claim screen capture. No MDC command captures the panel's
+  picture, so `as_screen_capturer()` returns `None` in every configuration and
+  `Capability::ScreenCapture` is never advertised. A caller can therefore tell
+  "this backend cannot do that" from "this reading is currently unknown" — the
+  two are different, and only the second is worth retrying.
+- No aggregate-`Telemetry` provider. The `0x0D` status is exposed as
+  `PanelHealth` (`as_panel_health()`), not behind `Capability::Telemetry`,
+  because MDC performs no structured telemetry reads (no signal-strength
+  history, no uptime, no network diagnostics).
 - It does not invent a wake path. Samsung documents Wake-on-LAN for a display
   that is off; a TCP MDC frame is not a wake transport, so `wake()` returns
   `Unsupported(Wake)`.

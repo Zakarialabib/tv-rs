@@ -10,11 +10,11 @@ use tokio::sync::Mutex;
 use tokio::time::timeout;
 
 use crate::error::MdcError;
-use crate::payload::Status;
+use crate::payload::{panel_hours_from_payload, ErrorStatus, Status};
 use crate::protocol::{
-    commands, Frame, Response, HEADER, MDC_TCP_PORT, RESPONSE_COMMAND, TERMINATOR,
+    commands, subcommands, Frame, Response, HEADER, MDC_TCP_PORT, RESPONSE_COMMAND, TERMINATOR,
 };
-use crate::types::{DisplayId, InputSource, MdcPower};
+use crate::types::{DisplayId, InputSource, MdcOrientation, MdcPower};
 
 /// Connection and framing options for [`MdcClient`].
 #[derive(Debug, Clone)]
@@ -415,6 +415,105 @@ impl MdcClient {
         validate_level("brightness", level, 100)?;
         let response = self.request(commands::BRIGHTNESS, &[level]).await?;
         expect_echo(&response.data, level, "brightness")
+    }
+
+    /// Reads whether the panel's own keys are locked (MDC `0x5F`).
+    ///
+    /// # Errors
+    ///
+    /// Returns a transport, protocol or `NAK` error.
+    pub async fn panel_lock(&self) -> Result<bool, MdcError> {
+        let data = self.query(commands::PANEL_LOCK).await?;
+        match data.first() {
+            Some(0x00) => Ok(false),
+            Some(0x01) => Ok(true),
+            other => Err(MdcError::Protocol(format!(
+                "panel lock reply carries {other:?}; expected 0x00 or 0x01"
+            ))),
+        }
+    }
+
+    /// Locks or unlocks the panel's own keys (MDC `0x5F`).
+    ///
+    /// # Errors
+    ///
+    /// Returns a transport error, a protocol error or a `NAK`.
+    pub async fn set_panel_lock(&self, locked: bool) -> Result<(), MdcError> {
+        let value = u8::from(locked);
+        let response = self.request(commands::PANEL_LOCK, &[value]).await?;
+        expect_echo(&response.data, value, "panel lock")
+    }
+
+    /// Reads the panel's signal state and health (MDC `0x0D`).
+    ///
+    /// # Errors
+    ///
+    /// Returns a transport, protocol or `NAK` error.
+    pub async fn error_status(&self) -> Result<ErrorStatus, MdcError> {
+        let data = self.query(commands::ERROR_STATUS).await?;
+        ErrorStatus::from_payload(&data)
+    }
+
+    /// Reads how many hours the panel has been powered on (MDC `0x83`).
+    ///
+    /// # Errors
+    ///
+    /// Returns a transport, protocol or `NAK` error, or
+    /// [`MdcError::Protocol`] when the reply carries no value.
+    pub async fn panel_hours(&self) -> Result<u32, MdcError> {
+        let data = self.query(commands::PANEL_ON_TIME).await?;
+        panel_hours_from_payload(&data)
+            .ok_or_else(|| MdcError::Protocol("panel on-time reply carried no value".to_string()))
+    }
+
+    /// Reads the orientation the panel displays its source content in (MDC `0xC8`/`0x82`).
+    ///
+    /// This is the *content* orientation, not the physical mounting: a panel bolted
+    /// portrait but told to display landscape content shows a rotated picture, and it
+    /// is the second that a wall builder needs to set.
+    ///
+    /// # Errors
+    ///
+    /// Returns a transport, protocol or `NAK` error, or [`MdcError::Protocol`] for a
+    /// code outside the four documented modes.
+    pub async fn orientation(&self) -> Result<MdcOrientation, MdcError> {
+        let data = self
+            .request(
+                commands::CONTENT_ORIENTATION,
+                &[subcommands::SOURCE_CONTENT_ORIENTATION],
+            )
+            .await?
+            .data;
+        let code = data
+            .last()
+            .copied()
+            .ok_or_else(|| MdcError::Protocol("orientation reply carried no value".to_string()))?;
+        MdcOrientation::from_code(code).ok_or_else(|| {
+            MdcError::Protocol(format!(
+                "orientation code 0x{code:02X} is not a documented mode"
+            ))
+        })
+    }
+
+    /// Sets the orientation the panel displays its source content in (MDC `0xC8`/`0x82`).
+    ///
+    /// # Errors
+    ///
+    /// Returns a transport error, a protocol error or a `NAK`.
+    pub async fn set_orientation(&self, orientation: MdcOrientation) -> Result<(), MdcError> {
+        let code = orientation.code();
+        let response = self
+            .request(
+                commands::CONTENT_ORIENTATION,
+                &[subcommands::SOURCE_CONTENT_ORIENTATION, code],
+            )
+            .await?;
+        match response.data.last() {
+            Some(&echo) if echo == code => Ok(()),
+            other => Err(MdcError::Protocol(format!(
+                "orientation set echoed {other:?}; expected {code:#04X}"
+            ))),
+        }
     }
 
     async fn query(&self, command: u8) -> Result<Vec<u8>, MdcError> {
