@@ -292,6 +292,11 @@ D-pad key codes — are in §3 (Tizen) and §4 (webOS) above.
 (~800 lines, EDID/connector enumeration) overlaps `tv-rs-local`. Compare the two;
 port anything `tv-rs-local` lacks, then SignageMaster depends on `tv-rs-local`
 and deletes its copy. Audio, USB and sensor probes are **not** moving here.
+Gaps found 2026-10-23 (SignageMaster path is now `crates/device/src/hardware/display/`):
+`tv-rs-local` has no public EDID byte parser (SignageMaster's `parse_edid_bytes` in
+`edid.rs` returns product code, serial and width/height in cm; `tv-rs-local`'s
+`parse_edid` is private and Linux-only) and no Windows registry EDID read. E3b has no
+item in [06-plan.md](06-plan.md) yet.
 
 **Streaming boundary** — SignageMaster is extracting a separate `streaming-core`
 workspace (MJPEG, HLS, WebRTC, RTSP relay). `tv-rs-media` stays the minimal byte server
