@@ -51,6 +51,40 @@ assert!(!conservative.is_tv);
 From async code, use `probe_displays_async()`: the Windows WMI/COM path is
 blocking and must not run on the runtime thread.
 
+### EDID
+
+The parser is platform-independent: bytes from any source in, the base block out.
+
+```rust
+use tv_rs_local::{display_edids, parse_edid};
+
+for display in display_edids() {
+    let edid = &display.edid;
+    println!(
+        "{:?} {} {} {:?}x{:?} cm",
+        display.system_name,
+        edid.pnp_id(), // "SAM0F99"
+        edid.model(),  // product-name descriptor, else the product code
+        edid.physical_width_cm,
+        edid.physical_height_cm,
+    );
+    if let Some(timing) = edid.preferred_timing {
+        println!("preferred {}x{} @ {:?} Hz", timing.h_active, timing.v_active, timing.refresh_hz());
+    }
+}
+
+// Bytes from elsewhere (a file, a capture card, a network report):
+assert!(parse_edid(&[0u8; 8]).is_err());
+```
+
+`Edid` carries the PNP manufacturer id, product code, numeric serial and serial
+descriptor, week/year, version/revision, digital input, size in cm (`None` when
+the panel only gives an aspect ratio), the product-name descriptor, the preferred
+`DetailedTiming`, the extension count, and `checksum_valid` — a bad checksum is
+reported, not rejected. Extension blocks (CTA-861, DisplayID) are counted, not
+decoded. Field offsets follow VESA E-EDID 1.4 §3; the tests parse two real EDIDs
+(see `tests/fixtures/README.md`). `display_edids()` is blocking, like the probe.
+
 ## What it returns
 
 `ProbeInfo` is one attached display:
@@ -74,7 +108,7 @@ that the display is not a TV. Callers should fall back to `fallback()` and show
 
 | Platform      | Implementation                                                                                   |
 | ------------- | ------------------------------------------------------------------------------------------------ |
-| Windows       | WMI (`root\WMI`) for EDID; `EnumDisplayDevicesW` / `EnumDisplaySettingsW` for connector and mode |
+| Windows       | WMI (`root\WMI`) for EDID; `EnumDisplayDevicesW` / `EnumDisplaySettingsW` for connector and mode; each active monitor's registry EDID (`Enum\DISPLAY\<id>\<instance>\Device Parameters\EDID`, found through its device interface path) for `display_edids()` and when WMI has no record |
 | Linux         | `/sys/class/drm` connectors, mode list and EDID                                                  |
 | macOS / other | No native probe yet; returns an empty list so the caller can use its own monitor data            |
 

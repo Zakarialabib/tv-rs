@@ -86,7 +86,7 @@ has that concept.
 | `core`           | —                           | —                                                                            | —                         | ✓ ids, capabilities (incl. the LFD subset), state, `Telemetry` | ✓ `TvError` + `Remedy` | —               |
 | `agent`          | —                           | ✓ telemetry policy (`assess_telemetry`) + remediation ladder (`plan_remedy`) | ✓ desired-state JSON      | ✓ `Decision`, `Outcome`, `TelemetryVerdict`, `RemedyStep`      | ✓ provider errors      | —               |
 | `cec`            | ✓ `CecClient` (in `lib.rs`) | ✓ `cec-client` grammar                                                       | —                         | ✓ `CecAddress`                                                 | ✓                      | —               |
-| `local`          | —                           | —                                                                            | —                         | ✓ `ProbeInfo`, `Attachment` (single `lib.rs`)                  | ✓                      | —               |
+| `local`          | —                           | —                                                                            | —                         | ✓ `ProbeInfo`, `Attachment`, `DisplayEdid` (`lib.rs`); `Edid` (`edid.rs`) | ✓                      | —               |
 | `dlna`           | ✓ `SoapAvTransport`         | ✓ SSDP discovery/GENA request builders                                       | ✓ DIDL-Lite               | ✓ `Renderer`                                                   | ✓ `DlnaError`          | —               |
 
 **The auth rule.** An `auth.rs` exists only where the protocol performs a real

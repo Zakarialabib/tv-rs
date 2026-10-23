@@ -73,6 +73,27 @@ wrapper once the registry has the crate.
 open with the platform's own tooling; the manifest and key-map functions are covered
 by tests; SignageMaster deletes `platform-tv-wrapper` once this publishes.
 
+## 2b. Display probe merge (SignageMaster handoff E3b) — the consumer switch
+
+SignageMaster's `crates/device/src/hardware/display/` duplicated what
+`tv-rs-local` is for. **The tv-rs side landed on 2026-10-23**
+([CHANGELOG](../CHANGELOG.md)): a public, platform-independent EDID parser
+(`tv_rs_local::parse_edid` → `Edid`, with the preferred `DetailedTiming`), and
+`display_edids()`, which reads each **active** monitor's registry EDID on Windows
+(keyed by the device interface path, so stale registry entries never leak in) and
+`/sys/class/drm/*/edid` on Linux. The Windows probe now falls back to that EDID when
+WMI has no record. Tested against two real EDIDs (an LG TV and a Samsung C49RG9x,
+linuxhw/EDID, CC BY 4.0) and run on a live Windows host.
+
+What is open is the consumer's half: SignageMaster replaces `edid::parse_edid_bytes`
+(and its `edidkit` dependency) and `read_edid_from_registry` with the calls above,
+then deletes its copy. Not moved, by design: DDC/CI brightness and display rotation
+in its `win32.rs` are output *control*, which is [item 7](#7-ddcci-in-tv-rs-local)
+and the expansion plan's `tv-rs-local` v2 — not part of the probe.
+
+**Exit:** SignageMaster depends on `tv-rs-local` for EDID identity and deletes
+`edid.rs`; this section is deleted.
+
 ## 3. Companion-app gaps — the tv-rs side
 
 Requested by the companion app (`companion-app/docs/TV-RS-GAPS.md`, ranked by its

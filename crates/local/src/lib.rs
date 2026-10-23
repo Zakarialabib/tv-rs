@@ -8,8 +8,14 @@
 //! Platforms:
 //! - Windows: WMI (`root\WMI`) for EDID-derived identity + connector, and
 //!   `EnumDisplayDevicesW` / `EnumDisplaySettingsW` for the `\\.\DISPLAYn`
-//!   mapping and current mode.
+//!   mapping and current mode; when WMI has no record, the raw EDID from the
+//!   monitor's registry key
+//!   (`HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY\<id>\<instance>\Device Parameters\EDID`).
 //! - Linux: `/sys/class/drm` connectors + EDID.
+//!
+//! The EDID parser itself is platform-independent: [`edid::parse_edid`] takes
+//! bytes from any source. [`display_edids`] returns the raw EDID of every
+//! active display, so a host can keep the bytes it needs.
 //! - macOS / other: no native probe yet; returns an empty list and the caller
 //!   uses [`fallback`] with the mode Tauri/CoreGraphics already reported.
 //!
@@ -34,6 +40,10 @@
 #![deny(unsafe_code)] // Platform FFI is isolated in the Windows module.
 
 use serde::{Deserialize, Serialize};
+
+pub mod edid;
+
+pub use edid::{parse_edid, DetailedTiming, Edid, EdidError};
 
 /// Physical connector class. `Unknown` is a first-class value: it means the
 /// probe could not establish the connector, not "not a TV".
@@ -162,6 +172,66 @@ pub fn probe_displays() -> Vec<ProbeInfo> {
     {
         Vec::new()
     }
+}
+
+/// One active display's EDID, as the platform hands it over.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct DisplayEdid {
+    /// Platform system name, matching [`ProbeInfo::system_name`]
+    /// (`\\.\DISPLAY1` on Windows, `HDMI-A-1` on Linux).
+    pub system_name: Option<String>,
+    /// Where the bytes came from: the device instance path on Windows
+    /// (`DISPLAY\SAM0F99\5&2d3c1b2&0&UID4352`), the sysfs directory on Linux.
+    pub source: String,
+    /// The EDID exactly as read: base block plus extensions.
+    pub raw: Vec<u8>,
+    /// The parsed base block.
+    pub edid: Edid,
+}
+
+/// The EDID of every active display.
+///
+/// Windows reads each active monitor's registry key, addressed by the device
+/// interface path `EnumDisplayDevicesW` returns, so a monitor that was once
+/// connected but is not now is never reported (the registry keeps those).
+/// Linux reads `/sys/class/drm/*/edid` for connected connectors. Other
+/// platforms, and displays without a readable, valid EDID, yield nothing.
+///
+/// Blocking; call it from `spawn_blocking` in async code.
+#[must_use]
+pub fn display_edids() -> Vec<DisplayEdid> {
+    #[cfg(target_os = "windows")]
+    {
+        win::display_edids()
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linux::display_edids()
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    {
+        Vec::new()
+    }
+}
+
+/// Maps a monitor device interface path to its device instance path, which is
+/// also its key under `HKLM\SYSTEM\CurrentControlSet\Enum`:
+/// `\\?\DISPLAY#SAM0F99#5&2d3c1b2&0&UID4352#{e6f07b5f-...}` becomes
+/// `DISPLAY\SAM0F99\5&2d3c1b2&0&UID4352`.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn instance_path(interface: &str) -> Option<String> {
+    let trimmed = interface.strip_prefix(r"\\?\").unwrap_or(interface);
+    let mut parts = trimmed.split('#');
+    let (class, hardware, instance) = (parts.next()?, parts.next()?, parts.next()?);
+    if !class.eq_ignore_ascii_case("DISPLAY") || hardware.is_empty() || instance.is_empty() {
+        return None;
+    }
+    // The registry path is built from these; a separator would escape the key.
+    if hardware.contains('\\') || instance.contains('\\') {
+        return None;
+    }
+    Some(format!(r"DISPLAY\{hardware}\{instance}"))
 }
 
 /// Async wrapper: the Windows path performs COM/WMI work that must not block
@@ -372,15 +442,29 @@ fn is_tv_brand(vendor: &str) -> bool {
 mod win {
     #![allow(unsafe_code)]
 
-    use super::{attachment_from_name, evaluate, Attachment, ProbeInfo, TV_THRESHOLD};
+    use super::{
+        attachment_from_name, evaluate, instance_path, parse_edid, Attachment, DisplayEdid, Edid,
+        ProbeInfo, TV_THRESHOLD,
+    };
     use serde::Deserialize;
     use std::collections::HashSet;
     use std::mem::{size_of, zeroed};
+    use windows_sys::Win32::Foundation::ERROR_SUCCESS;
     use windows_sys::Win32::Graphics::Gdi::{
         EnumDisplayDevicesW, EnumDisplaySettingsW, DEVMODEW, DISPLAY_DEVICEW,
-        DISPLAY_DEVICE_ATTACHED_TO_DESKTOP, ENUM_CURRENT_SETTINGS,
+        DISPLAY_DEVICE_ACTIVE, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP, ENUM_CURRENT_SETTINGS,
+    };
+    use windows_sys::Win32::System::Registry::{
+        RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_BINARY,
     };
     use wmi::{COMLibrary, WMIConnection};
+
+    /// `EnumDisplayDevicesW` flag: return the device interface path
+    /// (`\\?\DISPLAY#...#{guid}`) in `DeviceID` instead of the hardware id.
+    const EDD_GET_DEVICE_INTERFACE_NAME: u32 = 0x0000_0001;
+
+    /// Upper bound for one EDID: 256 blocks of 128 bytes.
+    const EDID_MAX_LEN: usize = 256 * 128;
 
     #[derive(Deserialize, Debug)]
     #[serde(rename = "WmiMonitorID")]
@@ -446,6 +530,24 @@ mod win {
         height: u32,
         refresh: Option<u32>,
         bpp: Option<u32>,
+        /// Registry EDID for this monitor: instance path and raw bytes.
+        edid: Option<(String, Vec<u8>)>,
+    }
+
+    pub(super) fn display_edids() -> Vec<DisplayEdid> {
+        enum_displays()
+            .into_iter()
+            .filter_map(|d| {
+                let (source, raw) = d.edid?;
+                let edid = parse_edid(&raw).ok()?;
+                Some(DisplayEdid {
+                    system_name: Some(d.system_name),
+                    source,
+                    raw,
+                    edid,
+                })
+            })
+            .collect()
     }
 
     pub(super) fn probe() -> Vec<ProbeInfo> {
@@ -467,6 +569,13 @@ mod win {
     }
 
     fn build_info(d: WinDisplay, record: Option<WmiRecord>) -> ProbeInfo {
+        // WMI is the primary source; the registry EDID only fills a missing record.
+        let registry = if record.is_none() {
+            d.edid.as_ref().and_then(|(_, raw)| parse_edid(raw).ok())
+        } else {
+            None
+        };
+        let record = record.or_else(|| registry.as_ref().map(record_from_edid));
         let attachment = record
             .as_ref()
             .and_then(|r| r.vot)
@@ -500,6 +609,9 @@ mod win {
                 evidence.push("EDID serial present".to_string());
             }
         }
+        if registry.is_some() {
+            evidence.push("EDID from registry".to_string());
+        }
 
         ProbeInfo {
             system_name: Some(d.system_name),
@@ -518,6 +630,71 @@ mod win {
             is_tv: attachment.tv_eligible() && tv_confidence >= TV_THRESHOLD,
             evidence,
         }
+    }
+
+    fn record_from_edid(edid: &Edid) -> WmiRecord {
+        WmiRecord {
+            vendor: Some(edid.manufacturer_id.clone()),
+            model: Some(edid.model()),
+            serial: edid.serial(),
+            width_cm: edid.physical_width_cm.map(f64::from),
+            height_cm: edid.physical_height_cm.map(f64::from),
+            ..WmiRecord::default()
+        }
+    }
+
+    /// Reads `EDID` from `HKLM\SYSTEM\CurrentControlSet\Enum\<instance>\Device Parameters`.
+    fn registry_edid(instance: &str) -> Option<Vec<u8>> {
+        let subkey = wide(&format!(
+            r"SYSTEM\CurrentControlSet\Enum\{instance}\Device Parameters"
+        ));
+        let value = wide("EDID");
+        let mut buffer = vec![0u8; EDID_MAX_LEN];
+        let mut len = EDID_MAX_LEN as u32;
+        // SAFETY: both strings are NUL-terminated UTF-16 that outlive the call;
+        // `buffer` is writable for `len` bytes, and RegGetValueW writes at most
+        // `len` bytes and stores the written length back into `len`.
+        let status = unsafe {
+            RegGetValueW(
+                HKEY_LOCAL_MACHINE,
+                subkey.as_ptr(),
+                value.as_ptr(),
+                RRF_RT_REG_BINARY,
+                std::ptr::null_mut(),
+                buffer.as_mut_ptr().cast(),
+                &mut len,
+            )
+        };
+        if status != ERROR_SUCCESS {
+            return None;
+        }
+        buffer.truncate(len as usize);
+        Some(buffer)
+    }
+
+    fn wide(text: &str) -> Vec<u16> {
+        text.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    /// The registry EDID of the monitor at `index` on `adapter`, asking for
+    /// the device interface path so the key is this monitor's, not a stale one.
+    fn monitor_edid(adapter: &[u16], index: u32) -> Option<(String, Vec<u8>)> {
+        let mut monitor: DISPLAY_DEVICEW = unsafe { zeroed() };
+        monitor.cb = size_of::<DISPLAY_DEVICEW>() as u32;
+        let ok = unsafe {
+            EnumDisplayDevicesW(
+                adapter.as_ptr(),
+                index,
+                &mut monitor,
+                EDD_GET_DEVICE_INTERFACE_NAME,
+            )
+        };
+        if ok == 0 || monitor.StateFlags & DISPLAY_DEVICE_ACTIVE == 0 {
+            return None;
+        }
+        let instance = instance_path(&wide_to_string(&monitor.DeviceID)?)?;
+        let raw = registry_edid(&instance)?;
+        Some((instance, raw))
     }
 
     fn query_wmi() -> Vec<WmiRecord> {
@@ -680,6 +857,7 @@ mod win {
                     height,
                     refresh,
                     bpp,
+                    edid: monitor_edid(&adapter.DeviceName, monitor_index),
                 });
                 found = true;
                 monitor_index += 1;
@@ -693,6 +871,7 @@ mod win {
                     height,
                     refresh,
                     bpp,
+                    edid: None,
                 });
             }
         }
@@ -728,7 +907,7 @@ mod win {
 
 #[cfg(target_os = "linux")]
 mod linux {
-    use super::{attachment_from_name, evaluate, ProbeInfo, TV_THRESHOLD};
+    use super::{attachment_from_name, evaluate, parse_edid, DisplayEdid, ProbeInfo, TV_THRESHOLD};
     use std::fs;
 
     pub(super) fn probe() -> Vec<ProbeInfo> {
@@ -742,20 +921,17 @@ mod linux {
             let Some((_, connector)) = dir_name.split_once('-') else {
                 continue;
             };
-            if fs::read_to_string(entry.path().join("status"))
-                .map(|s| s.trim() != "connected")
-                .unwrap_or(true)
-            {
+            if !is_connected(&entry.path()) {
                 continue;
             }
 
             let modes = fs::read_to_string(entry.path().join("modes")).unwrap_or_default();
             let (width, height, refresh) = parse_first_mode(&modes);
             let edid = fs::read(entry.path().join("edid")).ok();
-            let (vendor, model, width_cm, height_cm) = edid
+            let (vendor, model, serial, width_cm, height_cm) = edid
                 .as_deref()
-                .map(parse_edid)
-                .unwrap_or((None, None, None, None));
+                .map(edid_facts)
+                .unwrap_or((None, None, None, None, None));
 
             let attachment = attachment_from_name(connector);
             let diagonal = match (width_cm, height_cm) {
@@ -782,6 +958,7 @@ mod linux {
                 height,
                 vendor,
                 model,
+                serial,
                 attachment,
                 refresh_rate: refresh,
                 physical_width_cm: width_cm,
@@ -810,31 +987,59 @@ mod linux {
         )
     }
 
-    fn parse_edid(edid: &[u8]) -> (Option<String>, Option<String>, Option<f64>, Option<f64>) {
-        if edid.len() < 128 || !edid.starts_with(&[0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00])
-        {
-            return (None, None, None, None);
-        }
+    /// Vendor, model, serial and size from an EDID, through the shared parser.
+    type EdidFacts = (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<f64>,
+        Option<f64>,
+    );
 
-        // Manufacturer id: three 5-bit letters, big-endian at bytes 8-9.
-        let raw = ((edid[8] as u16) << 8) | edid[9] as u16;
-        let mut vendor = String::new();
-        for shift in [10u16, 5, 0] {
-            let code = ((raw >> shift) & 0x1F) as u8;
-            if (1..=26).contains(&code) {
-                vendor.push((b'A' + code - 1) as char);
-            }
-        }
-        let vendor = if vendor.is_empty() || vendor == "AAA" {
-            None
-        } else {
-            Some(vendor)
+    fn edid_facts(edid: &[u8]) -> EdidFacts {
+        let Ok(edid) = parse_edid(edid) else {
+            return (None, None, None, None, None);
         };
+        (
+            Some(edid.manufacturer_id.clone()),
+            edid.display_name.clone(),
+            edid.serial(),
+            edid.physical_width_cm.map(f64::from),
+            edid.physical_height_cm.map(f64::from),
+        )
+    }
 
-        let width_cm = (edid[21] > 0).then_some(edid[21] as f64);
-        let height_cm = (edid[22] > 0).then_some(edid[22] as f64);
+    pub(super) fn display_edids() -> Vec<DisplayEdid> {
+        let Ok(entries) = fs::read_dir("/sys/class/drm") else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for entry in entries.flatten() {
+            let dir_name = entry.file_name().to_string_lossy().to_string();
+            let Some((_, connector)) = dir_name.split_once('-') else {
+                continue;
+            };
+            if !is_connected(&entry.path()) {
+                continue;
+            }
+            let Ok(raw) = fs::read(entry.path().join("edid")) else {
+                continue;
+            };
+            let Ok(edid) = parse_edid(&raw) else {
+                continue;
+            };
+            out.push(DisplayEdid {
+                system_name: Some(connector.to_string()),
+                source: entry.path().to_string_lossy().to_string(),
+                raw,
+                edid,
+            });
+        }
+        out
+    }
 
-        (vendor, None, width_cm, height_cm)
+    fn is_connected(path: &std::path::Path) -> bool {
+        fs::read_to_string(path.join("status")).is_ok_and(|s| s.trim() == "connected")
     }
 }
 
@@ -923,6 +1128,24 @@ mod tests {
         assert_eq!(connector_key(r"\\.\DISPLAY1"), "DISPLAY1");
         assert_eq!(connector_key("HDMI-A-1"), "HDMI-1");
         assert_eq!(connector_key("HDMI-1"), "HDMI-1");
+    }
+
+    #[test]
+    fn interface_paths_map_to_registry_instances() {
+        assert_eq!(
+            instance_path(
+                r"\\?\DISPLAY#SAM0F99#5&2d3c1b2&0&UID4352#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}"
+            )
+            .as_deref(),
+            Some(r"DISPLAY\SAM0F99\5&2d3c1b2&0&UID4352")
+        );
+        // A hardware id (flag 0) is not an interface path.
+        assert_eq!(
+            instance_path(r"MONITOR\SAM0F99\{4d36e96e-e325-11ce-bfc1-08002be10318}\0001"),
+            None
+        );
+        assert_eq!(instance_path(r"\\?\USB#VID_1234#x#{guid}"), None);
+        assert_eq!(instance_path(r"\\?\DISPLAY#SAM0F99"), None);
     }
 
     #[test]

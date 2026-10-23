@@ -8,6 +8,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Public EDID parser and active-display EDID enumeration in `tv-rs-local`
+  (SignageMaster handoff E3b)**: `tv_rs_local::parse_edid(&[u8]) -> Result<Edid,
+  EdidError>` reads the base block per VESA E-EDID 1.4 §3 — PNP manufacturer id,
+  product code, serial (numeric and descriptor), week/year, version, digital input,
+  size in cm, the product-name descriptor and the preferred `DetailedTiming` (pixel
+  clock, active/blank, image mm, `refresh_hz()`), extension count and a reported (not
+  enforced) checksum. `display_edids() -> Vec<DisplayEdid>` returns the raw bytes and
+  the parsed block for every active display: on Windows from
+  `HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY\<id>\<instance>\Device Parameters\EDID`,
+  addressed through the monitor's device interface path; on Linux from
+  `/sys/class/drm`. The Windows probe uses that EDID when WMI has no record, and the
+  Linux probe now fills `model` and `serial` from it. Tested against two real EDIDs
+  from linuxhw/EDID (CC BY 4.0).
+
 - **One error taxonomy at the facade (companion gap A2)**: `tv_rs::TvError` is now a
   re-export of `tv_rs_core::TvError` — the facade's parallel enum is deleted, not
   deprecated. Core gains `TvError::UnsupportedDevice { address, reason }` (a device
