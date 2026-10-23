@@ -266,9 +266,12 @@ PIN/FairPlay protection.
 `am start`) but requires developer mode and a pairing step per TV. It is a
 different trust model from the protocols above. A second door, researched
 2026-10-23 in the matrix's peer landscape: the **Android TV Remote protocol v2**
-(the Google TV app's own — mTLS + Polo pairing + protobuf, pre-installed service,
-no developer mode, and the TV's MAC travels in the pairing certificate). The
-spike that decides between them is plan item 3.13 in [`06-plan.md`](06-plan.md).
+(the Google TV app's own — mTLS + Polo pairing + protobuf on fixed 6467/6466,
+pre-installed service, no developer mode). The device's name and MAC parse out
+of the **server** certificate the TV presents on the pairing port — no pairing
+needed to read it. Protocol facts are crystallized in the webos/androidtv
+research briefs; the spike that decides between them is plan item 3.13 in
+[`06-plan.md`](06-plan.md).
 
 All three are sender protocols or separate trust models; a partial
 implementation is worse than none. The deferral list lives in

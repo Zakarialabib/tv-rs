@@ -188,21 +188,27 @@ The matrix deferred Android TV for ADB's trust model (developer mode, per-TV
 pairing). The peer landscape ([`03-matrix.md`](03-matrix.md#peer-landscape))
 researched 2026-10-23 found a second door: the **Android TV Remote protocol v2** —
 the same protocol the Google TV remote app speaks, no developer mode, pre-installed
-`Android TV Remote Service`, mTLS with the Polo pairing handshake, protobuf
-commands, and the device's **MAC in the pairing certificate** (which is exactly
+`Android TV Remote Service`, mTLS with the Polo pairing handshake on fixed
+6467/6466, protobuf commands, and the device's **name + MAC parseable from the
+server certificate** on the pairing port (no pairing needed to read it — that is
 what G4 needs). Proven viable in Python (`androidtvremote2`, maintained).
 
-**Shape (spike):** reproduce the v2 pairing over mTLS against a real panel (or
-against the Google TV APK with the REA MCP when no panel is on the bench),
-record the handshake and cert-MAC extraction in `hil-results.md`, map the
-result into `TvVendor`/`Capability` terms, and write the verdict here. ADB stays
-the fallback (its `5555` story already lives in the playbook §"Not implemented
-here"). No `tv-rs-androidtv` crate before the verdict ship and no re-deferral
-of A5/C1 — the phone-side sender work rides its own plan items.
+**Fact source (decided):** the protocol brief crystallized with the deep-research
+skill, `androidtv-v2/references/atr-v2-brief.md`, carries the wire shapes, the
+capability truth table, the probe script (9 ordered probes against one panel),
+and the effort estimate (~5–7 dev-days spike-quality). Its research verdict:
+ATR v2 as primary transport, ADB as privileged fallback (Reboot + arbitrary
+intents), WOL/CEC wake ladder for deep-sleep panels.
 
-**Exit:** `hil-results.md` has an ATR v2 row (or a dated "not reachable" row);
-the playbook's Android TV paragraph reflects the verdict; the matrix deferred
-list is updated the day a crate is decided either way.
+**Shape (spike):** run the brief's 9 probes against a real panel — no REA
+session is planned: its residual unknowns are firmware-runtime behaviors a
+decompile cannot answer. Record a probe row per gate in `hil-results.md` and
+write the verdict here. No `tv-rs-androidtv` crate before the verdict ships and
+no re-deferral of A5/C1 — the phone-side sender work rides its own plan items.
+
+**Exit:** `hil-results.md` has the ATR v2 probe rows (or a dated "not reachable"
+row); the playbook's Android TV paragraph reflects the verdict; the matrix
+deferred list is updated the day a crate is decided either way.
 
 ## 4. `tv-rs-sim` — verify the hardware exits without hardware
 
