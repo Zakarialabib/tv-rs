@@ -10,6 +10,7 @@ use crate::error::TvError;
 /// address moves. Sources, in order of preference: the UPnP `UDN`, the Roku
 /// `device-id`, then a MAC address. An id is an opaque string — do not parse it.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DeviceId(String);
 
 impl DeviceId {

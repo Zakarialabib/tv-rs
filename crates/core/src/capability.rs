@@ -15,6 +15,7 @@ use crate::telemetry::TelemetryProvider;
 /// Capabilities are coarse on purpose: a UI greys out a control, and a fleet
 /// report counts devices, neither of which needs per-key granularity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Capability {
     /// Read the power state.
     PowerState,
@@ -81,6 +82,7 @@ impl Capability {
 /// Deliberately not a bitflags crate: ten capabilities fit in a `u16`, and a
 /// hand-written set keeps the dependency list of the core honest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct CapabilitySet(u16);
 
 impl CapabilitySet {

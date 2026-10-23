@@ -48,6 +48,9 @@ pub mod quirks;
 pub mod state;
 pub mod telemetry;
 
+#[cfg(feature = "serde")]
+pub mod serde;
+
 pub use capability::{
     AppLaunch, AppRef, BrightnessControl, Capability, CapabilitySet, DeviceHandle, Input,
     InputSelect, Key, KeyInput, Orientation, OrientationControl, PanelHealth, PanelHealthProvider,

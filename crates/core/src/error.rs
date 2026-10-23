@@ -133,6 +133,7 @@ impl TvError {
 
 /// The action a caller should take, one per [`TvError`] variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Remedy {
     /// Try again, with backoff.
     Retry,
@@ -156,6 +157,7 @@ pub enum Remedy {
 
 /// Network-level failure.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum TransportError {
     /// Nothing answered at the address.
     #[error("unreachable: {0}")]
@@ -171,6 +173,7 @@ pub enum TransportError {
 
 /// The device answered something this backend cannot use.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ProtocolError {
     /// The payload could not be parsed.
     #[error("malformed payload: {0}")]
@@ -182,6 +185,7 @@ pub enum ProtocolError {
 
 /// Credential or permission failure.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum AuthError {
     /// No usable credential yet: the user has to accept the pairing prompt.
     #[error("pairing required")]
@@ -202,6 +206,7 @@ pub enum AuthError {
 
 /// The device is in a state that forbids the command.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum StateError {
     /// Not connected, or still coming up.
     #[error("device not ready")]
@@ -213,6 +218,7 @@ pub enum StateError {
 
 /// Identifier of a known model/firmware defect, resolved against `quirks/`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, thiserror::Error)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[error("{0}")]
 pub struct QuirkId(String);
 

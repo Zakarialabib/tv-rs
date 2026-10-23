@@ -12,11 +12,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   re-export of `tv_rs_core::TvError` — the facade's parallel enum is deleted, not
   deprecated. Core gains `TvError::UnsupportedDevice { address, reason }` (a device
   answered and matched no signature) and `TvError::UnsupportedOperation { vendor,
-operation }` (the vendor has no such protocol message), both routing to
+  operation }` (the vendor has no such protocol message), both routing to
   `Remedy::Disable`, and a `hint()` method that returns a user-facing sentence where
   the error alone cannot. webOS `RegistrationFailed` now carries `presented_key`:
   a **declined prompt** maps to `Auth(PairingRequired)`, a **revoked stored key** to
   `Auth(TokenExpired)` — the app can finally offer the right button.
++- **Optional serialization of the core device model (`tv_rs_core/serde`)**: the new
+  `serde` feature (off by default) derives `Serialize`/`Deserialize` for the core
+  data types — `Capability`, `Key`, `Input`, `AppRef`, `DeviceDescriptor`,
+  `PowerState`, `TvError`, `Remedy`, `ObservedState` — with the wire contract that
+  goes to the companion: `Key::Digit(n)` → `"digit_n"`, `ObservedField` →
+  `{"verified_at_ms": u64, "age_ms": u64, "confidence": "high"|"inferred"|"unknown",
+  "value": T}`. No extra dependency in the default build, and the companion can
+  hand the core types straight to its `types.ts` instead of maintaining a DTO fork.
+  See `docs/03-matrix.md` and `docs/06-plan.md` item 3.3.
 - **`tv_rs::map` — the one home of vendor-error mapping**: three exhaustive
   per-vendor functions (`tizen`, `webos`, `roku`) plus `discovery` and `power`.
   No wildcard arms — a new vendor error variant is a compile error until someone
