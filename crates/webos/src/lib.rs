@@ -44,6 +44,8 @@ pub mod auth;
 pub mod client;
 pub mod error;
 pub mod payload;
+pub mod pointer;
+pub mod pool;
 pub mod protocol;
 pub mod types;
 
@@ -58,6 +60,8 @@ pub use payload::{
     SsapErrorBody, SsapManifest, SsapRegisterPayload, SsapRegisterRequest, SsapRegisterResponse,
     SsapRegisterResponsePayload, SsapRequest, SsapResponse,
 };
+pub use pointer::{extract_socket_path, PointerFrame, PointerSocket};
+pub use pool::{LiveSessionFactory, WebosSessionFactory, WebosSessionPool, WebosSessionWire};
 pub use protocol::SsapController;
 pub use tv_rs_transport::TlsPolicy;
 pub use types::{

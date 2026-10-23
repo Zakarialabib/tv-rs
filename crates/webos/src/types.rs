@@ -56,6 +56,11 @@ pub enum SsapUri {
     MediaPlay,
     /// Stop media playback.
     MediaStop,
+    /// Ask the TV for the pointer/mouse input socket.
+    ///
+    /// The response carries a `socketPath`; it is a complete WebSocket URL for a
+    /// second, per-session connection that accepts plain-text pointer frames.
+    NetworkInputGetPointerSocket,
     /// Open a URL in the TV's browser.
     ///
     /// This is the only content channel webOS offers without deploying an app:
@@ -83,6 +88,9 @@ impl SsapUri {
             Self::MediaPause => "ssap://media.controls/pause",
             Self::MediaPlay => "ssap://media.controls/play",
             Self::MediaStop => "ssap://media.controls/stop",
+            Self::NetworkInputGetPointerSocket => {
+                "ssap://com.webos.service.networkinput/getPointerInputSocket"
+            }
             Self::SystemLauncherOpen => "ssap://system.launcher/open",
         }
     }

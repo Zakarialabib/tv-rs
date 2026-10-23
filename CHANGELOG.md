@@ -25,6 +25,20 @@ operation }` (the vendor has no such protocol message), both routing to
 - **`DiscoveredTv.to_client` / facade errors for unknown devices** answer with
   `UnsupportedDevice`, which unlike the old `UnsupportedVendor` carries the address
   a fleet dashboard can act on.
+- **webOS session pool (`tv-rs-webos`)**: one registered SSAP session per TV,
+  reused across commands instead of paying a dial + `register` handshake per call
+  (which without a stored key meant an on-screen prompt per command). Idle limit
+  60 s, a dead session reopens exactly once before the failure surfaces, and
+  the pool serialises requests per TV to match the protocol.
+- **webOS pointer channel**: `SsapUri::NetworkInputGetPointerSocket` plus
+  `PointerSocket` — a second WebSocket computed from the per-session
+  `socketPath` the TV returns, carrying byte-exact plain-text pointer frames
+  (`type:move` / `type:button` / `type:click` / `type:scroll`, always with the
+  `down:` flag, blank-line terminated). Fire-and-forget as the TV acknowledges
+  nothing; `close()` gives the last frame the 120 ms grace the TV needs before
+  dropping near-close writes. Provenance-traced to four independent
+  implementations and one measured writeup (webOS 23). New enum variant; per
+  the 0.x policy that is a minor bump.
 
 ### Changed
 
