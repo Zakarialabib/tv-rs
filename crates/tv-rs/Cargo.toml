@@ -41,5 +41,10 @@ conformance = ["tv-rs-core/conformance"]
 # refused connection per command.
 quirks = ["tv-rs-core/quirks"]
 
+# The LFD surfaces that most deployments never touch (panel/lamp hours and
+# still-frame capture): the cloud agent deliberately carries no unused image
+# path, so enabling this feature is what exposes them for testing.
+supporting = []
+
 [lints]
 workspace = true

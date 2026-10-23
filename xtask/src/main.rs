@@ -376,10 +376,18 @@ fn bump_version(version: &str) -> Result<(), String> {
         let mut next = String::with_capacity(text.len());
         let mut replaced = 0_usize;
         for line in text.lines() {
-            if line.trim_start().starts_with("version = \"0.2.0\"") && replaced == 0 {
-                next.push_str(&format!("version = \"{version}"));
-                next.push('\n');
-                replaced += 1;
+            if replaced == 0 && line.trim_start().starts_with("version = \"") {
+                if let Some(at) = line.find('"') {
+                    let head = &line[..=at];
+                    next.push_str(head);
+                    next.push_str(version);
+                    next.push('"');
+                    next.push('\n');
+                    replaced += 1;
+                } else {
+                    next.push_str(line);
+                    next.push('\n');
+                }
             } else {
                 next.push_str(line);
                 next.push('\n');
