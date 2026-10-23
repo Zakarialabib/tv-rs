@@ -264,7 +264,11 @@ PIN/FairPlay protection.
 
 **Android TV** — ADB over TCP (`5555`) gives total control (`input keyevent`,
 `am start`) but requires developer mode and a pairing step per TV. It is a
-different trust model from the protocols above.
+different trust model from the protocols above. A second door, researched
+2026-10-23 in the matrix's peer landscape: the **Android TV Remote protocol v2**
+(the Google TV app's own — mTLS + Polo pairing + protobuf, pre-installed service,
+no developer mode, and the TV's MAC travels in the pairing certificate). The
+spike that decides between them is plan item 3.13 in [`06-plan.md`](06-plan.md).
 
 All three are sender protocols or separate trust models; a partial
 implementation is worse than none. The deferral list lives in

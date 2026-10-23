@@ -75,11 +75,11 @@ probe at runtime to find out what a vendor can do.
 
 ## Published (crates.io, verified 2026-10-22 against the registry API)
 
-| Crate                                                                                                                                                                                                   | Registry                | Note                                                                                               |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- |
-| `tv-rs-core`, `tv-rs-transport`, `tv-rs-discovery`, `tv-rs-power`, `tv-rs-local`, `tv-rs-dlna`, `tv-rs-roku`, `tv-rs-tizen`, `tv-rs-webos`, `tv-rs` (facade), `tv-rs-media`, `tv-rs-agent`, `tv-rs-cec` | `0.2.0`                 | thirteen crates installable today                                                                  |
+| Crate                                                                                                                                                                                                   | Registry                | Note                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| `tv-rs-core`, `tv-rs-transport`, `tv-rs-discovery`, `tv-rs-power`, `tv-rs-local`, `tv-rs-dlna`, `tv-rs-roku`, `tv-rs-tizen`, `tv-rs-webos`, `tv-rs` (facade), `tv-rs-media`, `tv-rs-agent`, `tv-rs-cec` | `0.2.0`                 | thirteen crates installable today                                                                    |
 | `tv-rs-mdc`, `tv-rs-app`                                                                                                                                                                                | **not on the registry** | merged in this repository; their first publish rides the `0.3.0` release ([plan item 1](06-plan.md)) |
-| `tv-rs-cli`, `xtask`                                                                                                                                                                                    | —                       | `publish = false`                                                                                  |
+| `tv-rs-cli`, `xtask`                                                                                                                                                                                    | —                       | `publish = false`                                                                                    |
 
 The workspace is tagged `0.3.0` and blocked on a crates.io token with
 `publish-update` scope; until that publishes, `tv-rs = "0.2"` is what the
@@ -137,6 +137,48 @@ Submitting a row: [`QUIRKS.md`](../QUIRKS.md).
 4. **The media crate is not a DLNA control point.** Serving bytes and playlists
    is `tv-rs-media`; renderer control is `tv-rs-dlna`; UPnP
    `ContentDirectory`/media-library stays application-owned.
+
+## Platform truth — where tv-rs runs and who runs it
+
+The sender-side matrix: the host the library compiles on, what compiles with it,
+and which consumer lives there. A platform is listed only if something consumes
+tv-rs on it, or a plan item names it.
+
+| Host platform                         | Status                              | TLS story                                           | Consumers                                                                                                                                                                           | Open work                                                                                                                                                         |
+| ------------------------------------- | ----------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows desktop                       | outlined, **primary**               | `rustls` default (no OpenSSL); `native-tls` opt-in  | Simple-Signage (Tauri 2 desktop, the signage workstation), tv-rs CLI, tv-rs-agent                                                                                                   | — (A5/C1 explicitly leave desktop untouched)                                                                                                                      |
+| Linux desktop                         | consumed, **primary**               | same                                                | signage nodes, agent deployments; `tv-rs-local` probes DRM connectors (Windows WMI / Linux DRM; **macOS EDID is declared unsupported**, not stubbed)                                | peer-comparison deltas below                                                                                                                                      |
+| macOS desktop                         | rustls path works                   | same                                                | none claimed in-repo; `tv-rs-local` macOS = `Unsupported`                                                                                                                           | none planned                                                                                                                                                      |
+| Android phone / tablet (Tauri mobile) | planned, **Tier A/C-Gated**         | rustls + TOFU/pinning (system roots are the C1 gap) | companion-app (Tauri 2; `AGENTS.md`: desktop-first, no `tauri android` until Tier A lands), Simple-Signage `crates/mobile` (scripts exist for aarch64 targets, `--features mobile`) | A5 — `Blocked`/`RequestPermission` for `ACCESS_LOCAL_NETWORK`; C1 — zero-datagams-vs-zero-TVs, trust roots, `cfg`-gate `tv-rs-local`; G15 `probe(ip)` for pickers |
+| Android TV (a _controlled_ device)    | deferred, **researched 2026-10-23** | n/a (device side)                                   | deferred trust model — see the peer landscape row                                                                                                                                   | one spike before any crate: ATR v2 vs ADB (below)                                                                                                                 |
+
+The important asymmetry Android was hiding: the **phone is a sender**, and its
+work is already in the plan as A5/C1. The **TV is a target**, and it was written
+off for the wrong reason — ADB's trust model. The peer landscape found a second
+door.
+
+## Peer landscape — the same work in other languages
+
+Written on 2026-10-23 from the libraries' own READMEs/releases (search-verified
+where the text says so; desktop-protocol trivia such as exact ports is **not**
+re-measured per panel and never will be here). The point is not to flatter — it
+is to steal the strengths and refuse the weaknesses, as gaps.
+
+| Project                                                                     | Language    | What it gets right                                                                                                                                                                                              | What tv-rs already does better or must refuse                                                                                                                                     |
+| --------------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `androidtvremote2` (Python, v0.3.2 2026-09)                                 | Python      | **Android TV without developer mode**: the Google TV app's own protocol v2 — mTLS with Polo pairing, protobuf, keycodes, deep links, voice; the TV's MAC comes out of the pairing certificate. Search-verified. | Single-vendor library, no capability truth, `asyncio` exceptions over a remedy taxonomy. **This is the spike**: pairing certs → our MAC gap (G4), pre-installed service → no ADB. |
+| `atvremote` (Go) / `androidtv-remote` (JS, louis49)                         | Go / Node   | same family; the JS repo is the origin of the v2 `.proto` definitions both Python and Go copy                                                                                                                   | CLI-first, no fleet model; proto files are the stealable artifact (they document the wire shape we would write from)                                                              |
+| Samsung consumer-crates: `samsungctl`, `samsung-tv-ws-api` lineage          | Python      | proved the remote channel + pin-pairing UX years ago                                                                                                                                                            | legacy SDK-style code, replaced in-repo by `tv-rs-tizen` with a token store, pools and quirk rows; keep their firmware-version scatter as quirks lessons                          |
+| `pywebostv` / `lgtv2` / `aiopylgtv`                                         | Python/Node | SSAP pointer input, `ssap://` discovery, `client-key` files                                                                                                                                                     | no remedy-typed errors; the pointer socket remains our B1 gap — the REA MCP (now wired into the opencode config) exists to decompile the LG/Google TV apps for it                 |
+| Home Assistant integrations (`androidtv`, `samsungtvws`, `cast`, `roku`...) | Python      | the pragmatic "everything, all vendors" reference point; users voted the integrations into existence                                                                                                            | HA's signal quality insulates it behind an event bus; tv-rs keeps the fleet contract: capability sets, `Remedy`, conformance, a simulator — the pieces HA never had               |
+| `cec-utils` (C) / `libcec`                                                  | C/C++       | the ground truth for CEC transport and key authority                                                                                                                                                            | `tv-rs-cec` shells to `cec-client` on purpose (no `unsafe`, no C toolchain); native `/dev/cec` stays behind a measurement                                                         |
+| B2B vendor SDKs (Samsung MDC/SPMD docs, LG InstaView CM SDK)                | C#/etc      | documents MDC 1515/RS-232 and LFD commands                                                                                                                                                                      | already implemented, tested and published as `tv-rs-mdc` — the only crate here whose protocol is _fully documented_                                                               |
+
+The immediate consequence for the plan: Android TV enters as a **spike**, not a
+crate — measure the ATR v2 pairing handshake and certificate-MAC extraction on a
+real panel (or with the REA MCP against the Google TV remote app's APK), record
+it in [`hil-results.md`](hil-results.md), and only then decide the trust-model
+framing ADB's "not started" note left blank.
 
 ## Next
 
