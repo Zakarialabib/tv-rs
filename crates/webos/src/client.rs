@@ -394,9 +394,11 @@ impl WebosClient {
                         .error
                         .map(|error| (error.code, error.message))
                         .unwrap_or((0, "unknown registration error".to_string()));
-                    Err(WebosError::RegistrationFailed(format!(
-                        "ssap registration failed ({code}): {message}"
-                    )))
+                    Err(WebosError::RegistrationFailed {
+                        detail: format!("ssap registration failed ({code}): {message}"),
+                        // `client_key` at this point is what the session presented.
+                        presented_key: self.client_key.is_some(),
+                    })
                 }
                 _ => Ok(None),
             }

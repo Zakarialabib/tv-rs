@@ -41,8 +41,18 @@ pub enum WebosError {
     },
 
     /// The registration handshake was rejected by the TV.
-    #[error("registration failed: {0}")]
-    RegistrationFailed(String),
+    #[error("registration failed: {detail}")]
+    RegistrationFailed {
+        /// What the TV said.
+        detail: String,
+        /// Whether the client presented a stored `client-key` when it was refused.
+        ///
+        /// This is the difference between two different instructions to the user:
+        /// a first pairing that was declined (accept the prompt) and a key the TV
+        /// has forgotten or revoked (pair again from scratch). The mapping to a
+        /// remedy depends on it, so the error carries it rather than guessing.
+        presented_key: bool,
+    },
 
     /// The peer sent a frame this client could not interpret for the current step.
     #[error("protocol error: {0}")]

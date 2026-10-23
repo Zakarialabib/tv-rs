@@ -9,10 +9,12 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use tv_rs::discovery::SsdpScanner;
+use tv_rs::map;
 use tv_rs::power::{MacAddress, WolSender};
 use tv_rs::roku::RokuClient;
 use tv_rs::tizen::{TizenClient, TizenSession};
-use tv_rs::{DiscoveredTv, TvClient, TvError, TvVendor};
+use tv_rs::{DiscoveredTv, TvClient, TvVendor};
+use tv_rs_core::Capability;
 
 use crate::cli::{
     parse_roku_key, parse_tizen_key, roku_key_names, tizen_key_names, Cli, Command, DiscoverArgs,
@@ -79,10 +81,13 @@ async fn run_wake(args: WakeArgs) -> Result<(), CliError> {
             })?;
             WolSender::with_broadcast_addr(addr)
         }
-        None => WolSender::new().map_err(TvError::from)?,
+        None => WolSender::new().map_err(|error| CliError::from(map::power(&error)))?,
     };
 
-    sender.wake(&mac).await.map_err(TvError::from)?;
+    sender
+        .wake(&mac)
+        .await
+        .map_err(|error| CliError::from(map::power(&error)))?;
     println!("Sent a Wake-on-LAN magic packet to {mac}.");
     Ok(())
 }
@@ -112,8 +117,11 @@ async fn run_key(args: KeyArgs) -> Result<(), CliError> {
             let client = TizenClient::new(args.ip.as_str());
             let mut session = TizenSession::connect(&client)
                 .await
-                .map_err(TvError::from)?;
-            session.send_key(key).await.map_err(TvError::from)?;
+                .map_err(|error| CliError::from(map::tizen(&error, Capability::Key)))?;
+            session
+                .send_key(key)
+                .await
+                .map_err(|error| CliError::from(map::tizen(&error, Capability::Key)))?;
 
             println!("Sent the samsung key '{}' to {}.", args.key, args.ip);
             Ok(())
@@ -126,7 +134,10 @@ async fn run_key(args: KeyArgs) -> Result<(), CliError> {
             })?;
 
             let client = RokuClient::new(args.ip.as_str());
-            client.send_keypress(key).await.map_err(TvError::from)?;
+            client
+                .send_keypress(key)
+                .await
+                .map_err(|error| CliError::from(map::roku(&error, Capability::Key)))?;
 
             println!("Sent the roku key '{}' to {}.", args.key, args.ip);
             Ok(())

@@ -111,7 +111,7 @@ impl DiscoveredTv {
 
     /// Build the default control client for this device.
     ///
-    /// Returns [`TvError::UnsupportedVendor`](crate::TvError::UnsupportedVendor)
+    /// Returns [`TvError::UnsupportedDevice`](crate::TvError::UnsupportedDevice)
     /// when the vendor is [`TvVendor::Unknown`].
     pub fn to_client(&self) -> Result<TvClient> {
         TvClient::from_discovered(self)

@@ -38,6 +38,34 @@ pub enum TvError {
     /// fallback instead of guessing.
     #[error("platform quirk: {0}")]
     PlatformQuirk(QuirkId),
+
+    /// The device answered, but matched no known vendor signature, so no control
+    /// client exists for it.
+    ///
+    /// Nothing can be retried into existence here: the caller removes the control
+    /// and, if it is a panel nobody has seen before, reports the model. Distinct
+    /// from [`TvError::Unsupported`], which is about one capability on a device
+    /// that *is* controllable.
+    #[error("no control client for {address}: {reason}")]
+    UnsupportedDevice {
+        /// Address the device answered from.
+        address: String,
+        /// Why classification failed.
+        reason: String,
+    },
+
+    /// The vendor's protocol has no path for this operation.
+    ///
+    /// An operation, not a capability: launching a URL on a vendor whose remote
+    /// channel has no such message is the operation being absent, while the
+    /// device itself remains fully controllable.
+    #[error("{vendor} does not support {operation} over its local control protocol")]
+    UnsupportedOperation {
+        /// Human-readable vendor name.
+        vendor: &'static str,
+        /// Human-readable operation name.
+        operation: &'static str,
+    },
 }
 
 impl TvError {
@@ -52,6 +80,47 @@ impl TvError {
             Self::State(StateError::Quarantined) => Remedy::Quarantine,
             Self::Unsupported(_) => Remedy::Disable,
             Self::PlatformQuirk(_) => Remedy::ApplyQuirk,
+            Self::UnsupportedDevice { .. } | Self::UnsupportedOperation { .. } => Remedy::Disable,
+        }
+    }
+
+    /// A sentence a UI can show next to the error, when the message alone does not
+    /// tell the user what to do about it.
+    ///
+    /// The rule for what belongs here: a hint names an action the **user** can
+    /// take. Technical detail an installer or a developer needs is already in the
+    /// message, and advice nobody can act on is noise — `None` is the honest
+    /// answer for an error that speaks for itself.
+    #[must_use]
+    pub fn hint(&self) -> Option<String> {
+        match self {
+            Self::Auth(AuthError::PairingRequired) => {
+                Some("Accept the pairing prompt on the TV, then try again.".to_string())
+            }
+            Self::Auth(AuthError::TokenExpired) => {
+                Some("The TV no longer accepts the saved key; pair with it again.".to_string())
+            }
+            // The vendor already wrote the instruction — Roku's setting path, for
+            // instance — so it is passed through rather than paraphrased.
+            Self::Auth(AuthError::NotPermitted { remedy }) => Some(remedy.clone()),
+            Self::Transport(TransportError::Unreachable(_)) => {
+                Some("Check the TV is on, and on the same network as this app.".to_string())
+            }
+            Self::Transport(TransportError::Timeout) => {
+                Some("The TV did not answer in time; it may be asleep — try waking it.".to_string())
+            }
+            Self::Transport(TransportError::Tls(_)) => {
+                Some("The TV presented a different certificate; trust it again.".to_string())
+            }
+            Self::State(StateError::Quarantined) => Some(
+                "Release the device from quarantine before sending it anything else.".to_string(),
+            ),
+            Self::State(StateError::NotReady)
+            | Self::Protocol(_)
+            | Self::Unsupported(_)
+            | Self::UnsupportedDevice { .. }
+            | Self::UnsupportedOperation { .. }
+            | Self::PlatformQuirk(_) => None,
         }
     }
 
@@ -189,6 +258,9 @@ mod tests {
             TvError::State(StateError::Quarantined) => Remedy::Quarantine,
             TvError::Unsupported(_) => Remedy::Disable,
             TvError::PlatformQuirk(_) => Remedy::ApplyQuirk,
+            TvError::UnsupportedDevice { .. } | TvError::UnsupportedOperation { .. } => {
+                Remedy::Disable
+            }
         }
     }
 
@@ -202,6 +274,14 @@ mod tests {
             TvError::State(StateError::Quarantined),
             TvError::Unsupported(Capability::Key),
             TvError::PlatformQuirk(QuirkId::new("samsung_8001_disabled")),
+            TvError::UnsupportedDevice {
+                address: "192.168.1.9".to_string(),
+                reason: "no vendor signature matched".to_string(),
+            },
+            TvError::UnsupportedOperation {
+                vendor: "samsung",
+                operation: "open_url",
+            },
         ];
         for error in cases {
             assert_eq!(error.remedy(), route(&error), "{error}");
@@ -224,6 +304,37 @@ mod tests {
             TvError::Unsupported(Capability::InputSelect).to_string(),
             "unsupported: input_select"
         );
+    }
+
+    #[test]
+    fn a_hint_names_an_action_the_user_can_take() {
+        let pairing = TvError::Auth(AuthError::PairingRequired);
+        assert!(pairing.hint().unwrap().contains("pairing prompt"));
+
+        // The vendor's own instruction is passed through, not paraphrased.
+        let roku = TvError::Auth(AuthError::NotPermitted {
+            remedy: "Settings → System → Control by mobile apps".to_string(),
+        });
+        assert_eq!(
+            roku.hint().as_deref(),
+            Some("Settings → System → Control by mobile apps")
+        );
+    }
+
+    #[cfg(feature = "supporting")]
+    #[test]
+    fn an_error_that_speaks_for_itself_has_no_hint() {
+        // Nothing the user can do: the control simply does not exist here.
+        for error in [
+            TvError::Unsupported(Capability::ScreenCapture),
+            TvError::UnsupportedDevice {
+                address: "192.168.1.9".to_string(),
+                reason: "unknown".to_string(),
+            },
+            TvError::protocol("bad xml"),
+        ] {
+            assert_eq!(error.hint(), None, "{error}");
+        }
     }
 
     #[test]

@@ -6,8 +6,9 @@
 //! reachable through the typed accessors on [`TvClient`].
 
 use crate::error::{Result, TvError};
+use crate::map;
 use crate::types::{DiscoveredTv, TvVendor};
-use tv_rs_core::ObservedField;
+use tv_rs_core::{Capability, ObservedField};
 use tv_rs_discovery::{SsdpDeviceDescriptor, SsdpMsearchResponse, SsdpScanner};
 use tv_rs_power::PowerState;
 use tv_rs_roku::{RokuClient, RokuPowerMode};
@@ -80,8 +81,8 @@ pub fn identify_vendor(
 ///
 /// # Errors
 ///
-/// Returns [`TvError::Discovery`] if the SSDP socket cannot be opened or a
-/// reply cannot be parsed.
+/// Returns [`TvError::Protocol`] if the SSDP socket cannot be opened or a
+/// reply cannot be parsed (discovery errors map through [`map::discovery`]).
 pub async fn discover() -> Result<Vec<DiscoveredTv>> {
     discover_with(&SsdpScanner::new()).await
 }
@@ -93,10 +94,13 @@ pub async fn discover() -> Result<Vec<DiscoveredTv>> {
 ///
 /// # Errors
 ///
-/// Returns [`TvError::Discovery`] if the SSDP socket cannot be opened or a
-/// reply cannot be parsed.
+/// Returns the [`tv_rs_core::TvError`] taxonomy the other facade calls return
+/// (see [`map::discovery`] for how discovery errors are classified).
 pub async fn discover_with(scanner: &SsdpScanner) -> Result<Vec<DiscoveredTv>> {
-    let found = scanner.discover_tvs().await?;
+    let found = scanner
+        .discover_tvs()
+        .await
+        .map_err(|error| map::discovery(&error))?;
 
     Ok(found
         .into_iter()
@@ -148,7 +152,7 @@ impl TvClient {
     ///
     /// # Errors
     ///
-    /// Returns [`TvError::UnsupportedVendor`] when the device is
+    /// Returns [`TvError::UnsupportedDevice`] when the device is
     /// [`TvVendor::Unknown`], since no protocol crate can drive it.
     pub fn from_discovered(tv: &DiscoveredTv) -> Result<Self> {
         match tv.vendor {
@@ -167,8 +171,8 @@ impl TvClient {
                 Ok(Self::Webos(client))
             }
             TvVendor::Roku => Ok(Self::Roku(RokuClient::new(tv.ip.clone()))),
-            TvVendor::Unknown => Err(TvError::UnsupportedVendor {
-                ip: tv.ip.clone(),
+            TvVendor::Unknown => Err(TvError::UnsupportedDevice {
+                address: tv.ip.clone(),
                 reason: "device did not advertise a known vendor signature".to_string(),
             }),
         }
@@ -185,7 +189,7 @@ impl TvClient {
     ///
     /// # Errors
     ///
-    /// Returns [`TvError::UnsupportedVendor`] for [`TvVendor::Unknown`].
+    /// Returns [`TvError::UnsupportedDevice`] for [`TvVendor::Unknown`].
     pub fn from_discovered_with(tv: &DiscoveredTv, tls: TlsPolicy) -> Result<Self> {
         match tv.vendor {
             TvVendor::Samsung => {
@@ -207,8 +211,8 @@ impl TvClient {
                 Ok(Self::Webos(client))
             }
             TvVendor::Roku => Ok(Self::Roku(RokuClient::new(tv.ip.clone()))),
-            TvVendor::Unknown => Err(TvError::UnsupportedVendor {
-                ip: tv.ip.clone(),
+            TvVendor::Unknown => Err(TvError::UnsupportedDevice {
+                address: tv.ip.clone(),
                 reason: "device did not advertise a known vendor signature".to_string(),
             }),
         }
@@ -229,12 +233,20 @@ impl TvClient {
     ///
     /// # Errors
     ///
-    /// Returns the originating protocol crate's error, wrapped in [`TvError`].
+    /// Returns [`TvError`]; the webOS error is mapped by [`map::webos`], naming
+    /// [`Capability::AppLaunch`] as the nearest capability ("put content on the
+    /// panel") — the webOS path has no open_url-deferred gap to sense.
     pub async fn open_url(&self, url: &str) -> Result<()> {
         match self {
             Self::Webos(client) => {
-                let mut session = client.connect().await?;
-                session.open_url(url).await?;
+                let mut session = client
+                    .connect()
+                    .await
+                    .map_err(|error| map::webos(&error, Capability::AppLaunch))?;
+                session
+                    .open_url(url)
+                    .await
+                    .map_err(|error| map::webos(&error, Capability::AppLaunch))?;
                 Ok(())
             }
             Self::Tizen(_) => Err(TvError::UnsupportedOperation {
@@ -301,21 +313,36 @@ impl TvClient {
     ///
     /// # Errors
     ///
-    /// Returns the originating protocol crate's error, wrapped in [`TvError`].
+    /// Returns [`TvError`]; the vendor error is mapped in place, each arm naming
+    /// [`Capability::PowerState`]. Every mapping lives in [`map`].
     pub async fn power_off(&self) -> Result<()> {
         match self {
             Self::Tizen(client) => {
-                let mut session = TizenSession::connect(client).await?;
-                session.send_key(TizenRemoteKey::PowerOff).await?;
+                let mut session = TizenSession::connect(client)
+                    .await
+                    .map_err(|error| map::tizen(&error, Capability::PowerState))?;
+                session
+                    .send_key(TizenRemoteKey::PowerOff)
+                    .await
+                    .map_err(|error| map::tizen(&error, Capability::PowerState))?;
                 Ok(())
             }
             Self::Webos(client) => {
-                let mut session = client.connect().await?;
-                session.power_off().await?;
+                let mut session = client
+                    .connect()
+                    .await
+                    .map_err(|error| map::webos(&error, Capability::PowerState))?;
+                session
+                    .power_off()
+                    .await
+                    .map_err(|error| map::webos(&error, Capability::PowerState))?;
                 Ok(())
             }
             Self::Roku(client) => {
-                client.power_off().await?;
+                client
+                    .power_off()
+                    .await
+                    .map_err(|error| map::roku(&error, Capability::PowerState))?;
                 Ok(())
             }
         }
@@ -331,9 +358,9 @@ impl TvClient {
     ///
     /// # Errors
     ///
-    /// Returns the originating protocol crate's error, wrapped in [`TvError`]. A
-    /// Roku that is genuinely off fails the HTTP request rather than answering
-    /// "off", so a transport failure there is reported, not converted.
+    /// Returns [`TvError`]; the vendor error is mapped in place. A Roku that is
+    /// genuinely off fails the HTTP request rather than answering "off", so a
+    /// transport failure there is reported, not converted.
     pub async fn power_state(&self) -> Result<PowerState> {
         // One implementation: the cheap answer is a projection of the careful one, so
         // the two can never disagree about a device.
@@ -355,23 +382,31 @@ impl TvClient {
     ///
     /// # Errors
     ///
-    /// Returns the originating protocol crate's error, wrapped in [`TvError`]. A
-    /// refused probe is not an error — it is `Off`.
+    /// Returns [`TvError`]; the Roku error maps through [`map::roku`], the TCP
+    /// probe's through [`map::power`]. A refused probe is not an error — it is
+    /// `Off`.
     pub async fn power_observation(&self) -> Result<ObservedField<PowerState>> {
         match self {
             Self::Roku(client) => Ok(ObservedField::from_read(map_roku_power(
-                client.power_state().await?,
+                client
+                    .power_state()
+                    .await
+                    .map_err(|error| map::roku(&error, Capability::PowerState))?,
             ))),
             Self::Tizen(client) => {
                 let probe = format!("{}:{}", client.host(), client.port());
                 Ok(ObservedField::from_inference(
-                    tv_rs_power::poll_power_state(&probe).await?,
+                    tv_rs_power::poll_power_state(&probe)
+                        .await
+                        .map_err(|error| map::power(&error))?,
                 ))
             }
             Self::Webos(client) => {
                 let probe = format!("{}:{}", client.host(), client.port());
                 Ok(ObservedField::from_inference(
-                    tv_rs_power::poll_power_state(&probe).await?,
+                    tv_rs_power::poll_power_state(&probe)
+                        .await
+                        .map_err(|error| map::power(&error))?,
                 ))
             }
         }
@@ -386,20 +421,33 @@ impl TvClient {
     ///
     /// # Errors
     ///
-    /// Returns the originating protocol crate's error, wrapped in [`TvError`].
+    /// Returns [`TvError`]; the vendor error is mapped in place, naming
+    /// [`Capability::AppLaunch`].
     pub async fn launch_app(&self, app_id: &str) -> Result<()> {
         match self {
             Self::Tizen(client) => {
-                client.launch_app_via_dial(app_id, None).await?;
+                client
+                    .launch_app_via_dial(app_id, None)
+                    .await
+                    .map_err(|error| map::tizen(&error, Capability::AppLaunch))?;
                 Ok(())
             }
             Self::Webos(client) => {
-                let mut session = client.connect().await?;
-                session.launch_app(app_id).await?;
+                let mut session = client
+                    .connect()
+                    .await
+                    .map_err(|error| map::webos(&error, Capability::AppLaunch))?;
+                session
+                    .launch_app(app_id)
+                    .await
+                    .map_err(|error| map::webos(&error, Capability::AppLaunch))?;
                 Ok(())
             }
             Self::Roku(client) => {
-                client.launch_app(app_id).await?;
+                client
+                    .launch_app(app_id)
+                    .await
+                    .map_err(|error| map::roku(&error, Capability::AppLaunch))?;
                 Ok(())
             }
         }
@@ -509,7 +557,7 @@ mod tests {
         };
 
         let error = TvClient::from_discovered(&tv).unwrap_err();
-        assert!(matches!(error, TvError::UnsupportedVendor { .. }));
+        assert!(matches!(error, TvError::UnsupportedDevice { .. }));
     }
 
     #[test]

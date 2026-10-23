@@ -30,14 +30,13 @@ use async_trait::async_trait;
 
 use tv_rs_core::{
     AppLaunch, AppRef, Capability, CapabilitySet, DeviceDescriptor, DeviceHandle, DeviceId,
-    DeviceOs, Input, InputSelect, Key, KeyInput, PowerControl, PowerState, TransportError,
-    TvError as CoreError, VolumeControl,
+    DeviceOs, Input, InputSelect, Key, KeyInput, PowerControl, PowerState, TvError, VolumeControl,
 };
 use tv_rs_roku::RokuKey;
 use tv_rs_tizen::{TizenRemoteKey, TizenSession};
 
 use crate::client::TvClient;
-use crate::error::TvError;
+use crate::map;
 use crate::types::TvVendor;
 
 impl TvClient {
@@ -106,141 +105,137 @@ impl DeviceHandle for TvClient {
 
 #[async_trait]
 impl PowerControl for TvClient {
-    async fn power_state(&self) -> Result<PowerState, CoreError> {
+    async fn power_state(&self) -> Result<PowerState, TvError> {
         // Fully qualified: the inherent method is the implementation, and calling
         // `self.power_state()` here would recurse into this trait method.
-        let state = TvClient::power_state(self)
-            .await
-            .map_err(|error| to_core(&error, Capability::PowerState))?;
+        // The inherent method already answers in the core taxonomy, so the error
+        // crosses as-is.
+        let state = TvClient::power_state(self).await?;
         Ok(core_power_state(state))
     }
 
-    async fn wake(&self) -> Result<(), CoreError> {
-        Err(CoreError::Unsupported(Capability::Wake))
+    async fn wake(&self) -> Result<(), TvError> {
+        Err(TvError::Unsupported(Capability::Wake))
     }
 
-    async fn sleep(&self) -> Result<(), CoreError> {
-        TvClient::power_off(self)
-            .await
-            .map_err(|error| to_core(&error, Capability::PowerState))
+    async fn sleep(&self) -> Result<(), TvError> {
+        TvClient::power_off(self).await
     }
 }
 
 #[async_trait]
 impl KeyInput for TvClient {
-    async fn key_press(&self, key: Key, _cmd: tv_rs_core::CommandId) -> Result<(), CoreError> {
+    async fn key_press(&self, key: Key, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
         match self {
             Self::Tizen(client) => {
                 let key = tizen_key(key)?;
                 let mut session = TizenSession::connect(client)
                     .await
-                    .map_err(|error| to_core(&TvError::from(error), Capability::Key))?;
+                    .map_err(|error| map::tizen(&error, Capability::Key))?;
                 session
                     .send_key(key)
                     .await
-                    .map_err(|error| to_core(&TvError::from(error), Capability::Key))
+                    .map_err(|error| map::tizen(&error, Capability::Key))
             }
             Self::Roku(client) => {
                 let key = roku_key(key)?;
                 client
                     .send_keypress(key)
                     .await
-                    .map_err(|error| to_core(&TvError::from(error), Capability::Key))
+                    .map_err(|error| map::roku(&error, Capability::Key))
             }
-            Self::Webos(_) => Err(CoreError::Unsupported(Capability::Key)),
+            Self::Webos(_) => Err(TvError::Unsupported(Capability::Key)),
         }
     }
 }
 
 #[async_trait]
 impl AppLaunch for TvClient {
-    async fn launch(&self, app: AppRef, _cmd: tv_rs_core::CommandId) -> Result<(), CoreError> {
-        TvClient::launch_app(self, &app.id)
-            .await
-            .map_err(|error| to_core(&error, Capability::AppLaunch))
+    async fn launch(&self, app: AppRef, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
+        TvClient::launch_app(self, &app.id).await
     }
 
-    async fn foreground(&self) -> Result<Option<AppRef>, CoreError> {
+    async fn foreground(&self) -> Result<Option<AppRef>, TvError> {
         match self {
             Self::Webos(client) => {
                 let mut session = client
                     .connect()
                     .await
-                    .map_err(|error| to_core(&TvError::from(error), Capability::Foreground))?;
+                    .map_err(|error| map::webos(&error, Capability::Foreground))?;
                 let app_id = session
                     .foreground_app()
                     .await
-                    .map_err(|error| to_core(&TvError::from(error), Capability::Foreground))?;
+                    .map_err(|error| map::webos(&error, Capability::Foreground))?;
                 Ok(app_id.map(AppRef::new))
             }
-            _ => Err(CoreError::Unsupported(Capability::Foreground)),
+            _ => Err(TvError::Unsupported(Capability::Foreground)),
         }
     }
 }
 
 #[async_trait]
 impl InputSelect for TvClient {
-    async fn active_input(&self) -> Result<Option<Input>, CoreError> {
-        Err(CoreError::Unsupported(Capability::InputSelect))
+    async fn active_input(&self) -> Result<Option<Input>, TvError> {
+        Err(TvError::Unsupported(Capability::InputSelect))
     }
 
     async fn select_input(
         &self,
         _input: Input,
         _cmd: tv_rs_core::CommandId,
-    ) -> Result<(), CoreError> {
-        Err(CoreError::Unsupported(Capability::InputSelect))
+    ) -> Result<(), TvError> {
+        Err(TvError::Unsupported(Capability::InputSelect))
     }
 }
 
 #[async_trait]
 impl VolumeControl for TvClient {
-    async fn volume(&self) -> Result<Option<u8>, CoreError> {
+    async fn volume(&self) -> Result<Option<u8>, TvError> {
         match self {
             Self::Webos(client) => {
                 let mut session = client
                     .connect()
                     .await
-                    .map_err(|error| to_core(&TvError::from(error), Capability::Volume))?;
+                    .map_err(|error| map::webos(&error, Capability::Volume))?;
                 session
                     .get_volume()
                     .await
                     .map(Some)
-                    .map_err(|error| to_core(&TvError::from(error), Capability::Volume))
+                    .map_err(|error| map::webos(&error, Capability::Volume))
             }
-            _ => Err(CoreError::Unsupported(Capability::Volume)),
+            _ => Err(TvError::Unsupported(Capability::Volume)),
         }
     }
 
-    async fn set_volume(&self, level: u8, _cmd: tv_rs_core::CommandId) -> Result<(), CoreError> {
+    async fn set_volume(&self, level: u8, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
         match self {
             Self::Webos(client) => {
                 let mut session = client
                     .connect()
                     .await
-                    .map_err(|error| to_core(&TvError::from(error), Capability::Volume))?;
+                    .map_err(|error| map::webos(&error, Capability::Volume))?;
                 session
                     .set_volume(level)
                     .await
-                    .map_err(|error| to_core(&TvError::from(error), Capability::Volume))
+                    .map_err(|error| map::webos(&error, Capability::Volume))
             }
-            _ => Err(CoreError::Unsupported(Capability::Volume)),
+            _ => Err(TvError::Unsupported(Capability::Volume)),
         }
     }
 
-    async fn set_mute(&self, muted: bool, _cmd: tv_rs_core::CommandId) -> Result<(), CoreError> {
+    async fn set_mute(&self, muted: bool, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
         match self {
             Self::Webos(client) => {
                 let mut session = client
                     .connect()
                     .await
-                    .map_err(|error| to_core(&TvError::from(error), Capability::Volume))?;
+                    .map_err(|error| map::webos(&error, Capability::Volume))?;
                 session
                     .set_mute(muted)
                     .await
-                    .map_err(|error| to_core(&TvError::from(error), Capability::Volume))
+                    .map_err(|error| map::webos(&error, Capability::Volume))
             }
-            _ => Err(CoreError::Unsupported(Capability::Volume)),
+            _ => Err(TvError::Unsupported(Capability::Volume)),
         }
     }
 }
@@ -289,7 +284,7 @@ fn device_os(vendor: TvVendor) -> DeviceOs {
 /// Keys with no Tizen equivalent are reported as `Unsupported` rather than being
 /// approximated by a different key: pressing "menu" when the caller asked for
 /// "info" is worse than a refusal.
-fn tizen_key(key: Key) -> Result<TizenRemoteKey, CoreError> {
+fn tizen_key(key: Key) -> Result<TizenRemoteKey, TvError> {
     Ok(match key {
         Key::Up => TizenRemoteKey::Up,
         Key::Down => TizenRemoteKey::Down,
@@ -311,12 +306,12 @@ fn tizen_key(key: Key) -> Result<TizenRemoteKey, CoreError> {
         Key::Mute => TizenRemoteKey::Mute,
         Key::Power => TizenRemoteKey::Power,
         Key::PowerOff => TizenRemoteKey::PowerOff,
-        _ => return Err(CoreError::Unsupported(Capability::Key)),
+        _ => return Err(TvError::Unsupported(Capability::Key)),
     })
 }
 
 /// Maps a core key onto the Roku ECP key vocabulary.
-fn roku_key(key: Key) -> Result<RokuKey, CoreError> {
+fn roku_key(key: Key) -> Result<RokuKey, TvError> {
     Ok(match key {
         Key::Up => RokuKey::Up,
         Key::Down => RokuKey::Down,
@@ -338,56 +333,8 @@ fn roku_key(key: Key) -> Result<RokuKey, CoreError> {
         Key::Mute => RokuKey::VolumeMute,
         Key::Power => RokuKey::PowerOn,
         Key::PowerOff => RokuKey::PowerOff,
-        _ => return Err(CoreError::Unsupported(Capability::Key)),
+        _ => return Err(TvError::Unsupported(Capability::Key)),
     })
-}
-
-/// Converts a facade error into the routing taxonomy.
-///
-/// `capability` names what was being attempted, because the backends' "unsupported"
-/// variants do not carry it.
-fn to_core(error: &TvError, capability: Capability) -> CoreError {
-    use tv_rs_core::{AuthError, ProtocolError};
-
-    let protocol = |detail: String| CoreError::Protocol(ProtocolError::Malformed(detail));
-    let unreachable = |detail: String| CoreError::Transport(TransportError::Unreachable(detail));
-
-    match error {
-        TvError::UnsupportedVendor { .. } | TvError::UnsupportedOperation { .. } => {
-            CoreError::Unsupported(capability)
-        }
-        TvError::Tizen(inner) => match inner {
-            tv_rs_tizen::TizenError::Unsupported(_) => CoreError::Unsupported(capability),
-            tv_rs_tizen::TizenError::Unauthorized => CoreError::Auth(AuthError::PairingRequired),
-            tv_rs_tizen::TizenError::Timeout => CoreError::Transport(TransportError::Timeout),
-            tv_rs_tizen::TizenError::Tls(detail) => {
-                CoreError::Transport(TransportError::Tls(detail.clone()))
-            }
-            tv_rs_tizen::TizenError::Protocol(detail) => protocol(detail.clone()),
-            tv_rs_tizen::TizenError::Json(_) | tv_rs_tizen::TizenError::Xml(_) => {
-                protocol(inner.to_string())
-            }
-            _ => unreachable(inner.to_string()),
-        },
-        TvError::Webos(inner) => match inner {
-            tv_rs_webos::WebosError::Unsupported(_) => CoreError::Unsupported(capability),
-            tv_rs_webos::WebosError::Timeout => CoreError::Transport(TransportError::Timeout),
-            tv_rs_webos::WebosError::Protocol(detail) => protocol(detail.clone()),
-            tv_rs_webos::WebosError::Ssap { .. } => protocol(inner.to_string()),
-            _ => unreachable(inner.to_string()),
-        },
-        TvError::Roku(inner) => match inner {
-            tv_rs_roku::RokuError::Unsupported(_) => CoreError::Unsupported(capability),
-            tv_rs_roku::RokuError::Xml(detail) => protocol(detail.clone()),
-            tv_rs_roku::RokuError::NotPermitted { remedy } => {
-                CoreError::Auth(tv_rs_core::AuthError::NotPermitted {
-                    remedy: remedy.clone(),
-                })
-            }
-            _ => unreachable(inner.to_string()),
-        },
-        _ => unreachable(error.to_string()),
-    }
 }
 
 #[cfg(test)]
@@ -475,7 +422,7 @@ mod tests {
     async fn wake_is_refused_rather_than_faked() {
         let client = tizen();
         let error = PowerControl::wake(&client).await.expect_err("no MAC known");
-        assert!(matches!(error, CoreError::Unsupported(Capability::Wake)));
+        assert!(matches!(error, TvError::Unsupported(Capability::Wake)));
     }
 
     #[tokio::test]
@@ -484,7 +431,7 @@ mod tests {
         let error = KeyInput::key_press(&client, Key::Home, tv_rs_core::CommandId::new())
             .await
             .expect_err("webOS has no key endpoint");
-        assert!(matches!(error, CoreError::Unsupported(Capability::Key)));
+        assert!(matches!(error, TvError::Unsupported(Capability::Key)));
     }
 
     #[tokio::test]
@@ -494,7 +441,7 @@ mod tests {
             InputSelect::select_input(&client, Input::Hdmi(1), tv_rs_core::CommandId::new())
                 .await
                 .expect_err("not implemented"),
-            CoreError::Unsupported(Capability::InputSelect)
+            TvError::Unsupported(Capability::InputSelect)
         ));
     }
 
@@ -508,22 +455,22 @@ mod tests {
 
     #[test]
     fn errors_route_to_actions_not_vendors() {
+        // The refusal to do an operation the vendor has no protocol message for:
         let restricted = TvError::UnsupportedOperation {
             vendor: "roku",
             operation: "input_select",
         };
         assert!(matches!(
-            to_core(&restricted, Capability::InputSelect),
-            CoreError::Unsupported(Capability::InputSelect)
+            restricted,
+            TvError::UnsupportedOperation { vendor: "roku", .. }
         ));
 
-        let pairing = to_core(
-            &TvError::Tizen(tv_rs_tizen::TizenError::Unauthorized),
-            Capability::Key,
-        );
+        // A Tizen that rejected the pairing prompt routes to pairing-required,
+        // not to the old catch-all's `Wait`.
+        let pairing = map::tizen(&tv_rs_tizen::TizenError::Unauthorized, Capability::Key);
         assert!(matches!(
             pairing,
-            CoreError::Auth(tv_rs_core::AuthError::PairingRequired)
+            TvError::Auth(tv_rs_core::AuthError::PairingRequired)
         ));
     }
 
@@ -600,11 +547,14 @@ mod tests {
 
     #[test]
     fn a_roku_permission_failure_routes_to_reprovisioning() {
-        let error = TvError::Roku(tv_rs_roku::RokuError::NotPermitted {
-            remedy: "enable Control by mobile apps".to_string(),
-        });
-        match to_core(&error, Capability::Key) {
-            CoreError::Auth(tv_rs_core::AuthError::NotPermitted { remedy }) => {
+        let error = map::roku(
+            &tv_rs_roku::RokuError::NotPermitted {
+                remedy: "enable Control by mobile apps".to_string(),
+            },
+            Capability::Key,
+        );
+        match error {
+            TvError::Auth(tv_rs_core::AuthError::NotPermitted { remedy }) => {
                 assert!(remedy.contains("Control by mobile apps"), "{remedy}");
             }
             other => panic!("expected Auth(NotPermitted), got {other:?}"),

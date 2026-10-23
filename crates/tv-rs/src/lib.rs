@@ -39,11 +39,10 @@
 //! raw frames — is reached through the re-exported protocol crates or the typed
 //! accessors on [`TvClient`].
 
-// The aggregated error embeds the protocol crates' error enums, which are
-// large by construction. Boxing them would break the #[from] conversions the
-// facade relies on, and error paths are cold.
+// The core `TvError` carries pre-vendor payloads (transport, protocol, auth),
+// which are small; vendor errors are converted, never embedded, so no `Err`
+// variant is large and no boxing shows up in the facade.
 #![forbid(unsafe_code)]
-#![allow(clippy::result_large_err)]
 
 mod client;
 mod error;
@@ -53,6 +52,15 @@ mod types;
 pub use client::{discover, discover_with, identify_vendor, TvClient};
 pub use error::{Result, TvError};
 pub use types::{DiscoveredTv, TvVendor};
+
+/// The one home of vendor-error → [`TvError`] mapping.
+///
+/// Callers that use a protocol crate directly (as the CLI does) map through
+/// these functions, so the remedy a vendor error carries is decided **once**,
+/// in one place, with no wildcard arm to hide a new variant. This is the module
+/// the A2 gap describes: adding a `TizenError`, `WebosError` or `RokuError`
+/// variant is a compile error here until someone names its remedy.
+pub mod map;
 
 /// SSDP discovery and UPnP descriptor parsing: [`discovery::SsdpScanner`] (mDNS is planned).
 pub use tv_rs_core as core;
