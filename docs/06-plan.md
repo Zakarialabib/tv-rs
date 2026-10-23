@@ -82,22 +82,8 @@ when it lands.** The gap work ships in [0.4.0](#10-release-040).
 
 Tier A shapes the contract, so it goes before the companion writes its `src-tauri`.
 Tier B makes the Remote real, per vendor — reorder it by the TVs on the bench.
-
-### 3.1 A2 · G12 + G9 — errors that route to the right button `[next]`
-
-webOS `RegistrationFailed` and `Ws`/`Io` handshake failures fall into
-`_ => Unreachable`, which maps to `Remedy::Wait`, so the app offers _Wake_ when the
-user must _pair again_; Tizen never produces `TokenExpired`; and the facade's own
-error type carries no remedy at all, so every consumer hand-maps it.
-
-**Shape (decided):** one error type. `tv_rs_core::TvError` becomes the only error a
-consumer sees — the facade's parallel enum is deleted, not deprecated, and its
-vendors' errors are mapped in one place. Core's error gains `remedy()` and `hint()`
-(a human sentence, e.g. the Roku setting path).
-
-**Exit:** no `tv_rs::TvError`; a table-driven test maps _every_ vendor error variant
-to its `Remedy`, so a new variant cannot silently become `Wait`; a rejected stored
-token maps to `Auth(TokenExpired)` and a missing one to `Auth(PairingRequired)`.
+A2 landed on 2026-10-23 (one error type, exhaustive remedy maps, the webOS
+registration split); its record lives in [CHANGELOG.md](../CHANGELOG.md).
 
 ### 3.2 A1 · G11 — sessions are not reused
 
