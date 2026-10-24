@@ -11,8 +11,9 @@ use std::sync::Arc;
 use crate::error::{Result, TvError};
 use crate::map;
 use crate::types::{DiscoveredTv, TvVendor};
-use tv_rs_core::{Capability, ObservedField};
+use tv_rs_core::{Capability, DeviceDescriptor, DeviceHandle, DeviceId, DeviceOs, ObservedField};
 use tv_rs_discovery::{SsdpDeviceDescriptor, SsdpMsearchResponse, SsdpScanner};
+use tv_rs_mdc::{MdcClient, MdcDevice};
 use tv_rs_power::PowerState;
 use tv_rs_roku::{RokuClient, RokuPowerMode};
 use tv_rs_tizen::{DynConnectionPool, LiveChannelFactory, TizenClient, TizenRemoteKey};
@@ -538,9 +539,70 @@ impl TvClient {
     }
 }
 
+/// Builds a handle for a commercial panel driven by MDC.
+///
+/// Deliberately **not** part of [`TvClient::from_discovered`]. SSDP carries no
+/// authoritative vendor field, and a commercial Samsung display answers it the
+/// same way a consumer one does — so a panel is never *classified* from a
+/// discovery reply, and core's `DeviceOs::SamsungMdc` is never produced by one.
+/// The caller knows: an operator adding a panel by address, or a probe that
+/// found MDC listening on its port.
+///
+/// The return is the erased [`DeviceHandle`], which is what keeps panels from
+/// being a special case downstream — the fleet calls the same methods either
+/// way. `MdcDevice` already implements the trait, so a [`TvClient`] variant
+/// would have meant forwarding every method to say nothing new, and MDC's
+/// capability set is its own: no keys, no applications, no pairing, and a
+/// display id travelling with each command rather than with the handle.
+///
+/// # Errors
+///
+/// Returns [`TvError::Protocol`] when `address` is empty — an empty identifier
+/// would silently merge every panel in a fleet into one.
+pub fn mdc_handle(address: impl Into<String>) -> Result<Box<dyn DeviceHandle>> {
+    let address = address.into();
+    if address.trim().is_empty() {
+        // Checked here rather than left to `DeviceId`: the id is prefixed
+        // (`mdc:<address>`), so it is never empty even when the address is, and an
+        // undialable address would otherwise reach the socket layer as a confusing
+        // resolution failure.
+        return Err(TvError::protocol("mdc address must not be empty"));
+    }
+    let descriptor = DeviceDescriptor::new(
+        DeviceId::new(format!("mdc:{address}"))?,
+        DeviceOs::SamsungMdc,
+        address.clone(),
+    );
+    Ok(Box::new(MdcDevice::new(
+        MdcClient::new(address),
+        descriptor,
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A panel is never *classified* from discovery — SSDP cannot tell a commercial
+    /// Samsung display from a consumer one — so the handle is built from what the
+    /// caller already knows, and it comes back as the same erased handle the rest of
+    /// the fleet is driven through. That erasure is the item: no special case at the
+    /// call site.
+    #[test]
+    fn an_mdc_handle_is_the_same_erased_handle_the_fleet_uses() {
+        let handle = mdc_handle("192.168.1.40").expect("a non-empty address");
+        assert_eq!(handle.descriptor().os, DeviceOs::SamsungMdc);
+        assert_eq!(handle.descriptor().address, "192.168.1.40");
+        assert!(handle.capabilities().contains(Capability::PowerState));
+        // MDC's surface is its own: a panel has no remote, so no keys.
+        assert!(!handle.capabilities().contains(Capability::Key));
+    }
+
+    /// An empty identifier would silently merge every panel in a fleet into one.
+    #[test]
+    fn an_empty_address_is_refused() {
+        assert!(mdc_handle("   ").is_err());
+    }
 
     #[cfg(feature = "quirks")]
     #[test]

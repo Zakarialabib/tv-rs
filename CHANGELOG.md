@@ -119,6 +119,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **MDC reaches the facade (companion gap G10e)**: `tv_rs::mdc_handle(address)` returns a
+  commercial panel as the same erased `DeviceHandle` the rest of the fleet is driven
+  through, so panels stop being a special case at the call site; the facade also
+  re-exports `tv_rs_mdc` as `tv_rs::mdc`, so its types are nameable. Deliberately **not**
+  a `TvClient` variant and **not** classified from discovery: SSDP carries no
+  authoritative vendor field, so a commercial Samsung display answers it the same way a
+  consumer one does, and core's `DeviceOs::SamsungMdc` is never produced by a reply — the
+  caller knows, and the handle is built from what it knows. `MdcDevice` already implements
+  `DeviceHandle`, so a variant would have meant forwarding every trait method to say
+  nothing new, and MDC's capability set is its own: no keys, no applications, no pairing,
+  and a display id travelling with each command rather than with the handle. An address
+  that is empty or only whitespace is refused, because the id is prefixed (`mdc:<address>`)
+  and would otherwise never be empty — the undialable address would reach the socket layer
+  as a confusing resolution failure instead.
+
+### Added
+
 - **`platform-verifier`: the operating system's root store for `tv-rs-transport`**
   (companion gap G7). `rustls-native-certs` reads a *system* store, which Android (a
   keystore) and iOS (its own roots) do not expose — so a mobile build with

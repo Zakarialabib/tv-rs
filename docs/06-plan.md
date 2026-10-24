@@ -159,11 +159,24 @@ premises go stale: what the audit found is recorded next to the item, not delete
   groundwork:** `dlna/src/soap.rs` already *parses* the `RenderingControl:1` service
   and its `controlURL` out of the device description, but no volume or mute action is
   implemented — the discovery half is done, the SOAP actions are not.
-- **G10e** MDC behind the facade. **The premise names a type that does not exist:**
-  there is no `TvVendor::Mdc`. `TvVendor` is `Samsung | Lg | Roku | Unknown`; MDC
-  identity lives in core's `DeviceOs::SamsungMdc`, a different enum, and the facade has
-  no MDC arm at all. The work is a facade path keyed on `DeviceOs`, not a `TvVendor`
-  variant — decide which enum the facade should branch on before writing it.
+- **G10e** MDC behind the facade. **The premise was wrong twice over, and the design is
+  now settled.**
+  - There is no `TvVendor::Mdc`: that enum is `Samsung | Lg | Roku | Unknown`.
+  - `DeviceOs::SamsungMdc` exists in core, but **nothing ever produces it** — there is no
+    classifier from a discovery reply, and there cannot be one worth trusting, because
+    SSDP carries no authoritative vendor field: a commercial Samsung panel answers it the
+    same way a consumer one does. So "key the facade on `DeviceOs`" is not available
+    either. **MDC is never classified from discovery; the caller knows.**
+  - **Decided shape:** a facade constructor taking an address and a display id, returning
+    `Box<dyn DeviceHandle>`. Not a `TvClient` variant — `MdcDevice` already implements
+    `DeviceHandle`, so a variant would mean forwarding every trait method to say nothing
+    new, and MDC's capability set is its own (no keys, no apps, no pairing). Returning the
+    erased handle is exactly what keeps panels from being a special case at the call site.
+  - **Landed:** `tv_rs::mdc_handle(address)` builds the panel's `MdcClient` and
+    `DeviceDescriptor` and returns `Box<dyn DeviceHandle>`; the facade re-exports
+    `tv_rs_mdc` as `tv_rs::mdc`, so its types are nameable too. An address that is empty
+    or whitespace-only is refused — a test caught that the prefixed id (`mdc:<address>`)
+    is never empty on its own, so the undialable address was reaching the socket layer.
 - **G15** `probe(ip) -> Option<DiscoveredTv>` — "what is at this IP?" for guest Wi-Fi
   and Android pickers that hand back an address. **Open, premise holds:** nothing
   probes a single address today.
