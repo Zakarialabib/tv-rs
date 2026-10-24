@@ -11,6 +11,11 @@ publish = false
 [[bin]]
 name = "tv-rs"
 path = "src/main.rs"
+# The command keeps the facade's name, which collides with the library's rustdoc
+# output: cargo warns on every `cargo doc --workspace` and one index overwrites the
+# other. The binary is a thin front end (`publish = false`) whose documentation is
+# the `--help` text, so it does not need a doc target of its own.
+doc = false
 
 [dependencies]
 tv-rs = { path = "../tv-rs" }
