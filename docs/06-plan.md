@@ -123,8 +123,23 @@ id, `foreground()` answering on Tizen, and a test pinning the parsed shape.
 
 ### 2.3 B3 · G5 — installed apps on Tizen and webOS
 
-webOS `listLaunchPoints`; Tizen `ed.installedApp.get` over the remote channel. Today
-only Roku lists apps.
+**Corrected while auditing, because two of the three premises were wrong.**
+
+- **The facade has no `apps()` arm at all.** `AppLaunch` is implemented for the
+  capabilities the fleet grid reads (`launch`, `foreground`) but not for listing what is
+  installed, so the "which apps are on this TV" column has no source — for *any* vendor,
+  including Roku.
+- **webOS: the URI is `listApps`, not `listLaunchPoints`.** `SsapUri::SystemLauncherListApps`
+  already maps to `ssap://com.webos.applicationManager/listApps`, but no method calls it and
+  the response shape (`launchPoints[]` with id/title/icon) is not recorded in the playbook,
+  so it needs the same provenance pass as B2's Roku endpoint before it is code.
+- **Tizen: `ed.installedApp.get` is unverified here.** Not in the crate, not in the
+  playbook. Same rule as the other Samsung gaps: a capability without a verified vendor
+  command does not exist.
+
+**Exit:** `AppLaunch::apps()` answering on Roku and webOS with the installed list, the
+webOS response shape recorded in the playbook with its source, and Tizen left honestly
+unsupported (or verified and implemented) rather than guessed.
 
 ### 2.4 B5 · G6 — text entry
 
