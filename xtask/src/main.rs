@@ -206,7 +206,10 @@ fn publish(args: &[String]) -> Result<(), String> {
 
             // First publish: workspace path deps are not on crates.io yet, so a
             // dependent cannot resolve during a dry run. Expected, not a defect.
-            if options.dry_run && stderr.contains("no matching package named `tv-rs-") {
+            if options.dry_run
+                && (stderr.contains("no matching package named `tv-rs-")
+                    || stderr.contains("failed to select a version for the requirement `tv-rs-"))
+            {
                 println!(
                     "warning: dry-run of {package} skipped — a workspace dependency is not on \
                      crates.io yet. Re-run after the earlier crates have been published once."

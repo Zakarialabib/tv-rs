@@ -88,6 +88,43 @@ async fn power_query_and_set_round_trip_over_tcp() {
 }
 
 #[tokio::test]
+async fn mdc_device_satisfies_conformance_suite_and_feature_gates_lfd_surfaces() {
+    let client = MdcClient::new("127.0.0.1").display(DisplayId::new(1).expect("display id"));
+    let descriptor = DeviceDescriptor::new(
+        DeviceId::new("conformance-panel").expect("device id"),
+        DeviceOs::SamsungMdc,
+        "127.0.0.1".to_string(),
+    );
+    let device = MdcDevice::new(client, descriptor);
+
+    let violations = tv_rs_core::conformance::run(&device).await;
+    assert!(
+        violations.is_empty(),
+        "MDC device conformance violations: {violations:#?}"
+    );
+
+    #[cfg(feature = "supporting")]
+    {
+        assert!(
+            device.capabilities().contains(Capability::LampOrPanelHours),
+            "LampOrPanelHours must be advertised when supporting feature is enabled"
+        );
+        assert!(
+            device.as_panel_hours().is_some(),
+            "PanelHoursProvider must be present when supporting feature is enabled"
+        );
+        assert!(
+            !device.capabilities().contains(Capability::ScreenCapture),
+            "ScreenCapture must NEVER be advertised (no MDC command exists)"
+        );
+        assert!(
+            device.as_screen_capturer().is_none(),
+            "ScreenCapturer must NEVER be present for MDC"
+        );
+    }
+}
+
+#[tokio::test]
 async fn wall_handles_share_one_socket() {
     let (listener, port) = listener().await;
     let server = tokio::spawn(async move {
