@@ -331,6 +331,9 @@ fn bump_version(version: &str) -> Result<(), String> {
     let mut replaced_package = false;
     let mut replaced_deps = 0_usize;
     let mut out = String::with_capacity(text.len());
+    // Rewriting with a bare '\n' turns a CRLF checkout into a dirty tree, which
+    // then fails the release's own clean-tree gate. Carry the file's own ending.
+    let eol = if text.contains("\r\n") { "\r\n" } else { "\n" };
 
     for line in text.lines() {
         let trimmed = line.trim_start();
@@ -351,7 +354,7 @@ fn bump_version(version: &str) -> Result<(), String> {
         } else {
             out.push_str(line);
         }
-        out.push('\n');
+        out.push_str(eol);
         if out.contains("version = \"") && !replaced_package {
             replaced_package = true;
         }
@@ -360,7 +363,10 @@ fn bump_version(version: &str) -> Result<(), String> {
     if replaced_deps == 0 {
         return Err("no path-dependency version pins found in Cargo.toml".to_string());
     }
-    std::fs::write(path, out).map_err(|error| error.to_string())?;
+    // Publishing the version the tree already declares must leave the tree clean.
+    if out != text {
+        std::fs::write(path, out).map_err(|error| error.to_string())?;
+    }
 
     // Every published crate pins its own package version too: bump each crate
     // manifest in sync (the workspace.dependencies pins above already carry the
@@ -378,6 +384,7 @@ fn bump_version(version: &str) -> Result<(), String> {
         }
         let mut next = String::with_capacity(text.len());
         let mut replaced = 0_usize;
+        let eol = if text.contains("\r\n") { "\r\n" } else { "\n" };
         for line in text.lines() {
             if replaced == 0 && line.trim_start().starts_with("version = \"") {
                 if let Some(at) = line.find('"') {
@@ -385,18 +392,18 @@ fn bump_version(version: &str) -> Result<(), String> {
                     next.push_str(head);
                     next.push_str(version);
                     next.push('"');
-                    next.push('\n');
+                    next.push_str(eol);
                     replaced += 1;
                 } else {
                     next.push_str(line);
-                    next.push('\n');
+                    next.push_str(eol);
                 }
             } else {
                 next.push_str(line);
-                next.push('\n');
+                next.push_str(eol);
             }
         }
-        if replaced == 1 {
+        if replaced == 1 && next != text {
             std::fs::write(&toml, next).map_err(|error| format!("write {toml:?}: {error}"))?;
             crate_versions += 1;
         }
