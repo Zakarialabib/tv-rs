@@ -159,11 +159,23 @@ glossary.
 - **G15** `probe(ip) -> Option<DiscoveredTv>` — "what is at this IP?" for guest Wi-Fi
   and Android pickers that hand back an address. **Open, premise holds:** nothing
   probes a single address today.
-- **G16** Tizen DIAL URL launching through `TvClient::open_url`. **Open, and further
-  along than the wording suggests:** the facade already has `open_url()` and a test
-  pins Tizen *refusing* it (`open_url_is_refused_where_there_is_no_browser`), and
-  `crates/tizen/src/apps.rs` already carries DIAL. So this is wiring an existing
-  refusal to an existing DIAL surface, not new protocol work.
+- **G16** Tizen DIAL URL launching through `TvClient::open_url`. **The premise conflates
+  two different operations, and that is the decision to make before writing anything.**
+  - The audit's pointers were wrong in detail: `crates/tizen/src/apps.rs` only *resolves
+    app ids*. The DIAL surface is in `crates/tizen/src/client.rs` —
+    `build_dial_launch_url(host, dial_port, app_id)`, `TizenClient::dial_device_description()`
+    and the `dial_port` field. Both ends do exist.
+  - But they do not meet. `TvClient::open_url(url)` means "load this page" (that is what
+    the webOS arm does, through the browser), while DIAL's launch is
+    `http://host:8080/ws/apps/{app_id}` — **an app id with an optional payload**, not a
+    URL. Wiring one into the other would make `open_url` mean two different things
+    depending on vendor, which is the quiet divergence the capability table exists to
+    prevent.
+  - **Decided shape:** keep `open_url` refusing on Tizen — a set with no browser has no
+    browser — and expose the DIAL capability as its own operation, taking an app id and a
+    payload, because that is what the protocol actually offers. A caller wanting to
+    deep-link a URL into a Tizen player app passes it as that payload, and the operation's
+    name says what happened.
 - **G17** DLNA `get_transport_info` / `get_position_info`, so a cast's position is a
   cold read rather than a session-scoped estimate. **Open, premise holds:** neither
   action appears in the crate.
