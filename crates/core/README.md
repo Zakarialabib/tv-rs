@@ -62,9 +62,15 @@ The wire contract is the contract with the companion's `types.ts`:
   `"digit_7"`, `"hdmi2"`, `"tv"`);
 - `Key::Digit(n)` becomes `"digit_n"` (not `"digit": n`);
 - `ObservedField` becomes
-  `{"verified_at_ms": u64, "age_ms": u64, "confidence": "high"|"inferred"|"unknown", "value": T}`;
+  `{"age_ms": u64, "confidence": "high"|"inferred"|"unknown", "value": T}`. There is
+  no `verified_at_ms`: the timestamp is a monotonic `Instant`, which has no epoch, so
+  only the age is derivable;
 - every other data type derives `Serialize`/`Deserialize` with
   `rename_all = "snake_case"` (enums `samsung`, `webos`, `roku`, `power_state`…).
+
+The contract is pinned by tests rather than by this page: `cargo test -p tv-rs-core
+--features serde` asserts every capability's JSON equals its `as_str()` label, so the
+derive and the label cannot drift.
 
 No `serde` dependency lands unless the feature is on, so a cloud agent can carry
 the core crate with zero serialisation cost.

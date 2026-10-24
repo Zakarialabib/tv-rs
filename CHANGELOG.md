@@ -8,6 +8,45 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`discover_stream(scanner, on_found)`**, re-exported from the crate root, and
+  `SsdpScanner::discover_tvs_with(on_found)`: discovery calls back per display the
+  moment its descriptor resolves instead of only when the reply window closes.
+  `discover_with` is now `discover_stream(scanner, |_| {})`, so there is one
+  implementation rather than two.
+
+### Changed
+
+- **`PowerControl::wake` for Roku falls back to a magic packet** when ECP does not
+  answer — a set that is fully off answers nothing — but only when the handle
+  carries an address. Without one it returns the ECP error instead of pretending.
+
+
+### Added
+
+- **Text entry, Roku half (companion gap G6)**: `RokuClient::type_text()` types a string
+  one `keypress/Lit_<char>` request per character, and a new `TextInput` trait (with a
+  default that refuses) plus `Capability::TextInput` expose it through the facade —
+  `as_text()` and `type_text()`. Source: Roku's own ECP documentation, where the key
+  parameter may be "a printable character value specified with the prefix `Lit_`" and
+  "Printable ASCII character code values can be transmitted as-is". That surface is
+  printable ASCII, so a string holding anything else is refused **atomically** — the
+  whole string is validated before the first request, so a refusal never leaves half a
+  search term typed into the field. The refusal names `TextInput`, never `Key`, because
+  a device that can press buttons may have no way to take a string.
+  `Capability::TextInput` is declared last, which forced `CapabilitySet` to widen from
+  `u16` to `u32` (the sixteenth capability filled the old width); the widening is
+  additive and every capability keeps its index, so a set written by an older build
+  reads the same. webOS and Tizen keep the honest default: their text-entry surfaces are
+  named in the plan but not traced to a source in this workspace.
+
+- **`AppLaunch::installed_apps()`** — lists what is actually installed, with a
+  default of `Unsupported` so a platform that cannot list says so instead of
+  fabricating a catalogue. webOS answers
+  `ssap://com.webos.applicationManager/listApps` through
+  `WebosSessionPool::list_apps` (the URI already existed in `SsapUri` and was
+  never used); Roku answers `/query/apps` through the facade now, rather than
+  only from the caller. Entries with no id are skipped and a missing title stays
+  `None`.
 - **webOS input switching** (`ssap://tv/switchInput`): `WebosSessionPool::switch_input`
   plus an `InputSelect` implementation for `TvClient::Webos`, so the companion's
   Inputs sheet appears on an LG set. `active_input()` answers `None` — webOS has no
@@ -18,7 +57,112 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   "cannot tell". webOS answers `ssap://audio/getMute` (the URI already existed and
   was never used), `MockBackend` reports its own state, and MDC returns `None`
   rather than guessing.
+- **An Android block no longer reads as "TV off" (companion gap A5)**: from Android
+  17 (target SDK 37) a LAN socket needs the runtime `ACCESS_LOCAL_NETWORK`
+  permission, and until the user grants it the platform refuses the call — `EPERM`
+  from a blocked socket, which the NDK reports as
+  `ANDROID_NETWORK_BLOCKED_REASON_LNP`. Every socket error used to be stringified
+  into `TransportError::Unreachable`, which routes to *Retry*, so the UI offered
+  *Wake* forever for a television that was awake and merely unreachable by this app.
+  Core gains `TransportError::Blocked { reason }` with a `from_io()` classifier —
+  the `EPERM` check compiles only on `target_os = "android"`, so desktop
+  classification is unchanged — and `Remedy::RequestPermission`, because the UI must
+  say "grant access" rather than "wake", with a `hint()` that names the grant. The
+  facade's tizen, webOS, discovery and power mappings and MDC's socket arm route
+  through the classifier, so a refused SSDP send is a blocked call instead of an
+  empty discovery list. The healer maps the new remedy to `Quarantine`: the
+  permission belongs to the platform, so retrying burns battery and waking wakes
+  nothing.
+- **Installed applications through the facade — companion gap G5**: `AppLaunch::installed_apps()`
+  now has real arms, so the fleet grid's "what is on this television" column has a source.
+  webOS enumerates through `ssap://com.webos.applicationManager/listApps` (the pool already
+  parsed it; the facade never called it) and Roku through `/query/apps` — both answers map to
+  `AppRef { id, name }`. The refusal names its own capability: `Capability::AppList` is new, and
+  Tizen answers `Unsupported(AppList)` rather than `Unsupported(AppLaunch)`, because the remote
+  channel starts an application it cannot enumerate and the two facts are independent. Advertised
+  only where delivered, and the webOS reply shape is recorded in the playbook with its sources.
+- **Roku foreground reads (`tv-rs-roku` + the facade — companion gap G10b, Roku half)**:
+  `RokuClient::query_active_app()` fetches `GET /query/active-app` and
+  `parse_active_app()` turns it into `RokuActiveApp` — the active app's id and name,
+  plus any screensaver covering it. The facade's `foreground()` answers on Roku now and
+  advertises `Capability::Foreground`, which is what an "on screen" card reads. The
+  home screen reports `Roku` with no `id`, so that answers `None` rather than inventing
+  an application; the three documented shapes (app, home screen, screensaver) each have
+  a test. Tizen's half stays open: no foreground command for the consumer remote
+  channel is verified in this workspace, and the candidate endpoint needs provenance
+  before it becomes code.
+- **webOS key input (`tv-rs-webos` + the facade — companion gap G10a)**: a press is
+  now a `type:button` frame on the pointer socket `getPointerInputSocket` hands
+  back. `PointerWire` / `PointerFactory` keep that connection testable without a
+  television, and `WebosSessionPool::send_key` holds one pointer socket per TV,
+  reuses it across presses and reopens it once on failure.
+  `WEBOS_DEFAULT_PERMISSIONS` gains `CONTROL_INPUT_TEXT` and
+  `CONTROL_MOUSE_AND_KEYBOARD` — the input service refuses the path without them,
+  so a registration that omitted them paired fine and then had a dead D-pad. The
+  facade maps `Key` to the channel's own button vocabulary (`webos_key`) and now
+  advertises `Capability::Key` for webOS. **Unverified on a real panel**: the fake
+  TV cannot answer SSAP, so the wire form is pinned by unit tests.
+- **Wake, and the address it needs (companion gap A4)**: `TvClient` can wake a panel
+  at last. Roku goes over ECP — `PowerControl::wake()` calls the `PowerOn` keypress the
+  client already had, because a Roku answers while the screen is dark. Tizen and webOS
+  drop their network stack when they sleep, so their only path is a broadcast magic
+  packet: `TvClient::with_mac("aa:bb:...")` supplies the address and `wake()` then
+  broadcasts it through `tv_rs_power::wake_on_lan`. `Capability::Wake` is advertised
+  exactly where a wake can be delivered — always on Roku, on the other two once a MAC
+  is known — never merely because the trait exists. `TvClient::learn_mac()` reads
+  Roku's own `/query/device-info` (Wi-Fi address preferred over wired) and refuses on
+  Samsung and webOS rather than guessing at an endpoint; `DeviceDescriptor::mac`
+  reports whatever the handle knows, so a fleet can persist it. A malformed address is
+  reported as `ProtocolError::Malformed` instead of being broadcast.
+- **`RokuDeviceInfo::mac()`** — the Wi-Fi address when the box is wireless, the
+  Ethernet one when it is wired.
 
+### Added
+
+- **MDC reaches the facade (companion gap G10e)**: `tv_rs::mdc_handle(address)` returns a
+  commercial panel as the same erased `DeviceHandle` the rest of the fleet is driven
+  through, so panels stop being a special case at the call site; the facade also
+  re-exports `tv_rs_mdc` as `tv_rs::mdc`, so its types are nameable. Deliberately **not**
+  a `TvClient` variant and **not** classified from discovery: SSDP carries no
+  authoritative vendor field, so a commercial Samsung display answers it the same way a
+  consumer one does, and core's `DeviceOs::SamsungMdc` is never produced by a reply — the
+  caller knows, and the handle is built from what it knows. `MdcDevice` already implements
+  `DeviceHandle`, so a variant would have meant forwarding every trait method to say
+  nothing new, and MDC's capability set is its own: no keys, no applications, no pairing,
+  and a display id travelling with each command rather than with the handle. An address
+  that is empty or only whitespace is refused, because the id is prefixed (`mdc:<address>`)
+  and would otherwise never be empty — the undialable address would reach the socket layer
+  as a confusing resolution failure instead.
+
+### Added
+
+- **`platform-verifier`: the operating system's root store for `tv-rs-transport`**
+  (companion gap G7). `rustls-native-certs` reads a *system* store, which Android (a
+  keystore) and iOS (its own roots) do not expose — so a mobile build with
+  `TlsPolicy::Strict` had no roots to verify against. The new `platform-verifier`
+  feature asks the operating system instead, through `rustls-platform-verifier` pinned
+  at 0.7.1, the version whose API was verified against docs.rs rather than remembered.
+  Additive and narrow: **only the `Strict` arm changes**. `Pinned` and
+  `TrustOnFirstUse` install their own verifiers and never reach it, so the feature
+  cannot weaken pinning — asserted by a test that builds all four policies with it
+  enabled. The extension used is `BuilderVerifierExt::with_platform_verifier`, which
+  takes the existing builder so the workspace's ring provider and protocol versions
+  carry into the verifier; the no-arg `ConfigVerifierExt` would have discarded them.
+
+### Changed
+
+- **A silent SSDP probe is now an error, not an empty list** (`tv-rs-discovery` +
+  the facade — companion gap G7). Discovery counted no datagrams: when `send_to`
+  succeeded and nothing came back, the scan returned an empty `Vec`, which reads as
+  "no displays on this network". Silence is a different statement and usually the
+  wrong one — the multicast was dropped, which on Android means the app has not
+  been granted local-network access. The scanner now counts the datagrams it
+  receives and, when that count is zero, returns `DiscoveryError::SilentProbe`. The
+  message names *both* explanations (nothing listening, or the local network
+  unreachable) because neither is knowable from here, and the facade maps it to
+  `TransportError::Blocked`, reusing A5's "grant access" remedy and `hint()` rather
+  than inventing a third bucket. An empty list still means the network answered and
+  no display was among the replies.
 
 ### Fixed
 
@@ -39,65 +183,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Every capability's serde output is now asserted equal to its `as_str()` label,
   so the derive and the label cannot drift. Two redundant `#[must_use]`s on
   functions returning `Result` are gone.
-
-
-### Added
-
-- **An Android block no longer reads as "TV off" (companion gap A5)**: from Android
-  17 (target SDK 37) a LAN socket needs the runtime `ACCESS_LOCAL_NETWORK`
-  permission, and until the user grants it the platform refuses the call — `EPERM`
-  from a blocked socket, which the NDK reports as
-  `ANDROID_NETWORK_BLOCKED_REASON_LNP`. Every socket error used to be stringified
-  into `TransportError::Unreachable`, which routes to *Retry*, so the UI offered
-  *Wake* forever for a television that was awake and merely unreachable by this app.
-  Core gains `TransportError::Blocked { reason }` with a `from_io()` classifier —
-  the `EPERM` check compiles only on `target_os = "android"`, so desktop
-  classification is unchanged — and `Remedy::RequestPermission`, because the UI must
-  say "grant access" rather than "wake", with a `hint()` that names the grant. The
-  facade's tizen, webOS, discovery and power mappings and MDC's socket arm route
-  through the classifier, so a refused SSDP send is a blocked call instead of an
-  empty discovery list. The healer maps the new remedy to `Quarantine`: the
-  permission belongs to the platform, so retrying burns battery and waking wakes
-  nothing.
-
-- **Roku foreground reads (`tv-rs-roku` + the facade — companion gap G10b, Roku half)**:
-  `RokuClient::query_active_app()` fetches `GET /query/active-app` and
-  `parse_active_app()` turns it into `RokuActiveApp` — the active app's id and name,
-  plus any screensaver covering it. The facade's `foreground()` answers on Roku now and
-  advertises `Capability::Foreground`, which is what an "on screen" card reads. The
-  home screen reports `Roku` with no `id`, so that answers `None` rather than inventing
-  an application; the three documented shapes (app, home screen, screensaver) each have
-  a test. Tizen's half stays open: no foreground command for the consumer remote
-  channel is verified in this workspace, and the candidate endpoint needs provenance
-  before it becomes code.
-
-- **webOS key input (`tv-rs-webos` + the facade — companion gap G10a)**: a press is
-  now a `type:button` frame on the pointer socket `getPointerInputSocket` hands
-  back. `PointerWire` / `PointerFactory` keep that connection testable without a
-  television, and `WebosSessionPool::send_key` holds one pointer socket per TV,
-  reuses it across presses and reopens it once on failure.
-  `WEBOS_DEFAULT_PERMISSIONS` gains `CONTROL_INPUT_TEXT` and
-  `CONTROL_MOUSE_AND_KEYBOARD` — the input service refuses the path without them,
-  so a registration that omitted them paired fine and then had a dead D-pad. The
-  facade maps `Key` to the channel's own button vocabulary (`webos_key`) and now
-  advertises `Capability::Key` for webOS. **Unverified on a real panel**: the fake
-  TV cannot answer SSAP, so the wire form is pinned by unit tests.
-
-- **Wake, and the address it needs (companion gap A4)**: `TvClient` can wake a panel
-  at last. Roku goes over ECP — `PowerControl::wake()` calls the `PowerOn` keypress the
-  client already had, because a Roku answers while the screen is dark. Tizen and webOS
-  drop their network stack when they sleep, so their only path is a broadcast magic
-  packet: `TvClient::with_mac("aa:bb:...")` supplies the address and `wake()` then
-  broadcasts it through `tv_rs_power::wake_on_lan`. `Capability::Wake` is advertised
-  exactly where a wake can be delivered — always on Roku, on the other two once a MAC
-  is known — never merely because the trait exists. `TvClient::learn_mac()` reads
-  Roku's own `/query/device-info` (Wi-Fi address preferred over wired) and refuses on
-  Samsung and webOS rather than guessing at an endpoint; `DeviceDescriptor::mac`
-  reports whatever the handle knows, so a fleet can persist it. A malformed address is
-  reported as `ProtocolError::Malformed` instead of being broadcast.
-
-- **`RokuDeviceInfo::mac()`** — the Wi-Fi address when the box is wireless, the
-  Ethernet one when it is wired.
 
 ## [0.3.0] - 2026-10-24
 

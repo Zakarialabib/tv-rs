@@ -14,6 +14,18 @@ pub const SSAP_URI_PREFIX: &str = "ssap://";
 /// Pairing type that makes the TV display an on-screen "Allow?" prompt.
 pub const WEBOS_PAIRING_TYPE_PROMPT: &str = "PROMPT";
 
+/// One installed application, as `listApps` reports it.
+///
+/// Kept local to this crate: `tv-rs-webos` does not depend on `tv-rs-core`, so the
+/// facade maps this onto `AppRef`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstalledApp {
+    /// The webOS application id, e.g. `com.webos.app.netflix`.
+    pub id: String,
+    /// The title the TV reports, when it reports one.
+    pub title: Option<String>,
+}
+
 /// Default SSAP manifest permissions requested during registration.
 ///
 /// `CONTROL_INPUT_TEXT` and `CONTROL_MOUSE_AND_KEYBOARD` are what the input

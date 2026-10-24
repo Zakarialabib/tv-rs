@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use crate::capability::{
     AppLaunch, AppRef, BrightnessControl, Capability, CapabilitySet, DeviceHandle, Input,
     InputSelect, Key, KeyInput, Orientation, OrientationControl, PanelHealth, PanelHealthProvider,
-    PanelLockControl, PowerControl, Probe, Rebootable, VolumeControl,
+    PanelLockControl, PowerControl, Probe, Rebootable, TextInput, VolumeControl,
 };
 #[cfg(feature = "supporting")]
 use crate::capability::{FrameFormat, PanelHours, PanelHoursProvider, ScreenCapturer, ScreenFrame};
@@ -276,6 +276,18 @@ fn error_for(failure: Failure) -> TvError {
     }
 }
 
+#[async_trait]
+impl TextInput for MockBackend {
+    /// The mock models acceptance, not a vendor limit: a real Roku refuses a
+    /// character outside its documented printable-ASCII surface, and a test double
+    /// has no reason to reproduce that. Success means "the device took the string",
+    /// which is all a caller can observe without a screen.
+    async fn type_text(&self, text: &str, _cmd: CommandId) -> Result<(), TvError> {
+        let _ = text;
+        Ok(())
+    }
+}
+
 impl DeviceHandle for MockBackend {
     fn id(&self) -> DeviceId {
         self.descriptor.id.clone()
@@ -305,6 +317,12 @@ impl DeviceHandle for MockBackend {
         self.capabilities
             .contains(Capability::AppLaunch)
             .then_some(self as &dyn AppLaunch)
+    }
+
+    fn as_text(&self) -> Option<&dyn TextInput> {
+        self.capabilities
+            .contains(Capability::TextInput)
+            .then_some(self as &dyn TextInput)
     }
 
     fn as_input(&self) -> Option<&dyn InputSelect> {

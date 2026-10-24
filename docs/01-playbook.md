@@ -125,7 +125,19 @@ ssap://audio/setVolume           {"volume": 15}
 ssap://audio/getVolume
 ssap://system/turnOff
 ssap://com.webos.applicationManager/getForegroundAppInfo
+ssap://com.webos.applicationManager/listApps
 ```
+
+`listApps` answers `{"apps":[{"id":"com.webos.app.netflix","title":"Netflix"}]}`: the
+catalogue of installed applications, and an entry with no `id` is skipped rather than
+shown as a blank row. The shape is documented for the same Lune bus by webOS OSE
+(`webosose.org/docs/reference/ls2-api/com-webos-service-applicationmanager/`, which names
+the method `listLaunchPoints` and lists `launchPoints[].id` and `launchPoints[].title` as
+required fields) and by LG's own Application Manager reference
+(`webostv.developer.lge.com/develop/references/application-manager`); an independent client
+library (`hobbyquaker/lgtv2`) maps the same reply to id → title. The crate's URI is
+`listApps`, the name webOS uses on consumer televisions; `listLaunchPoints` is the name
+the open-source tree documents.
 
 Traps:
 
@@ -149,6 +161,15 @@ on the local subnet. The most cooperative of the network protocols:
 | `/query/active-app`  | GET    | XML: the app in front — `Roku` with no `id` on the home screen        |
 | `/keypress/{Key}`    | POST   | emulates a remote button (`Home`, `Up`, `Select`, `Back`, `PowerOff`) |
 | `/launch/{appId}`    | POST   | starts an app                                                         |
+
+`/keypress/` also carries text. Roku's ECP documentation: "The key parameter can either
+be a key name … or a printable character value specified with the prefix `Lit_`. Printable
+ASCII character code values can be transmitted as-is with the `Lit_` prefix" — so
+`curl -d '' "http://<tv>:8060/keypress/Lit_r"` types `r`, one character per request. **The
+documented surface is printable ASCII** (0x20–0x7E); the encoding for anything else is not
+documented in that source, so a client must refuse a character it cannot prove rather than
+guess at a percent-encoding. Source: Roku's External Control Protocol documentation
+(`developer.roku.com`), with the same `Lit_` prefix confirmed by independent ECP clients.
 
 `/query/active-app` answers `<active-app><app id="12" type="appl" version="4.1.218">Netflix</app></active-app>`:
 the `app` element is the bare text `Roku` with **no** `id` when the user is on the home

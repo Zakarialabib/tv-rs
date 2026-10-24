@@ -84,11 +84,12 @@ advertised only where it can be delivered), **A5** (a platform-refused call is
 
 ### 2.1 A4 · G4 (the remainder) — MAC learning on Samsung and webOS
 
-Wake landed for all three vendors: Roku goes over ECP `PowerOn`, and Tizen and webOS
-broadcast a magic packet once a caller supplies the address
-(`TvClient::with_mac`), with `Capability::Wake` advertised only where it can actually
-be delivered. What is open is the convenience half — learning the address instead of
-asking for it.
+Wake landed for all three vendors, and G13 added the fallback: Roku goes over ECP
+`PowerOn` first, then falls back to a magic packet when the set is fully off and a caller
+has supplied an address; Tizen and webOS broadcast the packet directly, because they drop
+their network stack when they sleep. `TvClient::with_mac` supplies that address, and
+`Capability::Wake` is advertised only where it can actually be delivered. What is open is
+the convenience half — learning the address instead of asking for it.
 
 `TvClient::learn_mac()` answers on Roku (`/query/device-info`, Wi-Fi address preferred
 over wired). On Samsung and webOS it refuses, because **neither endpoint this item
@@ -121,56 +122,59 @@ code.
 **Exit:** the endpoint traced and recorded, `TizenClient` returning the foreground app
 id, `foreground()` answering on Tizen, and a test pinning the parsed shape.
 
-### 2.3 B3 · G5 — installed apps on Tizen and webOS
+### 2.3 B5 · G6 (the remainder) — text entry on webOS and Tizen
 
-**Corrected while auditing, because two of the three premises were wrong.**
+Roku landed: `keypress/Lit_<char>`, one request per character, traced to Roku's own ECP
+documentation and recorded in [`01-playbook.md`](01-playbook.md) §5. The documented
+surface is **printable ASCII** — "Printable ASCII character code values can be
+transmitted as-is with the `Lit_` prefix" — and the encoding for anything else is not
+documented in that source, so `type_text` refuses such a string rather than guessing at
+a percent-encoding. `Capability::TextInput` is its own capability (declared after
+`AppList`, which is what forced the `CapabilitySet` bitset to widen from `u16` to `u32`)
+and the refusal names it, never `Capability::Key`: a device that can press buttons may
+still have no way to take a string.
 
-- **The facade has no `apps()` arm at all.** `AppLaunch` is implemented for the
-  capabilities the fleet grid reads (`launch`, `foreground`) but not for listing what is
-  installed, so the "which apps are on this TV" column has no source — for *any* vendor,
-  including Roku.
-- **webOS: the URI is `listApps`, not `listLaunchPoints`.** `SsapUri::SystemLauncherListApps`
-  already maps to `ssap://com.webos.applicationManager/listApps`, but no method calls it and
-  the response shape (`launchPoints[]` with id/title/icon) is not recorded in the playbook,
-  so it needs the same provenance pass as B2's Roku endpoint before it is code.
-- **Tizen: `ed.installedApp.get` is unverified here.** Not in the crate, not in the
-  playbook. Same rule as the other Samsung gaps: a capability without a verified vendor
-  command does not exist.
+**webOS and Tizen are open, and neither premise is traced.** The plan names webOS IME
+`insertText` and Tizen `SendInputString` (base64); a search of the workspace finds no
+occurrence of either, and the playbook records no text-entry command for either vendor.
+Same rule as every other gap here — a capability without a verified vendor command does
+not exist — so both keep the trait default, which names `TextInput` and leaves the
+control greyed out rather than silently typing nothing.
 
-**Exit:** `AppLaunch::apps()` answering on Roku and webOS with the installed list, the
-webOS response shape recorded in the playbook with its source, and Tizen left honestly
-unsupported (or verified and implemented) rather than guessed.
+**Exit:** the webOS IME surface and the Tizen `SendInputString` payload traced into the
+playbook with their sources, then `type_text()` answering on both.
 
-### 2.4 B5 · G6 — text entry
+### 2.4 D — the rest, in the companion's order
 
-Tizen `ms.remote.control` `SendInputString` (base64), webOS IME `insertText`, Roku
-`Lit_<char>` key presses — for search boxes on the TV.
+Each entry was checked against the code before being left standing, because these
+premises go stale: what the audit found is recorded next to the item. Landed items are
+gone from the list — G3 (streaming discovery) and G10e (MDC behind the facade) both
+landed, and their rationale now lives in the CHANGELOG and the glossary.
 
-### 2.5 C1 · G7 — Android readiness
-
-A distinct error when **zero datagrams** were received (no multicast permission) as
-opposed to zero TVs answering; a `rustls-platform-verifier` feature for
-`tv-rs-transport`; `cfg`-gate `tv-rs-local` so Android and iOS do not build a
-desktop EDID probe.
-
-### 2.6 D — the rest, in the companion's order
-
-- **G3** streaming discovery (`discover_stream()` or a callback; dedup stays in the
-  scanner) — Devices › Find streams results as TVs answer.
 - **G8** `HealerLadder::release()` plus an audit entry, for Fleet › "Release from
-  quarantine".
-- **G10d** DLNA `RenderingControl` (volume/mute for renderers).
-- **G10e** MDC behind the facade: `TvVendor::Mdc` and the same `DeviceHandle` path, so
-  panels are not a special case.
+  quarantine". **Half-built:** `crates/agent/src/audit.rs` already exists, so this is
+  the ladder's `release()` plus the entry, not a new audit subsystem.
+- **G10d** DLNA `RenderingControl` (volume/mute for renderers). **Open, with
+  groundwork:** `dlna/src/soap.rs` already *parses* the `RenderingControl:1` service
+  and its `controlURL` out of the device description, but no volume or mute action is
+  implemented — the discovery half is done, the SOAP actions are not.
 - **G15** `probe(ip) -> Option<DiscoveredTv>` — "what is at this IP?" for guest Wi-Fi
-  and Android pickers that hand back an address.
-- **G16** Tizen DIAL URL launching through `TvClient::open_url`.
+  and Android pickers that hand back an address. **Open, premise holds:** nothing
+  probes a single address today.
+- **G16** Tizen DIAL URL launching through `TvClient::open_url`. **Open, and further
+  along than the wording suggests:** the facade already has `open_url()` and a test
+  pins Tizen *refusing* it (`open_url_is_refused_where_there_is_no_browser`), and
+  `crates/tizen/src/apps.rs` already carries DIAL. So this is wiring an existing
+  refusal to an existing DIAL surface, not new protocol work.
 - **G17** DLNA `get_transport_info` / `get_position_info`, so a cast's position is a
-  cold read rather than a session-scoped estimate.
+  cold read rather than a session-scoped estimate. **Open, premise holds:** neither
+  action appears in the crate.
 - **G18** event streams (`tv-rs` push instead of request/response) — the companion's
-  own list added it while this plan was written; it follows Tier B.
+  own list added it while this plan was written; it follows Tier B. **Open:** the only
+  `subscribe` in the tree is the agent's MQTT transport, which is not a facade push
+  API.
 
-### 2.7 X · Android TV as a target — the spike that decides (not a crate yet)
+### 2.5 X · Android TV as a target — the spike that decides (not a crate yet)
 
 The matrix deferred Android TV for ADB's trust model (developer mode, per-TV
 pairing). The peer landscape ([`03-matrix.md`](03-matrix.md#peer-landscape--the-same-work-in-other-languages))

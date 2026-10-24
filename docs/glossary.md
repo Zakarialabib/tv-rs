@@ -141,6 +141,32 @@ normal answer. Where: [`src/client.rs`](../crates/tv-rs/src/client.rs).
 **HIL** — hardware in the loop: tests that talk to real televisions, compiled out
 unless `--features hil` is on. Where: [`tests/hardware_in_the_loop.rs`](../crates/tv-rs/tests/hardware_in_the_loop.rs).
 
+**`discover_tvs_with(callback)`** — discovery that hands each device over as its
+descriptor resolves, so a television that answers in 40 ms surfaces then rather than
+after the slowest reply in the window. The socket loop is written out rather than shared
+with `msearch` because the descriptor fetch has to `await` inside it. Where: [`crates/discovery/src/client.rs`](../crates/discovery/src/client.rs).
+
+**`mdc_handle(address)`** — the facade's entry point for a commercial Samsung panel,
+returning the same erased `DeviceHandle` the rest of a fleet is driven through.
+Deliberately **not** reached through `TvClient` and **not** classified from discovery:
+SSDP carries no authoritative vendor field, so a panel answers it exactly as a consumer
+set does, and `DeviceOs::SamsungMdc` is never produced by a reply. The caller knows — an
+operator adding a panel by address, or a probe that found MDC listening. Where:
+[`crates/tv-rs/src/client.rs`](../crates/tv-rs/src/client.rs).
+
+**`platform-verifier`** — the `tv-rs-transport` feature that asks the operating system for
+a root store (`rustls-platform-verifier`) instead of reading one with
+`rustls-native-certs`. It exists because Android exposes a keystore and iOS its own roots,
+neither of which that call can see, so a mobile build with `TlsPolicy::Strict` had no roots
+to verify against. Additive: `Pinned` and `TrustOnFirstUse` install their own verifiers and
+never reach it, so it cannot weaken pinning. Where: [`crates/transport/src/tls.rs`](../crates/transport/src/tls.rs).
+
+**`installed_apps()` / `type_text()`** — the two facade reads and writes added alongside
+their capabilities. The first enumerates (webOS `listApps`, Roku `/query/apps`, Tizen
+refusing); the second types a string (Roku `keypress/Lit_<char>`, printable ASCII only,
+refused atomically so a refusal never leaves half a search term typed). Where:
+[`crates/tv-rs/src/handle.rs`](../crates/tv-rs/src/handle.rs).
+
 ## Process
 
 **ADR** — architecture decision record. Where: [ADR-001](adr/001-crate-publication.md).
@@ -153,18 +179,21 @@ dependencies resolvable on crates.io. Where: [`cargo xtask publish`](adr/001-cra
 ## Device model vocabulary
 
 **`Capability` / `CapabilitySet`** — what a _device_ can do, independent of vendor.
-Fifteen variants: `PowerState`, `Wake`, `Key`, `AppLaunch`, `Foreground`,
+Seventeen variants: `PowerState`, `Wake`, `Key`, `AppLaunch`, `Foreground`,
 `InputSelect`, `Volume`, `Brightness`, `Reboot`, `Telemetry`, `PanelLock`,
-`Orientation`, `NoSignalStatus` as always-on surfaces, plus `LampOrPanelHours`
-and `ScreenCapture` behind the core's `supporting` feature. A backend advertises
+`Orientation`, `NoSignalStatus`, `AppList` and `TextInput` as always-on surfaces, plus
+`LampOrPanelHours` and `ScreenCapture` behind the core's `supporting` feature. The last
+two declared are the narrowest on purpose: listing what is installed is not launching an
+application, and taking a string is not pressing a key — a platform can do one and not
+the other, and the refusal names the capability it actually lacks. A backend advertises
 exactly the set it supports, and the trait accessors enforce it — asking outside
 the set is `TvError::Unsupported`, not a silent no-op. Where:
 `crates/core/src/capability.rs`; the honest per-backend table:
 [03-matrix §Capability truth](03-matrix.md#capability-truth).
 
 **`DeviceHandle`** — the erased handle a fleet holds: `Arc<dyn DeviceHandle>` plus
-the capability traits (`PowerControl`, `KeyInput`, `AppLaunch`, `InputSelect`,
-`VolumeControl`) and the LFD surfaces (`PanelLockControl`, `OrientationControl`,
+the capability traits (`PowerControl`, `KeyInput`, `TextInput`, `AppLaunch`,
+`InputSelect`, `VolumeControl`) and the LFD surfaces (`PanelLockControl`, `OrientationControl`,
 `PanelHealthProvider`; behind `supporting`: `PanelHoursProvider`,
 `ScreenCapturer`). No generics, no vendor enum in the type. Where:
 `crates/core/src/capability.rs`; implemented for `TvClient` in

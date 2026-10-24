@@ -192,10 +192,10 @@ impl VolumeControl for MdcDevice {
         Ok(self.client.set_mute(muted).await?)
     }
 
-    /// MDC's status frame carries no mute bit this crate reads yet, so the answer
-    /// is "cannot tell" rather than a guess.
+    /// MDC answers mute directly (`0x00` status and the dedicated query); `None`
+    /// means the panel has no audio path at all.
     async fn mute(&self) -> Result<Option<bool>, TvError> {
-        Ok(None)
+        Ok(self.client.muted().await?)
     }
 }
 
@@ -318,6 +318,12 @@ impl DeviceHandle for MdcDevice {
     }
 
     fn as_app(&self) -> Option<&dyn tv_rs_core::AppLaunch> {
+        None
+    }
+
+    fn as_text(&self) -> Option<&dyn tv_rs_core::TextInput> {
+        // MDC has no text-entry command: a commercial panel's remote channel
+        // carries keys and inputs, never a string to type.
         None
     }
 
