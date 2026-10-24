@@ -184,7 +184,7 @@ desktop EDID probe.
 ### 3.11 X · Android TV as a target — the spike that decides (not a crate yet)
 
 The matrix deferred Android TV for ADB's trust model (developer mode, per-TV
-pairing). The peer landscape ([`03-matrix.md`](03-matrix.md#peer-landscape))
+pairing). The peer landscape ([`03-matrix.md`](03-matrix.md#peer-landscape--the-same-work-in-other-languages))
 researched 2026-10-23 found a second door: the **Android TV Remote protocol v2** —
 the same protocol the Google TV remote app speaks, no developer mode, pre-installed
 `Android TV Remote Service`, mTLS with the Polo pairing handshake on fixed

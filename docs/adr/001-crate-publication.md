@@ -31,7 +31,7 @@ All dependencies are MIT-compatible (`tokio`, `serde`, `reqwest`, `thiserror`,
 4. Link the Phase mapping in `docs/01-playbook.md` to crate versions in
    `docs/03-matrix.md`.
 5. Never panic in library code. Blocked capabilities return typed errors
-   (`TizenError::Unsupported`, `TvError::UnsupportedVendor`) instead of
+   (`TizenError::Unsupported`, `TvError::UnsupportedDevice`) instead of
    `unimplemented!()`, because a published crate must not abort a consumer's
    process.
 6. Keep the crate-per-protocol split (see §Integration Mode).

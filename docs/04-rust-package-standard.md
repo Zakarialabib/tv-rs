@@ -154,7 +154,7 @@ This is what makes CI meaningful:
 | Real hardware | Not in CI. Exercised manually, and this limitation is stated in the docs. |
 
 A project whose only tests require a live TV cannot be verified by anyone else.
-Name tests as behavioural sentences (`identifies_each_vendor_from_its_signature`,
+Name tests as behavioural sentences (`identifies_each_vendor_from_its_ssdp_signature`,
 not `test_vendor_2`).
 
 ---
