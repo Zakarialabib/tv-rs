@@ -170,6 +170,7 @@ impl SsdpScanner {
             .await?;
 
         let mut responses: Vec<SsdpMsearchResponse> = Vec::new();
+        let mut datagrams = 0usize;
         let mut seen: Vec<String> = Vec::new();
         let mut buffer = vec![0u8; RECV_BUFFER_SIZE];
         let deadline = tokio::time::Instant::now() + self.timeout;
@@ -182,6 +183,7 @@ impl SsdpScanner {
 
             match tokio::time::timeout(remaining, socket.recv_from(&mut buffer)).await {
                 Ok(Ok((len, peer))) => {
+                    datagrams += 1;
                     let raw = String::from_utf8_lossy(&buffer[..len]);
                     let response = parse_msearch_response(&raw, &peer.ip().to_string())?;
 
@@ -197,6 +199,14 @@ impl SsdpScanner {
                 Ok(Err(err)) => return Err(DiscoveryError::Io(err)),
                 Err(_) => break,
             }
+        }
+
+        if datagrams == 0 {
+            // Nothing answered. An empty list would read as "no displays on this
+            // network", which is a different statement and usually the wrong one.
+            return Err(DiscoveryError::SilentProbe {
+                target: target.to_string(),
+            });
         }
 
         Ok(responses)
@@ -218,17 +228,90 @@ impl SsdpScanner {
     /// Entries without a `LOCATION` header, or whose descriptor fetch fails,
     /// are skipped silently.
     pub async fn discover_tvs(&self) -> Result<Vec<(SsdpMsearchResponse, SsdpDeviceDescriptor)>> {
-        let responses = self.discover().await?;
-        let mut discovered = Vec::new();
+        self.discover_tvs_with(|_, _| {}).await
+    }
 
-        for response in responses {
-            let Some(location) = response.location.as_deref() else {
-                continue;
-            };
-            let Ok(descriptor) = self.fetch_descriptor(location).await else {
-                continue;
-            };
-            discovered.push((response, descriptor));
+    /// Like [`discover_tvs`](Self::discover_tvs), calling `on_found` as each
+    /// device's descriptor resolves.
+    ///
+    /// The callback is the point: a television that answers in 40 ms should
+    /// surface then, not after the slowest set in the reply window has answered.
+    /// A caller that wants the whole list anyway gets it as the return value.
+    ///
+    /// The socket loop is written out rather than shared with
+    /// [`msearch`](Self::msearch) because the descriptor fetch has to `await`
+    /// inside it; a per-reply async hook would need boxed futures to buy the same
+    /// thing. Entries without a `LOCATION`, or whose fetch fails, are skipped
+    /// silently — the same rule as `discover_tvs`.
+    ///
+    /// # Errors
+    ///
+    /// Same taxonomy as [`msearch`](Self::msearch), including
+    /// [`DiscoveryError::SilentProbe`] when nothing answers at all.
+    pub async fn discover_tvs_with<F>(
+        &self,
+        mut on_found: F,
+    ) -> Result<Vec<(SsdpMsearchResponse, SsdpDeviceDescriptor)>>
+    where
+        F: FnMut(&SsdpMsearchResponse, &SsdpDeviceDescriptor),
+    {
+        let multicast_addr: Ipv4Addr = SSDP_MULTICAST_IP
+            .parse()
+            .map_err(|err: std::net::AddrParseError| DiscoveryError::Malformed(err.to_string()))?;
+
+        let socket = UdpSocket::bind(self.bind_addr).await?;
+        socket.join_multicast_v4(multicast_addr, self.interface)?;
+
+        let datagram = build_msearch(SSDP_ALL_DEVICES, DEFAULT_MX);
+        socket
+            .send_to(datagram.as_bytes(), (multicast_addr, SSDP_UDP_PORT))
+            .await?;
+
+        let mut discovered: Vec<(SsdpMsearchResponse, SsdpDeviceDescriptor)> = Vec::new();
+        let mut datagrams = 0usize;
+        let mut seen: Vec<String> = Vec::new();
+        let mut buffer = vec![0u8; RECV_BUFFER_SIZE];
+        let deadline = tokio::time::Instant::now() + self.timeout;
+
+        loop {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+
+            match tokio::time::timeout(remaining, socket.recv_from(&mut buffer)).await {
+                Ok(Ok((len, peer))) => {
+                    datagrams += 1;
+                    let raw = String::from_utf8_lossy(&buffer[..len]);
+                    let response = parse_msearch_response(&raw, &peer.ip().to_string())?;
+
+                    if let Some(key) = response.usn.clone().or_else(|| response.location.clone()) {
+                        if seen.contains(&key) {
+                            continue;
+                        }
+                        seen.push(key);
+                    }
+
+                    let Some(location) = response.location.clone() else {
+                        continue;
+                    };
+                    let Ok(descriptor) = self.fetch_descriptor(&location).await else {
+                        continue;
+                    };
+                    on_found(&response, &descriptor);
+                    discovered.push((response, descriptor));
+                }
+                Ok(Err(err)) => return Err(DiscoveryError::Io(err)),
+                Err(_) => break,
+            }
+        }
+
+        if datagrams == 0 {
+            // Nothing answered. An empty list would read as "no displays on this
+            // network", which is a different statement and usually the wrong one.
+            return Err(DiscoveryError::SilentProbe {
+                target: SSDP_ALL_DEVICES.to_string(),
+            });
         }
 
         Ok(discovered)

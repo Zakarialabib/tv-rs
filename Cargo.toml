@@ -52,6 +52,12 @@ tokio-serial = { version = "5" }
 native-tls = "0.2"
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
 rustls-native-certs = "0.8"
+# Platform root-store verification (Android's keystore, Apple's Security
+# framework). Pinned to the version whose API was verified against docs.rs —
+# this crate's API has moved between releases, so do not widen it blind.
+# Not marked `optional` here: a workspace dependency cannot be, and optionality
+# is declared by the member crate that wants it (`tv-rs-transport`).
+rustls-platform-verifier = "0.7.1"
 sha2 = "0.10"
 url = "2"
 base64 = "0.23"

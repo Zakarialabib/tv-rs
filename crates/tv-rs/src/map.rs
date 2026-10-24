@@ -110,6 +110,14 @@ pub fn discovery(error: &tv_rs_discovery::DiscoveryError) -> TvError {
         DiscoveryError::Malformed(detail) | DiscoveryError::Xml(detail) => {
             TvError::Protocol(ProtocolError::Malformed(detail.clone()))
         }
+        // A silent probe means the local network did not answer at all — no display,
+        // or a permission the app has not been granted. The caller's action is the
+        // same one a refused socket gives (A5), so it reuses `Blocked` and its
+        // "grant access" remedy rather than inventing a third bucket, and `hint()`
+        // already names the grant.
+        DiscoveryError::SilentProbe { .. } => TvError::Transport(TransportError::Blocked {
+            reason: error.to_string(),
+        }),
         DiscoveryError::Http(_) => {
             TvError::Transport(TransportError::Unreachable(error.to_string()))
         }
@@ -148,6 +156,22 @@ mod tests {
     /// This is the table the plan asks for. It is deliberately written out rather
     /// than derived — the value of the test is that a human decided each row, and
     /// that the exhaustive matches above force a decision for every new variant.
+    /// A silent probe is not an empty list: the local network did not answer at
+    /// all, so the caller is asked to grant access rather than told there are no
+    /// displays and left to believe it.
+    #[test]
+    fn a_silent_probe_asks_for_access_rather_than_reporting_no_displays() {
+        let error = tv_rs_discovery::DiscoveryError::SilentProbe {
+            target: "ssdp:all".to_string(),
+        };
+        let mapped = discovery(&error);
+        assert_eq!(mapped.remedy(), Remedy::RequestPermission);
+        assert!(
+            mapped.hint().is_some(),
+            "the hint names the grant the caller has to make"
+        );
+    }
+
     #[test]
     fn every_vendor_error_routes_to_the_remedy_a_user_can_act_on() {
         use tv_rs_tizen::TizenError;

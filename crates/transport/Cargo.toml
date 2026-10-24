@@ -30,11 +30,22 @@ rustls = [
 ]
 native-tls = ["ws", "dep:native-tls", "tokio-tungstenite/native-tls"]
 
+# Ask the *operating system* for the root store instead of reading one with
+# `rustls-native-certs`. Additive and narrow: it changes only where the `Strict`
+# policy gets its roots, and leaves `Pinned` and `TrustOnFirstUse` — which
+# install their own verifiers — untouched, so it cannot weaken pinning.
+#
+# Why it exists: `rustls-native-certs` reads a system store. Android exposes a
+# keystore and iOS its own roots, neither of which that call can see, so a
+# mobile build with `Strict` has no roots to verify against.
+platform-verifier = ["rustls", "dep:rustls-platform-verifier"]
+
 [dependencies]
 futures-util = { workspace = true, optional = true }
 native-tls = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 rustls-native-certs = { workspace = true, optional = true }
+rustls-platform-verifier = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, optional = true }

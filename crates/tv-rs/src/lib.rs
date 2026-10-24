@@ -49,7 +49,7 @@ mod error;
 mod handle;
 mod types;
 
-pub use client::{discover, discover_with, identify_vendor, TvClient};
+pub use client::{discover, discover_stream, discover_with, identify_vendor, TvClient};
 pub use error::{Result, TvError};
 pub use types::{DiscoveredTv, TvVendor};
 

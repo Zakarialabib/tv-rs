@@ -5,6 +5,8 @@
 
 use std::time::Duration;
 
+use tv_rs_transport::Unsupported;
+
 use crate::error::{Result, RokuError};
 use crate::payload::{RokuActiveApp, RokuApp, RokuDeviceInfo};
 use crate::types::{
@@ -122,6 +124,17 @@ pub fn parse_active_app(xml: &str) -> Result<RokuActiveApp> {
     })
 }
 
+/// Builds the `Lit_<char>` path for a character the documented surface can carry.
+///
+/// Roku's ECP documentation covers printable ASCII ("Printable ASCII character code
+/// values can be transmitted as-is with the `Lit_` prefix"); anything else has no
+/// documented encoding here, so this answers `None` and the caller refuses rather
+/// than guess at a percent-encoding a search box would have to explain.
+#[must_use]
+fn literal_path(ch: char) -> Option<String> {
+    (ch.is_ascii_graphic() || ch == ' ').then(|| format!("{ECP_KEYPRESS_PATH_PREFIX}Lit_{ch}"))
+}
+
 /// Builds the ECP keypress path for `key`, e.g. `/keypress/PowerOff`.
 pub fn keypress_path(key: RokuKey) -> String {
     let segment = key.as_str();
@@ -230,6 +243,42 @@ impl RokuClient {
     /// 14.1+ that means *Control by mobile apps* is disabled, and the error says so.
     pub async fn send_keypress(&self, key: RokuKey) -> Result<()> {
         self.post(&keypress_path(key)).await
+    }
+
+    /// Types `text` into the focused field, one `Lit_<char>` request per character.
+    ///
+    /// Roku's ECP documentation: "The key parameter can either be a key name … or a
+    /// printable character value specified with the prefix `Lit_`. Printable ASCII
+    /// character code values can be transmitted as-is with the `Lit_` prefix." That
+    /// documented surface is printable ASCII; the encoding for anything else is not
+    /// documented in that source, so this refuses it rather than guessing at a
+    /// percent-encoding that a search box would then have to explain.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RokuError::Unsupported`] when `text` holds a character the
+    /// documented surface cannot carry, and [`RokuError::Http`] when the device
+    /// refuses a request.
+    pub async fn type_text(&self, text: &str) -> Result<()> {
+        // Validate the whole string before sending anything: refusing halfway
+        // through would leave half a search term typed into the field, which is
+        // worse than not having typed at all.
+        let paths: Vec<String> = text
+            .chars()
+            .map(|ch| {
+                literal_path(ch).ok_or_else(|| {
+                    RokuError::Unsupported(Unsupported::new(
+                        3,
+                        "non-ASCII characters are outside the documented printable-ASCII `Lit_` surface",
+                    ))
+                })
+            })
+            .collect::<Result<Vec<String>>>()?;
+
+        for path in &paths {
+            self.post(path).await?;
+        }
+        Ok(())
     }
 
     /// `POST`s to `path`, translating the two answers that are not failures of this
@@ -524,5 +573,42 @@ mod tests {
     fn a_non_active_app_document_is_rejected() {
         assert!(parse_active_app("<apps></apps>").is_err());
         assert!(parse_active_app("not xml at all").is_err());
+    }
+    /// Each character becomes its own `Lit_` request, in order.
+    #[test]
+    fn a_literal_path_is_the_character() {
+        assert_eq!(literal_path('r').as_deref(), Some("/keypress/Lit_r"));
+        assert_eq!(literal_path(' ').as_deref(), Some("/keypress/Lit_ "));
+        assert_eq!(literal_path('7').as_deref(), Some("/keypress/Lit_7"));
+    }
+
+    /// The documented surface is printable ASCII; everything else has no encoding
+    /// here and is refused rather than guessed at.
+    #[test]
+    fn a_character_outside_the_documented_surface_is_refused() {
+        assert!(
+            literal_path('é').is_none(),
+            "non-ASCII has no documented encoding"
+        );
+        assert!(
+            literal_path('\n').is_none(),
+            "a control character is not printable"
+        );
+        assert!(
+            literal_path('\u{20ac}').is_none(),
+            "the euro sign is not ASCII"
+        );
+    }
+
+    /// `type_text` refuses the whole string, so a search box never silently drops
+    /// the character it could not send.
+    #[tokio::test]
+    async fn typing_refuses_a_string_holding_one_bad_character() {
+        let client = RokuClient::new("10.0.0.4");
+        let error = client
+            .type_text("caf\u{e9}")
+            .await
+            .expect_err("é is refused");
+        assert!(matches!(error, RokuError::Unsupported(_)), "{error:?}");
     }
 }

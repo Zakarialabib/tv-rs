@@ -78,6 +78,6 @@ pub use pool::testkit;
 pub use protocol::SsapController;
 pub use tv_rs_transport::TlsPolicy;
 pub use types::{
-    SsapUri, SSAP_URI_PREFIX, WEBOS_CLIENT_KEY_FILE, WEBOS_DEFAULT_PERMISSIONS,
+    InstalledApp, SsapUri, SSAP_URI_PREFIX, WEBOS_CLIENT_KEY_FILE, WEBOS_DEFAULT_PERMISSIONS,
     WEBOS_PAIRING_TYPE_PROMPT, WEBOS_WSS_PORT, WEBOS_WS_PORT,
 };

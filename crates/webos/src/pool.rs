@@ -44,7 +44,7 @@ use crate::error::{Result, WebosError};
 use crate::pointer::{
     extract_socket_path, BoxedPointerFactory, LivePointerFactory, PointerFrame, PointerWire,
 };
-use crate::types::SsapUri;
+use crate::types::{InstalledApp, SsapUri};
 
 /// Sessions idle for at least this long are dropped and opened fresh on the
 /// next command.
@@ -391,6 +391,34 @@ impl<F: WebosSessionFactory> WebosSessionPool<F> {
         }
     }
 
+    /// Lists installed applications through the pooled session.
+    ///
+    /// `ssap://com.webos.applicationManager/listApps` answers
+    /// `{"apps":[{"id": ..., "title": ...}]}`. An entry with no id is skipped
+    /// rather than surfaced as a blank row.
+    pub async fn list_apps(&self, client: &WebosClient) -> Result<Vec<InstalledApp>> {
+        let payload = match self
+            .dispatch(client, &Op::Request(SsapUri::SystemLauncherListApps, None))
+            .await?
+        {
+            OpOutcome::Value(value) => value,
+            _ => unreachable!("a request op yields a value"),
+        };
+        let apps = payload
+            .get("apps")
+            .and_then(Value::as_array)
+            .ok_or_else(|| WebosError::Protocol("listApps carried no `apps` array".to_owned()))?;
+        Ok(apps
+            .iter()
+            .filter_map(|app| {
+                Some(InstalledApp {
+                    id: app.get("id").and_then(Value::as_str)?.to_owned(),
+                    title: app.get("title").and_then(Value::as_str).map(str::to_owned),
+                })
+            })
+            .collect())
+    }
+
     /// Switches the active input through the pooled session.
     ///
     /// `input_id` is the webOS id (`HDMI_1`, `tv`, …); mapping a vendor-neutral
@@ -629,6 +657,14 @@ pub mod testkit {
                     "socketPath": "wss://10.0.0.9:3001/resources/h/netinput.pointer.sock"
                 }),
                 SsapUri::AudioGetMute => json!({ "mute": true }),
+                // One entry with a title, one without: a missing title is `None`,
+                // not an empty string.
+                SsapUri::SystemLauncherListApps => json!({
+                    "apps": [
+                        { "id": "com.webos.app.netflix", "title": "Netflix" },
+                        { "id": "com.webos.app.primevideo" }
+                    ]
+                }),
                 _ => Value::Null,
             })
         }
@@ -807,6 +843,19 @@ mod tests {
         assert_eq!(opens.load(Ordering::SeqCst), 1, "session must be reused");
         assert_eq!(served.load(Ordering::SeqCst), 3);
         assert_eq!(pool.len().await, 1);
+    }
+
+    #[tokio::test]
+    async fn list_apps_parses_ids_and_titles() {
+        let (opens, served) = counters();
+        let pool = WebosSessionPool::with_factory(factory(opens, 0, served));
+        let client = WebosClient::new("10.0.0.5");
+
+        let apps = pool.list_apps(&client).await.expect("list");
+        assert_eq!(apps.len(), 2);
+        assert_eq!(apps[0].id, "com.webos.app.netflix");
+        assert_eq!(apps[0].title.as_deref(), Some("Netflix"));
+        assert_eq!(apps[1].title, None, "a missing title stays missing");
     }
 
     #[tokio::test]

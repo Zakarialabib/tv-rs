@@ -9,11 +9,11 @@
 //!
 //! [`TvClient`] advertises only what it can actually do today, per vendor:
 //!
-//! | Vendor | power | wake | key | app | foreground | input | volume | panel lock | orientation | panel health |
-//! |---|---|---|---|---|---|---|---|---|---|---|
-//! | Tizen | ✓ | MAC | ✓ | ✓ | — | — | — | — | — | — |
-//! | webOS | ✓ | MAC | ✓ | ✓ | ✓ | — | ✓ | — | — | — |
-//! | Roku | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — |
+//! | Vendor | power | wake | key | text | app | app list | foreground | input | volume | panel lock | orientation | panel health |
+//! |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+//! | Tizen | ✓ | MAC | ✓ | — | ✓ | — | — | — | — | — | — | — |
+//! | webOS | ✓ | MAC | ✓ | — | ✓ | ✓ | ✓ | — | ✓ | — | — | — |
+//! | Roku | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — |
 //!
 //! `wake` reads `MAC` where the vendor drops its network stack when it sleeps:
 //! the only wake path there is a broadcast magic packet, which needs an address
@@ -32,8 +32,9 @@ use async_trait::async_trait;
 
 use tv_rs_core::ProtocolError;
 use tv_rs_core::{
-    AppLaunch, AppRef, Capability, CapabilitySet, DeviceDescriptor, DeviceHandle, DeviceId,
-    DeviceOs, Input, InputSelect, Key, KeyInput, PowerControl, PowerState, TvError, VolumeControl,
+    AppLaunch, AppRef, Capability, CapabilitySet, CommandId, DeviceDescriptor, DeviceHandle,
+    DeviceId, DeviceOs, Input, InputSelect, Key, KeyInput, PowerControl, PowerState, TextInput,
+    TvError, VolumeControl,
 };
 use tv_rs_power::MacAddress;
 use tv_rs_roku::RokuKey;
@@ -59,6 +60,9 @@ impl TvClient {
                 set.insert(Capability::Volume);
                 set.insert(Capability::Key);
                 set.insert(Capability::InputSelect);
+                // `ssap://com.webos.applicationManager/listApps` answers with the
+                // installed catalogue, so this is a fact rather than a promise.
+                set.insert(Capability::AppList);
             }
             Self::Roku { .. } => {
                 set.insert(Capability::Key);
@@ -69,6 +73,10 @@ impl TvClient {
                 // `/query/active-app` says what is in front, which is the whole
                 // input of an "on screen" card.
                 set.insert(Capability::Foreground);
+                // `/query/apps` lists what is installed.
+                set.insert(Capability::AppList);
+                // `keypress/Lit_<char>` types printable ASCII.
+                set.insert(Capability::TextInput);
             }
         }
         // The other two drop their network stack when they sleep, so a magic
@@ -183,6 +191,12 @@ impl DeviceHandle for TvClient {
         Some(self)
     }
 
+    fn as_text(&self) -> Option<&dyn TextInput> {
+        self.core_capabilities()
+            .contains(Capability::TextInput)
+            .then_some(self as &dyn TextInput)
+    }
+
     fn as_key(&self) -> Option<&dyn KeyInput> {
         self.core_capabilities()
             .contains(Capability::Key)
@@ -223,25 +237,21 @@ impl PowerControl for TvClient {
 
     async fn wake(&self) -> Result<(), TvError> {
         match self {
-            // ECP answers while the screen is dark: no packet, no MAC.
-            Self::Roku { client, .. } => client
-                .power_on()
-                .await
-                .map_err(|error| map::roku(&error, Capability::Wake)),
+            // ECP answers while the screen is dark, so this is normally enough. A
+            // set that is fully off answers nothing at all, and then the packet is
+            // the only path — but only when a caller supplied an address.
+            Self::Roku { client, .. } => match client.power_on().await {
+                Ok(()) => Ok(()),
+                Err(error) => match self.mac() {
+                    Some(mac) => wake_with_packet(mac).await,
+                    None => Err(map::roku(&error, Capability::Wake)),
+                },
+            },
             // Tizen and webOS drop their network stack when they sleep, so the
             // broadcast packet is the only path — and it needs the address the
             // caller supplied. Without one this is a refusal, not a guess.
             Self::Tizen { .. } | Self::Webos { .. } => match self.mac() {
-                Some(mac) => {
-                    let address = mac.parse::<MacAddress>().map_err(|_| {
-                        TvError::Protocol(ProtocolError::Malformed(format!(
-                            "`{mac}` is not a hardware address"
-                        )))
-                    })?;
-                    tv_rs_power::wake_on_lan(&address)
-                        .await
-                        .map_err(|error| map::power(&error))
-                }
+                Some(mac) => wake_with_packet(mac).await,
                 None => Err(TvError::Unsupported(Capability::Wake)),
             },
         }
@@ -307,6 +317,66 @@ impl AppLaunch for TvClient {
                 Ok(active.app_id.map(AppRef::new))
             }
             Self::Tizen { .. } => Err(TvError::Unsupported(Capability::Foreground)),
+        }
+    }
+
+    /// Lists installed applications. webOS answers `listApps` and Roku answers
+    /// `/query/apps`; Tizen exposes neither over its REST API, so it keeps the
+    /// trait default rather than a fabricated catalogue.
+    async fn installed_apps(&self) -> Result<Vec<AppRef>, TvError> {
+        match self {
+            Self::Webos { client, pool, .. } => {
+                let apps = pool
+                    .list_apps(client)
+                    .await
+                    .map_err(|error| map::webos(&error, Capability::AppLaunch))?;
+                Ok(apps
+                    .into_iter()
+                    .map(|app| AppRef {
+                        id: app.id,
+                        name: app.title,
+                    })
+                    .collect())
+            }
+            Self::Roku { client, .. } => {
+                let apps = client
+                    .query_apps()
+                    .await
+                    .map_err(|error| map::roku(&error, Capability::AppLaunch))?;
+                Ok(apps
+                    .into_iter()
+                    .map(|app| AppRef {
+                        id: app.id,
+                        name: Some(app.name),
+                    })
+                    .collect())
+            }
+            // Listing is its own capability, so the refusal names `AppList`: Tizen
+            // launches what it cannot enumerate, and saying `AppLaunch` here would
+            // claim the wrong thing.
+            Self::Tizen { .. } => Err(TvError::Unsupported(Capability::AppList)),
+        }
+    }
+}
+
+#[async_trait]
+impl TextInput for TvClient {
+    /// Types a string into the focused field.
+    ///
+    /// Only Roku has a verified surface here (`keypress/Lit_<char>`). webOS's IME
+    /// and Tizen's `SendInputString` are named in the plan but are not traced to a
+    /// source in this workspace, so both keep the trait default, which names
+    /// [`Capability::TextInput`] — an unverified protocol operation does not
+    /// exist, and a search box that types nothing is worse than one that refuses.
+    async fn type_text(&self, text: &str, _cmd: CommandId) -> Result<(), TvError> {
+        match self {
+            Self::Roku { client, .. } => client
+                .type_text(text)
+                .await
+                .map_err(|error| map::roku(&error, Capability::TextInput)),
+            Self::Tizen { .. } | Self::Webos { .. } => {
+                Err(TvError::Unsupported(Capability::TextInput))
+            }
         }
     }
 }
@@ -455,6 +525,21 @@ fn tizen_key(key: Key) -> Result<TizenRemoteKey, TvError> {
 }
 
 /// Maps a core key onto the Roku ECP key vocabulary.
+/// Sends the magic packet a sleeping panel needs.
+///
+/// A packet is addressed to a hardware address, so a malformed one is a
+/// `Protocol::Malformed` rather than a silent no-op.
+async fn wake_with_packet(mac: &str) -> Result<(), TvError> {
+    let address = mac.parse::<MacAddress>().map_err(|_| {
+        TvError::Protocol(ProtocolError::Malformed(format!(
+            "`{mac}` is not a hardware address"
+        )))
+    })?;
+    tv_rs_power::wake_on_lan(&address)
+        .await
+        .map_err(|error| map::power(&error))
+}
+
 /// Maps a vendor-neutral input to the id webOS' `switchInput` expects.
 ///
 /// The ids are the ones `ssap://tv/getExternalInputList` reports: `HDMI_1`,
@@ -593,6 +678,7 @@ mod tests {
                     Capability::Foreground,
                     Capability::InputSelect,
                     Capability::Volume,
+                    Capability::AppList,
                 ],
             ),
             (
@@ -603,6 +689,8 @@ mod tests {
                     Capability::Key,
                     Capability::AppLaunch,
                     Capability::Foreground,
+                    Capability::AppList,
+                    Capability::TextInput,
                 ],
             ),
         ] {
@@ -636,6 +724,11 @@ mod tests {
                 set.contains(Capability::InputSelect),
                 client.as_input().is_some(),
                 "the input accessor follows the advertised set"
+            );
+            assert_eq!(
+                set.contains(Capability::TextInput),
+                client.as_text().is_some(),
+                "the text accessor follows the advertised set"
             );
         }
     }
@@ -715,6 +808,86 @@ mod tests {
             .await
             .expect_err("nothing listens");
         assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
+    }
+
+    /// The whole point of `AppList` as its own capability: Tizen launches what it
+    /// cannot enumerate, so the refusal must name the listing, never the launching.
+    #[tokio::test]
+    async fn tizen_refuses_to_list_without_refusing_to_launch() {
+        let client = tizen();
+        assert!(!client.capabilities().contains(Capability::AppList));
+        let error = AppLaunch::installed_apps(&client)
+            .await
+            .expect_err("Tizen keeps the trait default");
+        assert!(
+            matches!(error, TvError::Unsupported(Capability::AppList)),
+            "{error:?}"
+        );
+        assert!(!matches!(
+            error,
+            TvError::Unsupported(Capability::AppLaunch)
+        ));
+    }
+
+    /// Advertised where it is delivered: Roku (`/query/apps`) and webOS
+    /// (`listApps`) enumerate, and neither advertises a capability it cannot back.
+    #[test]
+    fn app_list_is_advertised_where_the_catalogue_is_real() {
+        assert!(roku().capabilities().contains(Capability::AppList));
+        assert!(webos().capabilities().contains(Capability::AppList));
+        assert!(!tizen().capabilities().contains(Capability::AppList));
+    }
+
+    /// The arm must be reached, not the trait default: port 1 refuses instantly,
+    /// so a transport error here proves the request was sent.
+    #[tokio::test]
+    async fn installed_apps_reaches_the_device() {
+        let client = TvClient::Roku {
+            client: RokuClient::with_base_url("http://127.0.0.1:1"),
+            mac: None,
+        };
+        let error = AppLaunch::installed_apps(&client)
+            .await
+            .expect_err("nothing listens");
+        assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
+    }
+
+    /// Advertised where it is delivered: Roku's `Lit_<char>` is documented, and
+    /// webOS/Tizen have no traced text-entry surface at all.
+    #[test]
+    fn text_input_is_advertised_only_where_it_is_documented() {
+        assert!(roku().capabilities().contains(Capability::TextInput));
+        assert!(!webos().capabilities().contains(Capability::TextInput));
+        assert!(!tizen().capabilities().contains(Capability::TextInput));
+    }
+
+    /// The arm must be reached, not the trait default: port 1 refuses instantly, so
+    /// a transport error here proves the request was sent.
+    #[tokio::test]
+    async fn type_text_reaches_the_device() {
+        let client = TvClient::Roku {
+            client: RokuClient::with_base_url("http://127.0.0.1:1"),
+            mac: None,
+        };
+        let error = TextInput::type_text(&client, "hello", CommandId::new())
+            .await
+            .expect_err("nothing listens");
+        assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
+    }
+
+    /// webOS and Tizen refuse by naming `TextInput`, never `Key`: a device that can
+    /// press buttons may still have no way to take a string.
+    #[tokio::test]
+    async fn the_unverified_vendors_refuse_to_type() {
+        for client in [tizen(), webos()] {
+            let error = TextInput::type_text(&client, "hello", CommandId::new())
+                .await
+                .expect_err("no traced surface");
+            assert!(
+                matches!(error, TvError::Unsupported(Capability::TextInput)),
+                "{error:?}"
+            );
+        }
     }
 
     #[tokio::test]
