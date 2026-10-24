@@ -119,6 +119,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`Reconciler::release()` — a quarantined device can be put back in rotation (companion
+  gap G8)**: the Fleet › "Release from quarantine" action had no lever. Quarantine is a
+  stop, not a verdict, so whoever fixed the television needs a way to say "try this one
+  again" without restarting the agent. Both halves have to move for that to be true: the
+  reconciler's list decides whether a device is visited at all, and the ladder's count
+  decides which step it resumes on — releasing one without the other leaves the device
+  held, or resumes it at the attempt that quarantined it, so it is one call and not two.
+  `HealerLadder::release()` is the count half. The attempt is audited either way
+  (`release_from_quarantine`, `ok` or `skipped`), because a technician grepping the log for
+  a device should see that someone tried, not only when it worked.
+
+### Added
+
 - **MDC reaches the facade (companion gap G10e)**: `tv_rs::mdc_handle(address)` returns a
   commercial panel as the same erased `DeviceHandle` the rest of the fleet is driven
   through, so panels stop being a special case at the call site; the facade also

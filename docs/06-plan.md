@@ -148,12 +148,10 @@ playbook with their sources, then `type_text()` answering on both.
 
 Each entry was checked against the code before being left standing, because these
 premises go stale: what the audit found is recorded next to the item. Landed items are
-gone from the list — G3 (streaming discovery) and G10e (MDC behind the facade) both
-landed, and their rationale now lives in the CHANGELOG and the glossary.
+gone from the list — G3 (streaming discovery), G8 (release from quarantine) and G10e (MDC
+behind the facade) all landed, and their rationale now lives in the CHANGELOG and the
+glossary.
 
-- **G8** `HealerLadder::release()` plus an audit entry, for Fleet › "Release from
-  quarantine". **Half-built:** `crates/agent/src/audit.rs` already exists, so this is
-  the ladder's `release()` plus the entry, not a new audit subsystem.
 - **G10d** DLNA `RenderingControl` (volume/mute for renderers). **Open, with
   groundwork:** `dlna/src/soap.rs` already *parses* the `RenderingControl:1` service
   and its `controlURL` out of the device description, but no volume or mute action is

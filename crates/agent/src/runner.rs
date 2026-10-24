@@ -101,6 +101,41 @@ impl Reconciler {
         &self.quarantined
     }
 
+    /// Puts a quarantined device back into rotation.
+    ///
+    /// Quarantine is a stop, not a verdict: whoever fixed the television — or the
+    /// network in front of it — needs a way to say "try this one again" without
+    /// restarting the agent. Both halves have to move for that to be true: the
+    /// reconciler's own list decides whether a device is visited at all, and the
+    /// ladder's count decides which step it resumes on. Releasing one without the
+    /// other leaves the device held, or resumes it at the attempt that quarantined
+    /// it — which is why this is one call and not two.
+    ///
+    /// Returns whether the device was actually being held, so a UI can say
+    /// "released" rather than "released (it was not quarantined)".
+    ///
+    /// The attempt is audited either way: a technician grepping the log for a device
+    /// should see that someone tried, not only when it worked.
+    pub async fn release(&mut self, device_id: &str) -> bool {
+        let held = self.quarantined.iter().any(|id| id == device_id);
+        self.quarantined.retain(|id| id != device_id);
+
+        if let Ok(id) = tv_rs_core::DeviceId::new(device_id) {
+            self.ladder.release(&id);
+        }
+
+        self.record(
+            device_id,
+            "in_rotation",
+            "release_from_quarantine",
+            if held { "ok" } else { "skipped" },
+            "inferred",
+        )
+        .await;
+
+        held
+    }
+
     /// Runs one pass over every device and returns what happened.
     pub async fn tick(&mut self) -> Vec<Outcome> {
         let mut outcomes = Vec::with_capacity(self.fleet.len());
@@ -535,6 +570,94 @@ mod tests {
         let text = tokio::fs::read_to_string(log.path()).await.unwrap();
         assert_eq!(text.lines().count(), 2);
         assert!(text.contains("\"failed\""), "{text}");
+
+        tokio::fs::remove_dir_all(dir).await.unwrap();
+        tokio::fs::remove_dir_all(audit_dir).await.unwrap();
+    }
+
+    /// Release has to move both halves, and this is the test that says so. The
+    /// reconciler's list decides whether a device is visited at all; the ladder's
+    /// count decides which step it resumes on. Moving one without the other leaves
+    /// the device held, or resumes it at the attempt that quarantined it.
+    ///
+    /// The device is one that can never launch (it advertises `PowerState` and
+    /// nothing else), so every pass fails the same way and quarantine is
+    /// deterministic. `max_failures: 2` is what makes the ladder half observable:
+    /// after a release, one more failure must *not* quarantine, because the count
+    /// restarted rather than resuming at two.
+    #[tokio::test]
+    async fn releasing_a_device_returns_it_to_rotation_and_restarts_its_ladder() {
+        let (provider, dir) = provider_for(r#"{"tv-6":{"power":"on","app":"netflix"}}"#).await;
+        let limited = MockBackend::new(descriptor("tv-6"))
+            .with_capabilities(CapabilitySet::of(Capability::PowerState));
+        let device = Arc::new(limited);
+
+        let audit_dir = unique_dir("tv-rs-release");
+        tokio::fs::create_dir_all(&audit_dir).await.unwrap();
+        let log = AuditLog::new(audit_dir.join("audit.jsonl"));
+
+        let mut reconciler = Reconciler::with_policy(
+            vec![device.clone()],
+            provider,
+            ReconcilePolicy {
+                max_failures: 2,
+                telemetry: None,
+                ..ReconcilePolicy::default()
+            },
+        )
+        .with_audit(log.clone());
+
+        // First failure: the ladder's first step, not quarantine.
+        let outcomes = reconciler.tick().await;
+        assert_ne!(outcomes[0].result, "quarantined", "{outcomes:?}");
+
+        // Second: now it is held.
+        let outcomes = reconciler.tick().await;
+        assert_eq!(outcomes[0].result, "quarantined", "{outcomes:?}");
+        assert_eq!(reconciler.quarantined(), ["tv-6"]);
+
+        // A further pass touches nothing at all: that is what quarantine means.
+        let actions_before = device.actions().len();
+        let outcomes = reconciler.tick().await;
+        assert_eq!(outcomes[0].result, "quarantined", "{outcomes:?}");
+        assert_eq!(device.actions().len(), actions_before);
+
+        assert!(reconciler.release("tv-6").await, "it was being held");
+        assert!(reconciler.quarantined().is_empty());
+
+        // The count restarted: the next failure is the *first* step again, so it is
+        // visited and fails without being quarantined.
+        let outcomes = reconciler.tick().await;
+        assert_ne!(
+            outcomes[0].result, "quarantined",
+            "the ladder restarted rather than resuming: {outcomes:?}"
+        );
+
+        let text = tokio::fs::read_to_string(log.path()).await.unwrap();
+        assert!(text.contains("release_from_quarantine"), "{text}");
+        assert!(text.contains("\"ok\""), "{text}");
+
+        tokio::fs::remove_dir_all(dir).await.unwrap();
+        tokio::fs::remove_dir_all(audit_dir).await.unwrap();
+    }
+
+    /// Releasing a device that was not held is audited as skipped, so a technician
+    /// reading the log sees the attempt rather than silence.
+    #[tokio::test]
+    async fn releasing_a_device_that_was_not_held_is_audited_as_skipped() {
+        let (provider, dir) = provider_for(r#"{"tv-7":{"power":"on"}}"#).await;
+        let device = Arc::new(MockBackend::new(descriptor("tv-7")));
+
+        let audit_dir = unique_dir("tv-rs-release-skipped");
+        tokio::fs::create_dir_all(&audit_dir).await.unwrap();
+        let log = AuditLog::new(audit_dir.join("audit.jsonl"));
+
+        let mut reconciler = Reconciler::new(vec![device], provider).with_audit(log.clone());
+        assert!(!reconciler.release("tv-7").await, "nothing was held");
+
+        let text = tokio::fs::read_to_string(log.path()).await.unwrap();
+        assert!(text.contains("release_from_quarantine"), "{text}");
+        assert!(text.contains("\"skipped\""), "{text}");
 
         tokio::fs::remove_dir_all(dir).await.unwrap();
         tokio::fs::remove_dir_all(audit_dir).await.unwrap();

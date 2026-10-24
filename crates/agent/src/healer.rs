@@ -92,6 +92,21 @@ impl HealerLadder {
         self.failures.get(device).copied().unwrap_or(0)
     }
 
+    /// Releases a device: clears its failure history so the ladder starts over.
+    ///
+    /// Quarantine is a stop, not a verdict, so a human who has fixed the television
+    /// (or the network in front of it) needs a way to say "try this one again". The
+    /// count is what makes a device ineligible, so clearing it is the whole release —
+    /// and the ladder restarts from its first step rather than resuming at the
+    /// attempt that quarantined it.
+    ///
+    /// Returns whether anything was recorded, so a caller can tell "released" from
+    /// "was never held". It does not touch a reconciler's own quarantine list: that
+    /// is the caller's, and one of them has to own the decision.
+    pub fn release(&mut self, device: &DeviceId) -> bool {
+        self.failures.remove(device).is_some()
+    }
+
     /// Whether a device is currently quarantined.
     #[must_use]
     pub fn is_quarantined(&self, device: &DeviceId) -> bool {
@@ -154,5 +169,33 @@ mod tests {
         let mut ladder = HealerLadder::new(3);
         let action = ladder.on_failure(&device(), &TvError::Unsupported(Capability::Wake));
         assert_eq!(action, HealerAction::Quarantine);
+    }
+    /// A released device is eligible again, and the ladder starts from the first
+    /// step — not from the attempt that quarantined it.
+    #[test]
+    fn releasing_a_quarantined_device_starts_the_ladder_over() {
+        let mut ladder = HealerLadder::new(2);
+        let device = device();
+        let error = TvError::Transport(TransportError::Unreachable("off".into()));
+
+        assert_eq!(ladder.on_failure(&device, &error), HealerAction::Wake);
+        assert_eq!(ladder.on_failure(&device, &error), HealerAction::Quarantine);
+        assert!(ladder.is_quarantined(&device));
+
+        assert!(ladder.release(&device), "it was held");
+        assert!(!ladder.is_quarantined(&device));
+        assert_eq!(ladder.failures(&device), 0);
+        assert_eq!(
+            ladder.on_failure(&device, &error),
+            HealerAction::Wake,
+            "the ladder restarts, it does not resume"
+        );
+    }
+
+    /// Releasing something that was never held says so, rather than pretending.
+    #[test]
+    fn releasing_an_untouched_device_reports_nothing_was_held() {
+        let mut ladder = HealerLadder::new(3);
+        assert!(!ladder.release(&device()));
     }
 }
