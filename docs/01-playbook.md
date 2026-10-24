@@ -108,6 +108,39 @@ certificate is handled by `TlsPolicy::Pinned` / `TrustOnFirstUse`; see
 [`architecture.md`](architecture.md#where-the-transport-crate-sits) and the TLS
 section of [`../INTEGRATION.md`](../INTEGRATION.md).
 
+**The MAC is readable before pairing.** `GET http://<ip>:8001/api/v2/` (plain HTTP, no
+auth header, no token) answers a JSON document whose `device.wifiMac` is the set's
+hardware address:
+
+```json
+{ "device": { "networkType": "wireless", "wifiMac": "B8:BC:5B:B1:F2:D2", "modelName": "QN55LS03RAFXZA" } }
+```
+
+Traps: `wifiMac` is **optional** on some firmware/models — parse it as optional and refuse
+when absent rather than falling back to something else. It is the Wi-Fi address even when
+the set is wired (`networkType: "wired"`), so a Wake-on-LAN caller should cross-check
+`networkType` before assuming it is the interface that will answer. And `device.ssid` is
+sometimes *itself* a MAC-shaped value — it is not a second source. Samsung does not
+document this endpoint anywhere; the provenance is community reverse-engineering,
+corroborated by five independent captures (samsung-tv-ws-api's `rest.py` issues it with no
+token; four public debug logs carry the field).
+
+**Typing text** goes over the remote channel, so it needs the pairing token like any other
+`ms.remote.control` command. The text is **base64** and travels in `Cmd`:
+
+```json
+{ "method": "ms.remote.control",
+  "params": { "Cmd": "<base64 of the UTF-8 bytes>", "DataOfCmd": "base64", "TypeOfRemote": "SendInputString" } }
+```
+
+There is no `Option` field here, unlike `SendRemoteKey`. Some firmware wants a
+`ms.channel.emit` broadcast of `custom.remote.textReceived` first, and `SendInputEnd` closes
+the session — treat both as conditional, not mandatory. A password sent this way needs
+`wss` on 8002 rather than plain `ws` on 8001. With no text field focused, nothing is typed
+and no error frame says so. Sources: samsung-tv-ws-api `remote.py` (the base64 encoding and
+the exact frame), samsungctl issue #75 (the same frame stated independently), and
+ha-samsungtv-smart's `samsungws.py`.
+
 ## §4 LG webOS
 
 **SSAP** (Second Screen Application Protocol) — a JSON-RPC-flavoured WebSocket on
@@ -138,6 +171,37 @@ required fields) and by LG's own Application Manager reference
 library (`hobbyquaker/lgtv2`) maps the same reply to id → title. The crate's URI is
 `listApps`, the name webOS uses on consumer televisions; `listLaunchPoints` is the name
 the open-source tree documents.
+
+**Typing text** is an IME service call, and the text is plain UTF-8 — not base64, unlike
+Samsung:
+
+```
+ssap://com.webos.service.ime/insertText       {"text": "hello", "replace": true}
+ssap://com.webos.service.ime/sendEnterKey     {}
+ssap://com.webos.service.ime/deleteCharacters {"count": 1}
+```
+
+It answers `{"returnValue": true}` or `{"returnValue": false, "errorText": "…"}`. Needs the
+paired session, and a focused text field — with none focused it fails rather than typing
+somewhere. `replace` is a boolean. Sources: webOS OSE's IME reference (method, params,
+return shape, ACG `ime.operation`) and lgtv2's command table (the consumer SSAP URI), with
+a public Home-Assistant workaround showing it working on webOS 25. The weakest of the
+verified entries here: LG's *consumer* docs do not cover `com.webos.service.ime` at all,
+only the open-source tree does.
+
+**The MAC is not verified, and the honest answer is to keep refusing.** Neither
+`ssap://system/getSystemInfo` nor `com.webos.service.tv.systemproperty` `getSystemInfo`
+returns one — that key set is closed (`boardType`, `firmwareVersion`, `modelName`,
+`sdkVersion`, `UHD`, `_3d`), and LG staff have said twice, in 2023 and 2025, that no MAC
+API is provided. The only endpoint that carries one is
+`ssap://com.webos.service.connectionmanager/getinfo` (`wifiInfo.macAddress` /
+`wiredInfo.macAddress`), documented in the OSE tree and implemented by lgtv2 — but absent
+from LG's consumer documentation, its MAC-bearing objects gated at **API level 29** (the
+method itself is level 11), and lgtv2 swallows the failure so its code cannot distinguish
+working from refused. That is not verified, so it is not code. Two traps either way:
+`READ_NETWORK_STATE` in a pairing manifest is not evidence that `getinfo` is permitted, and
+**LGUDID is not a MAC** — it is a hash seeded from one, and must never be stored in
+`DeviceDescriptor::mac`.
 
 Traps:
 

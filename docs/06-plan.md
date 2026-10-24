@@ -92,10 +92,21 @@ their network stack when they sleep. `TvClient::with_mac` supplies that address,
 the convenience half — learning the address instead of asking for it.
 
 `TvClient::learn_mac()` answers on Roku (`/query/device-info`, Wi-Fi address preferred
-over wired). On Samsung and webOS it refuses, because **neither endpoint this item
-originally named has a verified source in this workspace**: the playbook records no
-`:8001/api/v2/` `wifiMac` field and no `ssap://system/getSystemInfo` MAC, and the rule
-here is that a capability without a verified vendor command does not exist. Refusing
+over wired). **Samsung is now unblocked and only needs implementing:** the endpoint this
+item named does exist — `GET http://<ip>:8001/api/v2/` answers `device.wifiMac`, needs no
+pairing, and is corroborated by five independent captures. It is recorded in
+[`01-playbook.md`](01-playbook.md) §3 with its traps (`wifiMac` is optional on some
+firmware, it is the Wi-Fi address even on a wired set so `networkType` should be
+cross-checked, and `device.ssid` is sometimes MAC-shaped — not a second source).
+
+**webOS keeps refusing, and the reason is now precise rather than "untraced."** The two
+endpoints the item named return no MAC at all: `getSystemInfo`'s key set is closed
+(`boardType`, `firmwareVersion`, `modelName`, `sdkVersion`, `UHD`, `_3d`), and LG staff
+have said twice — 2023 and 2025 — that no MAC API is provided. The one endpoint that does
+carry a MAC (`com.webos.service.connectionmanager/getinfo`) is OSE-only, absent from LG's
+consumer documentation, gated at API level 29, and lgtv2 swallows its failure so it cannot
+distinguish working from refused. That is a refusal with evidence behind it, not a gap in
+our research. Refusing
 is the honest answer until someone traces one.
 
 **Exit:** a provenance-traced source for each endpoint (added to
@@ -134,12 +145,20 @@ a percent-encoding. `Capability::TextInput` is its own capability (declared afte
 and the refusal names it, never `Capability::Key`: a device that can press buttons may
 still have no way to take a string.
 
-**webOS and Tizen are open, and neither premise is traced.** The plan names webOS IME
-`insertText` and Tizen `SendInputString` (base64); a search of the workspace finds no
-occurrence of either, and the playbook records no text-entry command for either vendor.
-Same rule as every other gap here — a capability without a verified vendor command does
-not exist — so both keep the trait default, which names `TextInput` and leaves the
-control greyed out rather than silently typing nothing.
+**Both remaining halves are now unblocked and need implementing.** The plan named webOS
+IME `insertText` and Tizen `SendInputString`, and both traced to two independent sources,
+now recorded in [`01-playbook.md`](01-playbook.md) §3 and §4 with their exact frames:
+
+- **Tizen** — `ms.remote.control` with `{"Cmd": "<base64>", "DataOfCmd": "base64",
+  "TypeOfRemote": "SendInputString"}`. Needs the pairing token like any other remote
+  command; some firmware wants a `custom.remote.textReceived` broadcast first and
+  `SendInputEnd` to close, both conditional.
+- **webOS** — `ssap://com.webos.service.ime/insertText` with `{"text": …, "replace":
+  bool}`, plain UTF-8 rather than base64.
+
+Both need a focused text field and fail without one, which is worth saying in the
+documentation of whichever method lands: the honest answer is "nothing was typed", and no
+error frame distinguishes it.
 
 **Exit:** the webOS IME surface and the Tizen `SendInputString` payload traced into the
 playbook with their sources, then `type_text()` answering on both.
