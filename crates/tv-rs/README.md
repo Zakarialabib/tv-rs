@@ -14,6 +14,15 @@ if let Some(tv) = tvs.first() {
 # }
 ```
 
+`discover_stream(scanner, on_found)` is the same scan with a callback per display, so
+a "Find displays" screen fills in as sets answer instead of waiting for the reply
+window to close.
+
+`PowerControl::wake` owns the whole ladder: Roku ECP, falling back to a magic packet
+when the handle carries an address, and a packet for Tizen and webOS, which drop
+their network stack when they sleep. `TvClient::with_mac` is where that address
+comes from.
+
 - `tv-rs` — this facade: `TvClient`, discovery, vendor dispatch
 - `tv-rs-core` — the device model: capability traits, `DeviceHandle`, confidence, error taxonomy
 - `tv-rs-discovery`, `tv-rs-power` — SSDP and Wake-on-LAN
