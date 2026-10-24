@@ -133,9 +133,15 @@ TCP connects time out and UDP sends fail `EPERM`, both mapped today to
 `ANDROID_NETWORK_BLOCKED_REASON_LNP` map to `Blocked`; zero datagrams received is
 distinguishable from zero TVs answered; desktop paths are untouched.
 
-### 3.4 B1 · G10a — webOS key input
+### 3.4 B1 · G10a — webOS key input — **done**
 
-Without the pointer/input socket (`getPointerInputSocket`) the LG D-pad is dead.
+The pointer/input socket (`getPointerInputSocket`) is implemented: `crates/webos/src/pointer.rs`
+owns the frame encoder, the `socketPath` extraction and a `PointerWire`/`PointerFactory` pair,
+and `WebosSessionPool::send_key` keeps one pointer socket per TV and reuses it across presses
+(reopened once on failure). The facade maps `Key` → button name (`webos_key`) and now
+advertises `Capability::Key` for webOS; registration requests `CONTROL_INPUT_TEXT` and
+`CONTROL_MOUSE_AND_KEYBOARD`, without which the TV refuses the path. Still unverified against
+a real panel — the fake TV cannot answer SSAP, so the wire form is pinned by tests only.
 
 ### 3.5 B2 · G10b — foreground on Roku and Tizen
 

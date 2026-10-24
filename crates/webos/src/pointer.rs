@@ -170,8 +170,7 @@ impl PointerSocket {
     /// The TV never acknowledges pointer frames; a successful send means the
     /// frame was written, not that the TV acted on it.
     pub async fn send(&mut self, frame: &PointerFrame<'_>) -> Result<()> {
-        self.stream.send(Message::text(frame.encode())).await?;
-        Ok(())
+        self.send_frame(frame.encode()).await
     }
 
     /// Closes the pointer socket, giving the last frame the grace it needs.
@@ -179,6 +178,72 @@ impl PointerSocket {
         tokio::time::sleep(CLOSE_GRACE).await;
         self.stream.send(Message::Close(None)).await?;
         Ok(())
+    }
+}
+
+/// A live pointer connection, as the session pool needs to see it.
+///
+/// Implemented for [`PointerSocket`]; the trait exists for the same reason
+/// [`WebosSessionWire`](crate::pool::WebosSessionWire) does — so the pool's
+/// reuse and reopen-once behaviour can be proven without a television. Frames
+/// arrive already encoded, so the trait method carries no lifetime.
+#[async_trait::async_trait]
+pub trait PointerWire: Send {
+    /// Writes one encoded frame; the television never acknowledges it.
+    async fn send_frame(&mut self, frame: String) -> Result<()>;
+}
+
+#[async_trait::async_trait]
+impl PointerWire for PointerSocket {
+    async fn send_frame(&mut self, frame: String) -> Result<()> {
+        self.stream.send(Message::text(frame)).await?;
+        Ok(())
+    }
+}
+
+/// Opens pointer sockets for the pool.
+#[async_trait::async_trait]
+pub trait PointerFactory: Send + Sync {
+    /// Dials the complete `socketPath` URL a television returned.
+    async fn open(
+        &self,
+        tls_policy: crate::TlsPolicy,
+        socket_path: &str,
+    ) -> Result<Box<dyn PointerWire>>;
+}
+
+/// The production factory: a real WebSocket dial to the TV's pointer path.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LivePointerFactory;
+
+#[async_trait::async_trait]
+impl PointerFactory for LivePointerFactory {
+    async fn open(
+        &self,
+        tls_policy: crate::TlsPolicy,
+        socket_path: &str,
+    ) -> Result<Box<dyn PointerWire>> {
+        Ok(Box::new(
+            PointerSocket::connect(tls_policy, socket_path).await?,
+        ))
+    }
+}
+
+/// A pointer factory behind a box, so a pool can hold one it does not name.
+///
+/// The session-pool equivalent is [`BoxedSessionFactory`](crate::pool::BoxedSessionFactory);
+/// both exist so a facade can store one pool type while a test or a different
+/// transport supplies its own factory.
+pub type BoxedPointerFactory = Box<dyn PointerFactory + Send + Sync>;
+
+#[async_trait::async_trait]
+impl PointerFactory for BoxedPointerFactory {
+    async fn open(
+        &self,
+        tls_policy: crate::TlsPolicy,
+        socket_path: &str,
+    ) -> Result<Box<dyn PointerWire>> {
+        (**self).open(tls_policy, socket_path).await
     }
 }
 

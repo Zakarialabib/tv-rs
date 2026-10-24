@@ -53,6 +53,7 @@ impl TvClient {
                 set.insert(Capability::AppLaunch);
                 set.insert(Capability::Foreground);
                 set.insert(Capability::Volume);
+                set.insert(Capability::Key);
             }
             Self::Roku(_) => {
                 set.insert(Capability::Key);
@@ -154,7 +155,12 @@ impl KeyInput for TvClient {
             // webOS has no remote-key endpoint: SSAP drives the pointer-input
             // socket instead, which is not implemented yet (plan item B1). A
             // refusal is the honest answer — pressing nothing is not a key.
-            Self::Webos { .. } => Err(TvError::Unsupported(Capability::Key)),
+            Self::Webos { client, pool } => {
+                let name = webos_key(key)?;
+                pool.send_key(client, name)
+                    .await
+                    .map_err(|error| map::webos(&error, Capability::Key))
+            }
             Self::Roku(client) => {
                 let key = roku_key(key)?;
                 client
@@ -306,6 +312,47 @@ fn tizen_key(key: Key) -> Result<TizenRemoteKey, TvError> {
 }
 
 /// Maps a core key onto the Roku ECP key vocabulary.
+/// Maps a vendor-neutral key to the webOS pointer channel's button name.
+///
+/// webOS has no remote-key endpoint: SSAP exposes no `KEY_*` message, so a
+/// press is a `type:button` frame on the pointer socket (`tv-rs-webos`
+/// `pointer.rs`). The names are the channel's own vocabulary — uppercase, no
+/// spaces — and they are case-sensitive on the wire.
+///
+/// Only the documented subset is mapped. A key the pointer channel has no
+/// frame for is `Unsupported`, never a silently dropped press: the caller's
+/// capability check and the user's error are both better than a button that
+/// does nothing. `Key::Power` is deliberately absent — power goes through
+/// `ssap://system/turnOff`, not the pointer channel.
+fn webos_key(key: Key) -> Result<&'static str, TvError> {
+    /// The pointer channel takes a bare digit for `Key::Digit(n)`.
+    const DIGITS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+
+    Ok(match key {
+        Key::Up => "UP",
+        Key::Down => "DOWN",
+        Key::Left => "LEFT",
+        Key::Right => "RIGHT",
+        Key::Select | Key::Enter => "ENTER",
+        Key::Back => "BACK",
+        Key::Home => "HOME",
+        Key::Menu => "MENU",
+        Key::Info => "INFO",
+        Key::Play => "PLAY",
+        Key::Pause => "PAUSE",
+        Key::Stop => "STOP",
+        Key::Rewind => "REWIND",
+        Key::FastForward => "FASTFORWARD",
+        Key::ChannelUp => "CHANNELUP",
+        Key::ChannelDown => "CHANNELDOWN",
+        Key::VolumeUp => "VOLUMEUP",
+        Key::VolumeDown => "VOLUMEDOWN",
+        Key::Mute => "MUTE",
+        Key::Digit(n @ 0..=9) => DIGITS[n as usize],
+        _ => return Err(TvError::Unsupported(Capability::Key)),
+    })
+}
+
 fn roku_key(key: Key) -> Result<RokuKey, TvError> {
     Ok(match key {
         Key::Up => RokuKey::Up,
@@ -376,6 +423,7 @@ mod tests {
                 webos(),
                 vec![
                     Capability::PowerState,
+                    Capability::Key,
                     Capability::AppLaunch,
                     Capability::Foreground,
                     Capability::Volume,
@@ -430,13 +478,27 @@ mod tests {
         assert!(matches!(error, TvError::Unsupported(Capability::Wake)));
     }
 
-    #[tokio::test]
-    async fn webos_refuses_keys_without_touching_the_network() {
-        let client = webos();
-        let error = KeyInput::key_press(&client, Key::Home, tv_rs_core::CommandId::new())
-            .await
-            .expect_err("webOS has no key endpoint");
-        assert!(matches!(error, TvError::Unsupported(Capability::Key)));
+    #[test]
+    fn webos_maps_keys_to_pointer_button_names() {
+        // webOS has no key endpoint: a press is a pointer-channel button frame.
+        // These strings are the wire vocabulary, so a typo here is a dead button.
+        assert_eq!(webos_key(Key::Home).expect("mapped"), "HOME");
+        assert_eq!(webos_key(Key::Select).expect("mapped"), "ENTER");
+        assert_eq!(webos_key(Key::Enter).expect("mapped"), "ENTER");
+        assert_eq!(webos_key(Key::VolumeUp).expect("mapped"), "VOLUMEUP");
+        assert_eq!(webos_key(Key::FastForward).expect("mapped"), "FASTFORWARD");
+        assert_eq!(webos_key(Key::Digit(7)).expect("mapped"), "7");
+    }
+
+    #[test]
+    fn webos_refuses_keys_the_pointer_channel_has_no_frame_for() {
+        // An honest `Unsupported` beats a press that silently does nothing.
+        for key in [Key::Power, Key::Previous, Key::Next, Key::Digit(10)] {
+            assert!(
+                matches!(webos_key(key), Err(TvError::Unsupported(Capability::Key))),
+                "{key:?} should have no pointer frame"
+            );
+        }
     }
 
     #[tokio::test]

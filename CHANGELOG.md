@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **webOS key input (`tv-rs-webos` + the facade — companion gap G10a)**: a press is
+  now a `type:button` frame on the pointer socket `getPointerInputSocket` hands
+  back. `PointerWire` / `PointerFactory` keep that connection testable without a
+  television, and `WebosSessionPool::send_key` holds one pointer socket per TV,
+  reuses it across presses and reopens it once on failure.
+  `WEBOS_DEFAULT_PERMISSIONS` gains `CONTROL_INPUT_TEXT` and
+  `CONTROL_MOUSE_AND_KEYBOARD` — the input service refuses the path without them,
+  so a registration that omitted them paired fine and then had a dead D-pad. The
+  facade maps `Key` to the channel's own button vocabulary (`webos_key`) and now
+  advertises `Capability::Key` for webOS. **Unverified on a real panel**: the fake
+  TV cannot answer SSAP, so the wire form is pinned by unit tests.
+
 ## [0.3.0] - 2026-10-24
 
 ### Added

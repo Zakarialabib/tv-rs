@@ -41,6 +41,9 @@ use tokio::sync::Mutex;
 
 use crate::client::{WebosClient, WebosSession};
 use crate::error::Result;
+use crate::pointer::{
+    extract_socket_path, BoxedPointerFactory, LivePointerFactory, PointerFrame, PointerWire,
+};
 use crate::types::SsapUri;
 
 /// Sessions idle for at least this long are dropped and opened fresh on the
@@ -217,11 +220,43 @@ impl PooledSession {
     }
 }
 
+/// A pooled pointer socket, with the time of its last successful frame.
+///
+/// Held separately from the session map because it is a *different*
+/// connection: the SSAP session serves requests, the pointer socket takes
+/// plain-text frames. Both are per-TV and both are reused.
+struct PooledPointer {
+    socket: Box<dyn PointerWire>,
+    last_used: Instant,
+}
+
+impl PooledPointer {
+    fn new(socket: Box<dyn PointerWire>) -> Self {
+        Self {
+            socket,
+            last_used: Instant::now(),
+        }
+    }
+
+    fn mark_used(&mut self) {
+        self.last_used = Instant::now();
+    }
+
+    fn idle_expired(&self, limit: Duration) -> bool {
+        self.last_used.elapsed() >= limit
+    }
+}
+
 /// One registered session per TV, keyed by host.
 pub struct WebosSessionPool<F: WebosSessionFactory = LiveSessionFactory> {
     factory: F,
+    /// Pointer sockets are always factory-erased: they are an implementation
+    /// detail of key input, and giving the pool a second type parameter would
+    /// leak into every facade that stores a `DynSessionPool`.
+    pointer_factory: BoxedPointerFactory,
     idle_after: Duration,
     sessions: Mutex<HashMap<String, PooledSession>>,
+    pointers: Mutex<HashMap<String, PooledPointer>>,
 }
 
 impl WebosSessionPool<LiveSessionFactory> {
@@ -267,10 +302,26 @@ impl<F: WebosSessionFactory> WebosSessionPool<F> {
     /// Creates a pool with a custom factory and idle limit. An idle limit of
     /// zero drops every session after each command.
     pub fn with_factory_and_idle(factory: F, idle_after: Duration) -> Self {
+        Self::with_factories_and_idle(factory, Box::new(LivePointerFactory), idle_after)
+    }
+
+    /// Creates a pool with a custom session factory, a custom pointer factory
+    /// and an idle limit.
+    ///
+    /// Tests use this to count pointer dials: a television cannot be asked to
+    /// drop a pointer socket on cue, so "reopened exactly once" is only
+    /// observable through a factory that counts.
+    pub fn with_factories_and_idle(
+        factory: F,
+        pointer_factory: BoxedPointerFactory,
+        idle_after: Duration,
+    ) -> Self {
         Self {
             factory,
+            pointer_factory,
             idle_after,
             sessions: Mutex::new(HashMap::new()),
+            pointers: Mutex::new(HashMap::new()),
         }
     }
 
@@ -330,12 +381,77 @@ impl<F: WebosSessionFactory> WebosSessionPool<F> {
         }
     }
 
+    /// Sends one remote-key press over the TV's pointer socket.
+    ///
+    /// The pointer channel is a *second*, per-session WebSocket: the path comes
+    /// from `getPointerInputSocket` on the pooled SSAP session, and the frames
+    /// are plain text (`pointer.rs`). One pointer socket is kept per TV and
+    /// reused across presses — dialing costs a full WebSocket handshake, and a
+    /// remote that re-dialed on every key would be unusable. A dead socket is
+    /// reopened exactly once, like a dead session.
+    ///
+    /// `name` is the wire button name (`HOME`, `ENTER`, `VOLUMEUP`, …). The
+    /// vendor vocabulary is the caller's job: this crate does not depend on
+    /// `tv-rs-core`, so the facade owns the key map.
+    pub async fn send_key(&self, client: &WebosClient, name: &str) -> Result<()> {
+        let host = client.host().to_string();
+        let frame = PointerFrame::Button(name).encode();
+
+        let mut pointers = self.pointers.lock().await;
+        let idle_expired = pointers
+            .get(&host)
+            .is_some_and(|pointer| pointer.idle_expired(self.idle_after));
+        if idle_expired || !pointers.contains_key(&host) {
+            pointers.remove(&host);
+            let socket = self.open_pointer(client).await?;
+            pointers.insert(host.clone(), PooledPointer::new(socket));
+        }
+
+        let pooled = pointers
+            .get_mut(&host)
+            .expect("pointer was just inserted or already present");
+
+        let first = pooled.socket.send_frame(frame.clone()).await;
+        if first.is_ok() {
+            pooled.mark_used();
+            return first;
+        }
+
+        // Dead pointer socket (idle timeout, TV rebooted): reopen once, retry.
+        pointers.remove(&host);
+        let mut fresh = self.open_pointer(client).await?;
+        let retry = fresh.send_frame(frame).await;
+        let mut pooled = PooledPointer::new(fresh);
+        if retry.is_ok() {
+            pooled.mark_used();
+        }
+        pointers.insert(host, pooled);
+        retry
+    }
+
+    /// Asks the pooled SSAP session for a pointer path and dials it.
+    ///
+    /// The path is per-session, so it is fetched through the same session that
+    /// serves every other command — and re-fetched whenever the pointer socket
+    /// has to be replaced.
+    async fn open_pointer(&self, client: &WebosClient) -> Result<Box<dyn PointerWire>> {
+        let payload = self
+            .request(client, SsapUri::NetworkInputGetPointerSocket, None)
+            .await?;
+        let socket_path = extract_socket_path(&payload)?;
+        self.pointer_factory
+            .open(client.tls_policy(), &socket_path)
+            .await
+    }
+
     /// Drops the pooled session for `host`; `true` when one was connected.
     ///
     /// Call this when a TV is removed from the fleet, or after
     /// [`power_off`](Self::power_off) — the next command opens a fresh
-    /// session.
+    /// session. Any pooled pointer socket for the same host goes with it: its
+    /// path belongs to the session that issued it.
     pub async fn evict(&self, host: &str) -> bool {
+        self.pointers.lock().await.remove(host);
         self.sessions.lock().await.remove(host).is_some()
     }
 
@@ -354,6 +470,15 @@ impl<F: WebosSessionFactory> WebosSessionPool<F> {
         self.sessions.lock().await.contains_key(host)
     }
 
+    /// `true` when `host` has a pooled pointer socket.
+    ///
+    /// Separate from [`contains`](Self::contains): a TV can hold a registered
+    /// session with no pointer socket yet, which is the state before the first
+    /// key press.
+    pub async fn has_pointer(&self, host: &str) -> bool {
+        self.pointers.lock().await.contains_key(host)
+    }
+
     /// `client-key` observed on the pooled session for `host`, when known.
     pub async fn client_key_for(&self, host: &str) -> Option<String> {
         self.sessions
@@ -364,8 +489,15 @@ impl<F: WebosSessionFactory> WebosSessionPool<F> {
             .map(str::to_string)
     }
 
-    /// Drops every pooled session; returns how many were connected.
+    /// Drops every pooled session and pointer socket; returns how many sessions
+    /// were connected.
+    ///
+    /// A mobile caller needs this before the app is backgrounded: the OS will
+    /// not close a WebSocket for it, and both the SSAP session and the pointer
+    /// socket count. The pointer path belongs to the session that issued it, so
+    /// they go together.
     pub async fn clear(&self) -> usize {
+        self.pointers.lock().await.clear();
         let mut sessions = self.sessions.lock().await;
         let count = sessions.len();
         sessions.clear();
@@ -433,11 +565,12 @@ pub mod testkit {
     use std::sync::{Arc, Mutex as StdMutex};
 
     use async_trait::async_trait;
-    use serde_json::Value;
+    use serde_json::{json, Value};
 
     use super::{WebosSessionFactory, WebosSessionWire};
     use crate::client::WebosClient;
     use crate::error::{Result, WebosError};
+    use crate::pointer::{BoxedPointerFactory, PointerFactory, PointerWire};
     use crate::types::SsapUri;
 
     /// A session that spends from a shared budget of simulated failures.
@@ -452,8 +585,17 @@ pub mod testkit {
 
     #[async_trait]
     impl WebosSessionWire for FakeSession {
-        async fn request(&mut self, _uri: SsapUri, _payload: Option<Value>) -> Result<Value> {
-            self.serve().map(|_| Value::Null)
+        async fn request(&mut self, uri: SsapUri, _payload: Option<Value>) -> Result<Value> {
+            self.serve()?;
+            // A real TV answers `getPointerInputSocket` with a complete
+            // WebSocket URL. Anything else is `Value::Null`, which the pool
+            // never inspects.
+            Ok(match uri {
+                SsapUri::NetworkInputGetPointerSocket => json!({
+                    "socketPath": "wss://10.0.0.9:3001/resources/h/netinput.pointer.sock"
+                }),
+                _ => Value::Null,
+            })
         }
 
         async fn open_url(&mut self, _url: &str) -> Result<()> {
@@ -538,6 +680,74 @@ pub mod testkit {
             served,
         }
     }
+
+    /// A pointer socket that spends from a shared budget of simulated failures
+    /// and records every frame it was asked to send.
+    ///
+    /// The recorded frames are the point: they prove the *wire* form of a key
+    /// press, not just that something was written.
+    pub struct FakePointer {
+        failures: Arc<StdMutex<usize>>,
+        frames: Arc<StdMutex<Vec<String>>>,
+    }
+
+    #[async_trait]
+    impl PointerWire for FakePointer {
+        async fn send_frame(&mut self, frame: String) -> Result<()> {
+            let mut budget = self.failures.lock().expect("test mutex");
+            if *budget > 0 {
+                *budget -= 1;
+                return Err(WebosError::Protocol("dead pointer".to_string()));
+            }
+            drop(budget);
+            self.frames.lock().expect("test mutex").push(frame);
+            Ok(())
+        }
+    }
+
+    /// A pointer factory that counts dials and hands out [`FakePointer`]s.
+    pub struct FakePointerFactory {
+        opens: Arc<AtomicUsize>,
+        failures: Arc<StdMutex<usize>>,
+        frames: Arc<StdMutex<Vec<String>>>,
+    }
+
+    #[async_trait]
+    impl PointerFactory for FakePointerFactory {
+        async fn open(
+            &self,
+            _tls_policy: crate::TlsPolicy,
+            _socket_path: &str,
+        ) -> Result<Box<dyn PointerWire>> {
+            self.opens.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::new(FakePointer {
+                failures: self.failures.clone(),
+                frames: self.frames.clone(),
+            }))
+        }
+    }
+
+    /// A pointer factory plus the counters a test asserts on.
+    ///
+    /// `failures` is how many `send_frame` calls die before one serves, which is
+    /// how a dead pointer socket is simulated.
+    #[must_use]
+    pub fn pointer_factory(
+        failures: usize,
+    ) -> (
+        BoxedPointerFactory,
+        Arc<AtomicUsize>,
+        Arc<StdMutex<Vec<String>>>,
+    ) {
+        let opens = Arc::new(AtomicUsize::new(0));
+        let frames = Arc::new(StdMutex::new(Vec::new()));
+        let factory = FakePointerFactory {
+            opens: opens.clone(),
+            failures: Arc::new(StdMutex::new(failures)),
+            frames: frames.clone(),
+        };
+        (Box::new(factory), opens, frames)
+    }
 }
 
 #[cfg(test)]
@@ -546,7 +756,7 @@ mod tests {
 
     use serde_json::json;
 
-    use super::testkit::{counters, factory};
+    use super::testkit::{counters, factory, pointer_factory};
     use super::*;
 
     #[tokio::test]
@@ -562,6 +772,71 @@ mod tests {
         assert_eq!(opens.load(Ordering::SeqCst), 1, "session must be reused");
         assert_eq!(served.load(Ordering::SeqCst), 3);
         assert_eq!(pool.len().await, 1);
+    }
+
+    #[tokio::test]
+    async fn key_presses_reuse_one_pointer_socket() {
+        let (opens, served) = counters();
+        let (pointer_factory, pointer_opens, frames) = pointer_factory(0);
+        let pool = WebosSessionPool::with_factories_and_idle(
+            factory(opens.clone(), 0, served.clone()),
+            pointer_factory,
+            Duration::from_secs(60),
+        );
+        let client = WebosClient::new("10.0.0.5");
+
+        pool.send_key(&client, "HOME").await.unwrap();
+        pool.send_key(&client, "DOWN").await.unwrap();
+
+        // Two presses, one dial: a remote that re-dialed per key would be
+        // unusable, and the TV issues a fresh path per request.
+        assert_eq!(pointer_opens.load(Ordering::SeqCst), 1, "one dial");
+        assert!(pool.has_pointer("10.0.0.5").await);
+        assert_eq!(
+            frames.lock().expect("test mutex").as_slice(),
+            ["type:button\nname:HOME\n\n", "type:button\nname:DOWN\n\n"],
+            "the wire form of a press"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_dead_pointer_socket_is_reopened_once() {
+        let (opens, served) = counters();
+        let (pointer_factory, pointer_opens, frames) = pointer_factory(1);
+        let pool = WebosSessionPool::with_factories_and_idle(
+            factory(opens.clone(), 0, served.clone()),
+            pointer_factory,
+            Duration::from_secs(60),
+        );
+        let client = WebosClient::new("10.0.0.6");
+
+        pool.send_key(&client, "ENTER").await.unwrap();
+
+        assert_eq!(pointer_opens.load(Ordering::SeqCst), 2, "one reopen");
+        assert_eq!(
+            frames.lock().expect("test mutex").as_slice(),
+            ["type:button\nname:ENTER\n\n"]
+        );
+    }
+
+    #[tokio::test]
+    async fn clearing_the_pool_drops_the_pointer_socket_too() {
+        let (opens, served) = counters();
+        let (pointer_factory, _, _) = pointer_factory(0);
+        let pool = WebosSessionPool::with_factories_and_idle(
+            factory(opens.clone(), 0, served.clone()),
+            pointer_factory,
+            Duration::from_secs(60),
+        );
+        let client = WebosClient::new("10.0.0.7");
+
+        pool.send_key(&client, "HOME").await.unwrap();
+        assert!(pool.has_pointer("10.0.0.7").await);
+
+        // Mobile backgrounding: the OS will not close the socket for us.
+        pool.clear().await;
+        assert!(!pool.has_pointer("10.0.0.7").await);
+        assert!(pool.is_empty().await);
     }
 
     #[tokio::test]

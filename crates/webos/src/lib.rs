@@ -60,7 +60,10 @@ pub use payload::{
     SsapErrorBody, SsapManifest, SsapRegisterPayload, SsapRegisterRequest, SsapRegisterResponse,
     SsapRegisterResponsePayload, SsapRequest, SsapResponse,
 };
-pub use pointer::{extract_socket_path, PointerFrame, PointerSocket};
+pub use pointer::{
+    extract_socket_path, BoxedPointerFactory, LivePointerFactory, PointerFactory, PointerFrame,
+    PointerSocket, PointerWire,
+};
 pub use pool::{
     BoxedSessionFactory, DynSessionPool, LiveSessionFactory, WebosSessionFactory, WebosSessionPool,
     WebosSessionWire,

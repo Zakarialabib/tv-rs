@@ -15,6 +15,12 @@ pub const SSAP_URI_PREFIX: &str = "ssap://";
 pub const WEBOS_PAIRING_TYPE_PROMPT: &str = "PROMPT";
 
 /// Default SSAP manifest permissions requested during registration.
+///
+/// `CONTROL_INPUT_TEXT` and `CONTROL_MOUSE_AND_KEYBOARD` are what the input
+/// service checks: without them the television refuses
+/// `getPointerInputSocket`, and the pointer channel is the only way webOS
+/// accepts a remote key (`pointer.rs`). A registration that omits them pairs
+/// fine and then has a dead D-pad.
 pub const WEBOS_DEFAULT_PERMISSIONS: &[&str] = &[
     "CONTROL_POWER",
     "READ_INSTALLED_APPS",
@@ -24,6 +30,8 @@ pub const WEBOS_DEFAULT_PERMISSIONS: &[&str] = &[
     "CONTROL_AUDIO",
     "READ_AUDIO",
     "CONTROL_INPUT_MEDIA_PLAYBACK",
+    "CONTROL_INPUT_TEXT",
+    "CONTROL_MOUSE_AND_KEYBOARD",
 ];
 
 /// Default file name used when persisting the SSAP `client-key`.
