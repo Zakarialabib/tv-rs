@@ -50,6 +50,15 @@ pub enum Capability {
     /// Grab a still frame of what the panel is showing.
     #[cfg(feature = "supporting")]
     ScreenCapture,
+    /// List the applications installed on the device.
+    ///
+    /// Its own capability rather than part of [`Capability::AppLaunch`]: a platform
+    /// can start an application it cannot enumerate (Tizen's remote channel is
+    /// exactly that), so "can I launch" and "can I list what is installed" are
+    /// independent facts, and the fleet grid renders a blank column on the wrong
+    /// one. Declared last so the `CapabilitySet` bit layout of every capability
+    /// before it is unchanged.
+    AppList,
 }
 
 impl Capability {
@@ -74,6 +83,7 @@ impl Capability {
             Self::LampOrPanelHours => "lamp_or_panel_hours",
             #[cfg(feature = "supporting")]
             Self::ScreenCapture => "screen_capture",
+            Self::AppList => "app_list",
         }
     }
 }
@@ -150,6 +160,7 @@ const ALL_CAPABILITIES: &[Capability] = &[
     Capability::LampOrPanelHours,
     #[cfg(feature = "supporting")]
     Capability::ScreenCapture,
+    Capability::AppList,
 ];
 
 const fn capability_index(capability: Capability) -> u16 {
@@ -171,6 +182,7 @@ const fn capability_index(capability: Capability) -> u16 {
         Capability::LampOrPanelHours => 13,
         #[cfg(feature = "supporting")]
         Capability::ScreenCapture => 14,
+        Capability::AppList => 15,
     }
 }
 
@@ -388,6 +400,18 @@ pub trait AppLaunch: Send + Sync {
 
     /// Reports the foreground application, when the platform can say.
     async fn foreground(&self) -> Result<Option<AppRef>, TvError>;
+
+    /// Lists installed applications, when the platform can say.
+    ///
+    /// An empty `Vec` is a real answer ("this TV exposes none"); `Unsupported`
+    /// means the platform cannot list at all. The default is `Unsupported`, so an
+    /// implementation that cannot list says so instead of inventing a catalogue.
+    async fn installed_apps(&self) -> Result<Vec<AppRef>, TvError> {
+        // Names [`Capability::AppList`], not [`Capability::AppLaunch`]: a platform
+        // that cannot enumerate may well be able to launch, and the caller needs to
+        // know which of the two it was refused.
+        Err(TvError::Unsupported(Capability::AppList))
+    }
 }
 
 /// Input selection.

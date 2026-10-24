@@ -9,11 +9,11 @@
 //!
 //! [`TvClient`] advertises only what it can actually do today, per vendor:
 //!
-//! | Vendor | power | wake | key | app | foreground | input | volume | panel lock | orientation | panel health |
-//! |---|---|---|---|---|---|---|---|---|---|---|
-//! | Tizen | ✓ | MAC | ✓ | ✓ | — | — | — | — | — | — |
-//! | webOS | ✓ | MAC | ✓ | ✓ | ✓ | — | ✓ | — | — | — |
-//! | Roku | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — |
+//! | Vendor | power | wake | key | app | app list | foreground | input | volume | panel lock | orientation | panel health |
+//! |---|---|---|---|---|---|---|---|---|---|---|---|---|
+//! | Tizen | ✓ | MAC | ✓ | ✓ | — | — | — | — | — | — | — |
+//! | webOS | ✓ | MAC | ✓ | ✓ | ✓ | ✓ | — | ✓ | — | — | — |
+//! | Roku | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — |
 //!
 //! `wake` reads `MAC` where the vendor drops its network stack when it sleeps:
 //! the only wake path there is a broadcast magic packet, which needs an address
@@ -59,6 +59,9 @@ impl TvClient {
                 set.insert(Capability::Volume);
                 set.insert(Capability::Key);
                 set.insert(Capability::InputSelect);
+                // `ssap://com.webos.applicationManager/listApps` answers with the
+                // installed catalogue, so this is a fact rather than a promise.
+                set.insert(Capability::AppList);
             }
             Self::Roku { .. } => {
                 set.insert(Capability::Key);
@@ -69,6 +72,8 @@ impl TvClient {
                 // `/query/active-app` says what is in front, which is the whole
                 // input of an "on screen" card.
                 set.insert(Capability::Foreground);
+                // `/query/apps` lists what is installed.
+                set.insert(Capability::AppList);
             }
         }
         // The other two drop their network stack when they sleep, so a magic
@@ -307,6 +312,44 @@ impl AppLaunch for TvClient {
                 Ok(active.app_id.map(AppRef::new))
             }
             Self::Tizen { .. } => Err(TvError::Unsupported(Capability::Foreground)),
+        }
+    }
+
+    /// Lists installed applications. webOS answers `listApps` and Roku answers
+    /// `/query/apps`; Tizen exposes neither over its REST API, so it keeps the
+    /// trait default rather than a fabricated catalogue.
+    async fn installed_apps(&self) -> Result<Vec<AppRef>, TvError> {
+        match self {
+            Self::Webos { client, pool, .. } => {
+                let apps = pool
+                    .list_apps(client)
+                    .await
+                    .map_err(|error| map::webos(&error, Capability::AppLaunch))?;
+                Ok(apps
+                    .into_iter()
+                    .map(|app| AppRef {
+                        id: app.id,
+                        name: app.title,
+                    })
+                    .collect())
+            }
+            Self::Roku { client, .. } => {
+                let apps = client
+                    .query_apps()
+                    .await
+                    .map_err(|error| map::roku(&error, Capability::AppLaunch))?;
+                Ok(apps
+                    .into_iter()
+                    .map(|app| AppRef {
+                        id: app.id,
+                        name: Some(app.name),
+                    })
+                    .collect())
+            }
+            // Listing is its own capability, so the refusal names `AppList`: Tizen
+            // launches what it cannot enumerate, and saying `AppLaunch` here would
+            // claim the wrong thing.
+            Self::Tizen { .. } => Err(TvError::Unsupported(Capability::AppList)),
         }
     }
 }
@@ -593,6 +636,7 @@ mod tests {
                     Capability::Foreground,
                     Capability::InputSelect,
                     Capability::Volume,
+                    Capability::AppList,
                 ],
             ),
             (
@@ -603,6 +647,7 @@ mod tests {
                     Capability::Key,
                     Capability::AppLaunch,
                     Capability::Foreground,
+                    Capability::AppList,
                 ],
             ),
         ] {
@@ -712,6 +757,48 @@ mod tests {
             mac: None,
         };
         let error = AppLaunch::foreground(&client)
+            .await
+            .expect_err("nothing listens");
+        assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
+    }
+
+    /// The whole point of `AppList` as its own capability: Tizen launches what it
+    /// cannot enumerate, so the refusal must name the listing, never the launching.
+    #[tokio::test]
+    async fn tizen_refuses_to_list_without_refusing_to_launch() {
+        let client = tizen();
+        assert!(!client.capabilities().contains(Capability::AppList));
+        let error = AppLaunch::installed_apps(&client)
+            .await
+            .expect_err("Tizen keeps the trait default");
+        assert!(
+            matches!(error, TvError::Unsupported(Capability::AppList)),
+            "{error:?}"
+        );
+        assert!(!matches!(
+            error,
+            TvError::Unsupported(Capability::AppLaunch)
+        ));
+    }
+
+    /// Advertised where it is delivered: Roku (`/query/apps`) and webOS
+    /// (`listApps`) enumerate, and neither advertises a capability it cannot back.
+    #[test]
+    fn app_list_is_advertised_where_the_catalogue_is_real() {
+        assert!(roku().capabilities().contains(Capability::AppList));
+        assert!(webos().capabilities().contains(Capability::AppList));
+        assert!(!tizen().capabilities().contains(Capability::AppList));
+    }
+
+    /// The arm must be reached, not the trait default: port 1 refuses instantly,
+    /// so a transport error here proves the request was sent.
+    #[tokio::test]
+    async fn installed_apps_reaches_the_device() {
+        let client = TvClient::Roku {
+            client: RokuClient::with_base_url("http://127.0.0.1:1"),
+            mac: None,
+        };
+        let error = AppLaunch::installed_apps(&client)
             .await
             .expect_err("nothing listens");
         assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");

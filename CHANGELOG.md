@@ -8,6 +8,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`AppLaunch::installed_apps()`** — lists what is actually installed, with a
+  default of `Unsupported` so a platform that cannot list says so instead of
+  fabricating a catalogue. webOS answers
+  `ssap://com.webos.applicationManager/listApps` through
+  `WebosSessionPool::list_apps` (the URI already existed in `SsapUri` and was
+  never used); Roku answers `/query/apps` through the facade now, rather than
+  only from the caller. Entries with no id are skipped and a missing title stays
+  `None`.
+
+
+### Added
+
 - **webOS input switching** (`ssap://tv/switchInput`): `WebosSessionPool::switch_input`
   plus an `InputSelect` implementation for `TvClient::Webos`, so the companion's
   Inputs sheet appears on an LG set. `active_input()` answers `None` — webOS has no
@@ -59,6 +71,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   empty discovery list. The healer maps the new remedy to `Quarantine`: the
   permission belongs to the platform, so retrying burns battery and waking wakes
   nothing.
+
+- **Installed applications through the facade — companion gap G5**: `AppLaunch::installed_apps()`
+  now has real arms, so the fleet grid's "what is on this television" column has a source.
+  webOS enumerates through `ssap://com.webos.applicationManager/listApps` (the pool already
+  parsed it; the facade never called it) and Roku through `/query/apps` — both answers map to
+  `AppRef { id, name }`. The refusal names its own capability: `Capability::AppList` is new, and
+  Tizen answers `Unsupported(AppList)` rather than `Unsupported(AppLaunch)`, because the remote
+  channel starts an application it cannot enumerate and the two facts are independent. Advertised
+  only where delivered, and the webOS reply shape is recorded in the playbook with its sources.
 
 - **Roku foreground reads (`tv-rs-roku` + the facade — companion gap G10b, Roku half)**:
   `RokuClient::query_active_app()` fetches `GET /query/active-app` and
