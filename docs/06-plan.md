@@ -84,11 +84,12 @@ advertised only where it can be delivered), **A5** (a platform-refused call is
 
 ### 2.1 A4 · G4 (the remainder) — MAC learning on Samsung and webOS
 
-Wake landed for all three vendors: Roku goes over ECP `PowerOn`, and Tizen and webOS
-broadcast a magic packet once a caller supplies the address
-(`TvClient::with_mac`), with `Capability::Wake` advertised only where it can actually
-be delivered. What is open is the convenience half — learning the address instead of
-asking for it.
+Wake landed for all three vendors, and G13 added the fallback: Roku goes over ECP
+`PowerOn` first, then falls back to a magic packet when the set is fully off and a caller
+has supplied an address; Tizen and webOS broadcast the packet directly, because they drop
+their network stack when they sleep. `TvClient::with_mac` supplies that address, and
+`Capability::Wake` is advertised only where it can actually be delivered. What is open is
+the convenience half — learning the address instead of asking for it.
 
 `TvClient::learn_mac()` answers on Roku (`/query/device-info`, Wi-Fi address preferred
 over wired). On Samsung and webOS it refuses, because **neither endpoint this item
@@ -146,12 +147,10 @@ playbook with their sources, then `type_text()` answering on both.
 ### 2.4 D — the rest, in the companion's order
 
 Each entry was checked against the code before being left standing, because these
-premises go stale: what the audit found is recorded next to the item, not deleted.
+premises go stale: what the audit found is recorded next to the item. Landed items are
+gone from the list — G3 (streaming discovery) and G10e (MDC behind the facade) both
+landed, and their rationale now lives in the CHANGELOG and the glossary.
 
-- **G3** streaming discovery (`discover_stream()` or a callback; dedup stays in the
-  scanner) — Devices › Find streams results as TVs answer. **Open, premise holds:** no
-  streaming entry point exists; the `callback` hits in the tree are DLNA GENA
-  subscriptions, which are a different mechanism.
 - **G8** `HealerLadder::release()` plus an audit entry, for Fleet › "Release from
   quarantine". **Half-built:** `crates/agent/src/audit.rs` already exists, so this is
   the ladder's `release()` plus the entry, not a new audit subsystem.
@@ -159,24 +158,6 @@ premises go stale: what the audit found is recorded next to the item, not delete
   groundwork:** `dlna/src/soap.rs` already *parses* the `RenderingControl:1` service
   and its `controlURL` out of the device description, but no volume or mute action is
   implemented — the discovery half is done, the SOAP actions are not.
-- **G10e** MDC behind the facade. **The premise was wrong twice over, and the design is
-  now settled.**
-  - There is no `TvVendor::Mdc`: that enum is `Samsung | Lg | Roku | Unknown`.
-  - `DeviceOs::SamsungMdc` exists in core, but **nothing ever produces it** — there is no
-    classifier from a discovery reply, and there cannot be one worth trusting, because
-    SSDP carries no authoritative vendor field: a commercial Samsung panel answers it the
-    same way a consumer one does. So "key the facade on `DeviceOs`" is not available
-    either. **MDC is never classified from discovery; the caller knows.**
-  - **Decided shape:** a facade constructor taking an address and a display id, returning
-    `Box<dyn DeviceHandle>`. Not a `TvClient` variant — `MdcDevice` already implements
-    `DeviceHandle`, so a variant would mean forwarding every trait method to say nothing
-    new, and MDC's capability set is its own (no keys, no apps, no pairing). Returning the
-    erased handle is exactly what keeps panels from being a special case at the call site.
-  - **Landed:** `tv_rs::mdc_handle(address)` builds the panel's `MdcClient` and
-    `DeviceDescriptor` and returns `Box<dyn DeviceHandle>`; the facade re-exports
-    `tv_rs_mdc` as `tv_rs::mdc`, so its types are nameable too. An address that is empty
-    or whitespace-only is refused — a test caught that the prefixed id (`mdc:<address>`)
-    is never empty on its own, so the undialable address was reaching the socket layer.
 - **G15** `probe(ip) -> Option<DiscoveredTv>` — "what is at this IP?" for guest Wi-Fi
   and Android pickers that hand back an address. **Open, premise holds:** nothing
   probes a single address today.
