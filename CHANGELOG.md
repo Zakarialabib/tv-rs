@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **webOS input switching** (`ssap://tv/switchInput`): `WebosSessionPool::switch_input`
+  plus an `InputSelect` implementation for `TvClient::Webos`, so the companion's
+  Inputs sheet appears on an LG set. `active_input()` answers `None` — webOS has no
+  reliable "which input is live" read. Ids are `HDMI_<n>` (1-based) and `tv` for the
+  tuner; `Usb` and `Hdmi(0)` are refused rather than guessed at. Unverified on a
+  real panel, so the ids are pinned by tests.
+- **`VolumeControl::mute()`**: a read next to `set_mute`, with `Ok(None)` meaning
+  "cannot tell". webOS answers `ssap://audio/getMute` (the URI already existed and
+  was never used), `MockBackend` reports its own state, and MDC returns `None`
+  rather than guessing.
+
+### Fixed
+
+- `tv-rs-mdc` did not compile: `TransportError::from_io` takes `&io::Error` and the
+  mapping passed it by value.
+- `tv-rs-agent`'s `HealerLadder` became non-exhaustive when `Remedy::RequestPermission`
+  was added. It now maps that remedy to `Quarantine`: only the user can grant a
+  permission, so retrying only burns battery.
+
+
 ### Fixed
 
 - **The `serde` feature compiles now.** It never did: `Serialize`/`Deserialize`
@@ -28,6 +50,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
 ### Added
+
+- **An Android block no longer reads as "TV off" (companion gap A5)**: from Android
+  17 (target SDK 37) a LAN socket needs the runtime `ACCESS_LOCAL_NETWORK`
+  permission, and until the user grants it the platform refuses the call — `EPERM`
+  from a blocked socket, which the NDK reports as
+  `ANDROID_NETWORK_BLOCKED_REASON_LNP`. Every socket error used to be stringified
+  into `TransportError::Unreachable`, which routes to *Retry*, so the UI offered
+  *Wake* forever for a television that was awake and merely unreachable by this app.
+  Core gains `TransportError::Blocked { reason }` with a `from_io()` classifier —
+  the `EPERM` check compiles only on `target_os = "android"`, so desktop
+  classification is unchanged — and `Remedy::RequestPermission`, because the UI must
+  say "grant access" rather than "wake", with a `hint()` that names the grant. The
+  facade's tizen, webOS, discovery and power mappings and MDC's socket arm route
+  through the classifier, so a refused SSDP send is a blocked call instead of an
+  empty discovery list. The healer maps the new remedy to `Quarantine`: the
+  permission belongs to the platform, so retrying burns battery and waking wakes
+  nothing.
 
 - **webOS key input (`tv-rs-webos` + the facade — companion gap G10a)**: a press is
   now a `type:button` frame on the pointer socket `getPointerInputSocket` hands

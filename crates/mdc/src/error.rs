@@ -58,7 +58,7 @@ pub enum MdcError {
 impl From<MdcError> for TvError {
     fn from(error: MdcError) -> Self {
         match error {
-            MdcError::Io(error) => Self::Transport(TransportError::Unreachable(error.to_string())),
+            MdcError::Io(error) => Self::Transport(TransportError::from_io(&error)),
             MdcError::Timeout => Self::Transport(TransportError::Timeout),
             MdcError::Protocol(message) => Self::Protocol(ProtocolError::Malformed(message)),
             MdcError::Nak { command, code } => Self::Protocol(ProtocolError::Unexpected(format!(

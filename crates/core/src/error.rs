@@ -73,6 +73,9 @@ impl TvError {
     #[must_use]
     pub fn remedy(&self) -> Remedy {
         match self {
+            // Retrying a refused call fails identically: the app has to be granted
+            // the permission first, which is a different instruction to the user.
+            Self::Transport(TransportError::Blocked { .. }) => Remedy::RequestPermission,
             Self::Transport(_) => Remedy::Retry,
             Self::Protocol(_) => Remedy::BackOff,
             Self::Auth(_) => Remedy::Reprovision,
@@ -109,6 +112,10 @@ impl TvError {
             Self::Transport(TransportError::Timeout) => {
                 Some("The TV did not answer in time; it may be asleep — try waking it.".to_string())
             }
+            Self::Transport(TransportError::Blocked { reason }) => Some(format!(
+                "This app is not allowed to reach the local network. Grant it network \
+                 access in the system prompt or settings, then try again ({reason})."
+            )),
             Self::Transport(TransportError::Tls(_)) => {
                 Some("The TV presented a different certificate; trust it again.".to_string())
             }
@@ -154,6 +161,12 @@ pub enum Remedy {
     Disable,
     /// A documented defect with documented handling.
     ApplyQuirk,
+    /// The platform is withholding the network call; ask the user to grant it.
+    ///
+    /// Distinct from [`Remedy::Reprovision`], which is about a *television*
+    /// credential, and from [`Remedy::Retry`]: nothing about waiting or retrying
+    /// changes a permission the app does not hold.
+    RequestPermission,
 }
 
 /// Network-level failure.
@@ -171,6 +184,45 @@ pub enum TransportError {
     /// trust store refused it.
     #[error("tls: {0}")]
     Tls(String),
+    /// The platform refused the call before it left the process.
+    ///
+    /// From Android 17 (target SDK 37) a LAN socket needs the runtime
+    /// `ACCESS_LOCAL_NETWORK` permission: until the user grants it, a connect to a
+    /// television fails and a datagram send returns `EPERM`. Reading that as
+    /// [`TransportError::Unreachable`] is how a UI ends up offering *Wake* forever
+    /// for a television that is awake and simply unreachable by this app — the
+    /// failure is a permission, not a device condition.
+    #[error("blocked: {reason}")]
+    Blocked {
+        /// Why the platform refused, in the platform's own words.
+        reason: String,
+    },
+}
+
+impl TransportError {
+    /// Classifies a socket error into this taxonomy.
+    ///
+    /// Most `io::Error`s out of a socket mean "nothing answered": a wrong address,
+    /// a closed port, a television that is off. Android adds a different failure —
+    /// the platform refusing a LAN call before it leaves the process — and that one
+    /// is a [`TransportError::Blocked`], because it is the *app's* missing
+    /// permission and no amount of retrying supplies it.
+    ///
+    /// The check is compiled only where the condition exists: desktop sockets do
+    /// not fail this way, so their classification is unchanged.
+    #[must_use]
+    pub fn from_io(error: &std::io::Error) -> Self {
+        #[cfg(target_os = "android")]
+        if error.raw_os_error() == Some(1) {
+            // EPERM: the NDK reports a blocked LAN socket as
+            // ANDROID_NETWORK_BLOCKED_REASON_LNP with this errno.
+            return Self::Blocked {
+                reason: error.to_string(),
+            };
+        }
+
+        Self::Unreachable(error.to_string())
+    }
 }
 
 /// The device answered something this backend cannot use.
@@ -262,6 +314,7 @@ mod tests {
     /// compiling — which is the exhaustiveness test the spec asks for.
     fn route(error: &TvError) -> Remedy {
         match error {
+            TvError::Transport(TransportError::Blocked { .. }) => Remedy::RequestPermission,
             TvError::Transport(_) => Remedy::Retry,
             TvError::Protocol(_) => Remedy::BackOff,
             TvError::Auth(_) => Remedy::Reprovision,
@@ -279,6 +332,9 @@ mod tests {
     fn remedy_matches_the_exhaustive_match() {
         let cases = [
             TvError::Transport(TransportError::Timeout),
+            TvError::Transport(TransportError::Blocked {
+                reason: "EPERM".into(),
+            }),
             TvError::protocol("bad xml"),
             TvError::Auth(AuthError::PairingRequired),
             TvError::State(StateError::NotReady),
@@ -352,5 +408,40 @@ mod tests {
     fn errors_convert_from_their_parts() {
         let error: TvError = TransportError::Unreachable("192.168.1.5:8060".into()).into();
         assert_eq!(error.remedy(), Remedy::Retry);
+    }
+    /// The failure this variant exists for: a platform that refuses the call is not
+    /// a device that is off, and the two need different instructions.
+    #[test]
+    fn a_refused_lan_call_asks_for_the_permission_not_a_retry() {
+        let refused = TvError::Transport(TransportError::Blocked {
+            reason: "EPERM (blocked by ACCESS_LOCAL_NETWORK)".into(),
+        });
+        assert_eq!(refused.remedy(), Remedy::RequestPermission);
+        assert_ne!(refused.remedy(), Remedy::Retry);
+        let hint = refused.hint().expect("a user can act on this one");
+        assert!(hint.contains("network"), "{hint}");
+    }
+
+    /// Desktop sockets do not fail this way, so their classification is unchanged —
+    /// the same errno that means "blocked" on Android stays "unreachable" here.
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn a_desktop_socket_error_is_still_unreachable() {
+        let error = std::io::Error::from_raw_os_error(1);
+        assert!(matches!(
+            TransportError::from_io(&error),
+            TransportError::Unreachable(_)
+        ));
+    }
+
+    /// On Android that errno is the platform withholding the LAN call.
+    #[cfg(target_os = "android")]
+    #[test]
+    fn an_android_eperm_is_a_blocked_call() {
+        let error = std::io::Error::from_raw_os_error(1);
+        assert!(matches!(
+            TransportError::from_io(&error),
+            TransportError::Blocked { .. }
+        ));
     }
 }

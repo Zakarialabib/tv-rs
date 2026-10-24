@@ -31,9 +31,12 @@ pub fn tizen(error: &tv_rs_tizen::TizenError, capability: Capability) -> TvError
             TvError::Transport(TransportError::Unreachable(detail.clone()))
         }
         TizenError::Timeout => TvError::Transport(TransportError::Timeout),
-        TizenError::Ws(_) | TizenError::Http(_) | TizenError::Io(_) => {
+        TizenError::Ws(_) | TizenError::Http(_) => {
             TvError::Transport(TransportError::Unreachable(error.to_string()))
         }
+        // A socket error can be the platform refusing the call outright rather
+        // than a television that is off; only `from_io` can tell them apart.
+        TizenError::Io(io) => TvError::Transport(TransportError::from_io(io)),
         TizenError::Json(_) | TizenError::Xml(_) | TizenError::Url(_) => {
             TvError::Protocol(ProtocolError::Malformed(error.to_string()))
         }
@@ -63,9 +66,8 @@ pub fn webos(error: &tv_rs_webos::WebosError, capability: Capability) -> TvError
             format!("ssap error {code}: {message}"),
         )),
         WebosError::Timeout => TvError::Transport(TransportError::Timeout),
-        WebosError::Ws(_) | WebosError::Io(_) => {
-            TvError::Transport(TransportError::Unreachable(error.to_string()))
-        }
+        WebosError::Ws(_) => TvError::Transport(TransportError::Unreachable(error.to_string())),
+        WebosError::Io(io) => TvError::Transport(TransportError::from_io(io)),
         WebosError::Json(_) | WebosError::Url(_) => {
             TvError::Protocol(ProtocolError::Malformed(error.to_string()))
         }
@@ -108,9 +110,13 @@ pub fn discovery(error: &tv_rs_discovery::DiscoveryError) -> TvError {
         DiscoveryError::Malformed(detail) | DiscoveryError::Xml(detail) => {
             TvError::Protocol(ProtocolError::Malformed(detail.clone()))
         }
-        DiscoveryError::Io(_) | DiscoveryError::Http(_) => {
+        DiscoveryError::Http(_) => {
             TvError::Transport(TransportError::Unreachable(error.to_string()))
         }
+        // Discovery is where an Android block shows up first and looks most like
+        // "there are no televisions here": the SSDP send is refused, nothing is
+        // ever received, and an empty list is the wrong story to tell.
+        DiscoveryError::Io(io) => TvError::Transport(TransportError::from_io(io)),
     }
 }
 
@@ -128,7 +134,7 @@ pub fn power(error: &tv_rs_power::PowerError) -> TvError {
         PowerError::InvalidBroadcastAddress(detail) => TvError::Protocol(ProtocolError::Malformed(
             format!("invalid broadcast address: {detail}"),
         )),
-        PowerError::Io(_) => TvError::Transport(TransportError::Unreachable(error.to_string())),
+        PowerError::Io(io) => TvError::Transport(TransportError::from_io(io)),
     }
 }
 
@@ -225,6 +231,13 @@ mod tests {
                     "truncated".into(),
                 )),
                 Remedy::BackOff,
+            ),
+            // A platform that withholds the call is not a device that is off.
+            (
+                TvError::Transport(TransportError::Blocked {
+                    reason: "EPERM".into(),
+                }),
+                Remedy::RequestPermission,
             ),
         ];
 

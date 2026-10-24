@@ -59,6 +59,12 @@ impl HealerLadder {
                 self.failures.insert(device.clone(), self.max_attempts);
                 HealerAction::Quarantine
             }
+            // Only the user can grant a permission (Android's LAN block), and an
+            // agent that keeps retrying just burns the battery: stop and report.
+            Remedy::RequestPermission => {
+                self.failures.insert(device.clone(), self.max_attempts);
+                HealerAction::Quarantine
+            }
             Remedy::ApplyQuirk => HealerAction::Reconnect,
             Remedy::Wait | Remedy::BackOff | Remedy::Retry => {
                 let count = self.failures.entry(device.clone()).or_insert(0);

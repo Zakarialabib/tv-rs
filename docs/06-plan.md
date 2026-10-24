@@ -107,9 +107,10 @@ Tier B makes the Remote real, per vendor — reorder it by the TVs on the bench.
 Landed so far, each recorded in [CHANGELOG.md](../CHANGELOG.md): **A2** (one error
 type, exhaustive remedy maps, the webOS registration split), **A1** (the facade owns
 the connection pools, with `close_all()` and a `testkit` proof that twenty presses
-open one channel), **A3** (the core `serde` feature and its wire contract) and **A4**
+open one channel), **A3** (the core `serde` feature and its wire contract), **A4**
 (wake on all three vendors, `with_mac`, `learn_mac` on Roku, and `Capability::Wake`
-advertised only where it can be delivered).
+advertised only where it can be delivered) and **A5** (a platform-refused call is
+`Blocked`/`RequestPermission`, not an unreachable television).
 
 ### 3.2 A4 · G4 (the remainder) — MAC learning on Samsung and webOS
 
@@ -130,20 +131,7 @@ is the honest answer until someone traces one.
 [`01-playbook.md`](01-playbook.md) the way the other protocol facts are), `learn_mac()`
 returning the address on both vendors, and a test pinning the parsed field.
 
-### 3.3 A5 · G14 — an Android block must not read as "TV off"
-
-From Android 17 (target SDK 37) LAN sockets need runtime `ACCESS_LOCAL_NETWORK`:
-TCP connects time out and UDP sends fail `EPERM`, both mapped today to
-`Timeout`/`Unreachable` → `Retry`/`Wait`, so the UI offers _Wake_ forever.
-
-**Shape (decided):** `TransportError::Blocked { reason }` plus a new
-`Remedy::RequestPermission` — the UI must say "grant access", not "wake".
-
-**Exit:** on `target_os = "android"`, `EPERM` and the NDK's
-`ANDROID_NETWORK_BLOCKED_REASON_LNP` map to `Blocked`; zero datagrams received is
-distinguishable from zero TVs answered; desktop paths are untouched.
-
-### 3.4 B1 · G10a — webOS key input — **done**
+### 3.3 B1 · G10a — webOS key input — **done**
 
 The pointer/input socket (`getPointerInputSocket`) is implemented: `crates/webos/src/pointer.rs`
 owns the frame encoder, the `socketPath` extraction and a `PointerWire`/`PointerFactory` pair,
@@ -153,34 +141,34 @@ advertises `Capability::Key` for webOS; registration requests `CONTROL_INPUT_TEX
 `CONTROL_MOUSE_AND_KEYBOARD`, without which the TV refuses the path. Still unverified against
 a real panel — the fake TV cannot answer SSAP, so the wire form is pinned by tests only.
 
-### 3.5 B2 · G10b — foreground on Roku and Tizen
+### 3.4 B2 · G10b — foreground on Roku and Tizen
 
 Roku `/query/active-app`, Tizen's foreground app: the "on screen" card and the
 fleet's app check need them.
 
-### 3.6 B3 · G5 — installed apps on Tizen and webOS
+### 3.5 B3 · G5 — installed apps on Tizen and webOS
 
 webOS `listLaunchPoints`; Tizen `ed.installedApp.get` over the remote channel. Today
 only Roku lists apps.
 
-### 3.7 B4 · G10c — mute read, and input select
+### 3.6 B4 · G10c — mute read, and input select
 
 `VolumeControl` has `volume()` and `set_mute()` but no `muted()`; input select is
 missing on webOS (`switchInput`) and Tizen (at least `KEY_HDMI1..4`).
 
-### 3.8 B5 · G6 — text entry
+### 3.7 B5 · G6 — text entry
 
 Tizen `ms.remote.control` `SendInputString` (base64), webOS IME `insertText`, Roku
 `Lit_<char>` key presses — for search boxes on the TV.
 
-### 3.9 C1 · G7 — Android readiness
+### 3.8 C1 · G7 — Android readiness
 
 A distinct error when **zero datagrams** were received (no multicast permission) as
 opposed to zero TVs answering; a `rustls-platform-verifier` feature for
 `tv-rs-transport`; `cfg`-gate `tv-rs-local` so Android and iOS do not build a
 desktop EDID probe.
 
-### 3.10 D — the rest, in the companion's order
+### 3.9 D — the rest, in the companion's order
 
 - **G3** streaming discovery (`discover_stream()` or a callback; dedup stays in the
   scanner) — Devices › Find streams results as TVs answer.
@@ -197,7 +185,7 @@ desktop EDID probe.
 - **G18** event streams (`tv-rs` push instead of request/response) — the companion's
   own list added it while this plan was written; it follows Tier B.
 
-### 3.11 X · Android TV as a target — the spike that decides (not a crate yet)
+### 3.10 X · Android TV as a target — the spike that decides (not a crate yet)
 
 The matrix deferred Android TV for ADB's trust model (developer mode, per-TV
 pairing). The peer landscape ([`03-matrix.md`](03-matrix.md#peer-landscape--the-same-work-in-other-languages))
