@@ -143,59 +143,44 @@ control greyed out rather than silently typing nothing.
 **Exit:** the webOS IME surface and the Tizen `SendInputString` payload traced into the
 playbook with their sources, then `type_text()` answering on both.
 
-### 2.4 C1 · G7 (the remainder) — Android readiness
+### 2.4 D — the rest, in the companion's order
 
-**The silent probe landed.** The scanner counts the datagrams it receives and returns
-`DiscoveryError::SilentProbe` when that count is zero, so "nothing answered" is no
-longer reported as "no displays". The message names both explanations (nothing
-listening, or the local network unreachable) because neither is knowable from here,
-and the facade maps it to `TransportError::Blocked` — reusing A5's "grant access"
-remedy rather than inventing a third bucket. An empty list still means the network
-answered and no display was among the replies.
-
-**Still open:**
-
-- **`rustls-platform-verifier` as a `tv-rs-transport` feature.** Scoped by
-  recon, because the plan's wording ("platform-native certificate verification")
-  points at the wrong target:
-  - `native-tls` **already exists** as a feature and already *is* the platform trust
-    store. It is banned in rustls-only consumers, which is policy — so the feature is
-    not "add native-tls".
-  - The actual gap is narrower: the rustls feature loads roots through
-    `rustls-native-certs`, which reads the *system* store. Android and iOS do not
-    expose one that way — Android has a keystore and iOS has its own roots — so an
-    unpinned policy on a mobile build has **no roots to verify against**. That is
-    exactly the case `rustls-platform-verifier` exists for.
-  - **Shape it must take:** an *additive* feature that supplies the root store for
-    the unpinned policy only. `TlsPolicy::Pinned` and `TrustOnFirstUse` must keep
-    their own verifiers, and nothing may silently weaken pinning — the repo's rule is
-    that verification never silently weakens.
-
-**Already satisfied — the plan's premise was stale.** `tv-rs-local` was said to build a
-desktop EDID probe into mobile builds; it does not. The probe is `cfg`-gated per
-platform (`lib.rs` keeps a stub for anything that is neither Windows nor Linux) and its
-Windows dependencies are target-scoped (`[target.'cfg(windows)'.dependencies]`), so
-cargo neither builds nor resolves them for a mobile target. Verified by
-`cargo check -p tv-rs-local --target aarch64-linux-android`, which exits 0.
-
-### 2.5 D — the rest, in the companion's order
+Each entry was checked against the code before being left standing, because these
+premises go stale: what the audit found is recorded next to the item, not deleted.
 
 - **G3** streaming discovery (`discover_stream()` or a callback; dedup stays in the
-  scanner) — Devices › Find streams results as TVs answer.
+  scanner) — Devices › Find streams results as TVs answer. **Open, premise holds:** no
+  streaming entry point exists; the `callback` hits in the tree are DLNA GENA
+  subscriptions, which are a different mechanism.
 - **G8** `HealerLadder::release()` plus an audit entry, for Fleet › "Release from
-  quarantine".
-- **G10d** DLNA `RenderingControl` (volume/mute for renderers).
-- **G10e** MDC behind the facade: `TvVendor::Mdc` and the same `DeviceHandle` path, so
-  panels are not a special case.
+  quarantine". **Half-built:** `crates/agent/src/audit.rs` already exists, so this is
+  the ladder's `release()` plus the entry, not a new audit subsystem.
+- **G10d** DLNA `RenderingControl` (volume/mute for renderers). **Open, with
+  groundwork:** `dlna/src/soap.rs` already *parses* the `RenderingControl:1` service
+  and its `controlURL` out of the device description, but no volume or mute action is
+  implemented — the discovery half is done, the SOAP actions are not.
+- **G10e** MDC behind the facade. **The premise names a type that does not exist:**
+  there is no `TvVendor::Mdc`. `TvVendor` is `Samsung | Lg | Roku | Unknown`; MDC
+  identity lives in core's `DeviceOs::SamsungMdc`, a different enum, and the facade has
+  no MDC arm at all. The work is a facade path keyed on `DeviceOs`, not a `TvVendor`
+  variant — decide which enum the facade should branch on before writing it.
 - **G15** `probe(ip) -> Option<DiscoveredTv>` — "what is at this IP?" for guest Wi-Fi
-  and Android pickers that hand back an address.
-- **G16** Tizen DIAL URL launching through `TvClient::open_url`.
+  and Android pickers that hand back an address. **Open, premise holds:** nothing
+  probes a single address today.
+- **G16** Tizen DIAL URL launching through `TvClient::open_url`. **Open, and further
+  along than the wording suggests:** the facade already has `open_url()` and a test
+  pins Tizen *refusing* it (`open_url_is_refused_where_there_is_no_browser`), and
+  `crates/tizen/src/apps.rs` already carries DIAL. So this is wiring an existing
+  refusal to an existing DIAL surface, not new protocol work.
 - **G17** DLNA `get_transport_info` / `get_position_info`, so a cast's position is a
-  cold read rather than a session-scoped estimate.
+  cold read rather than a session-scoped estimate. **Open, premise holds:** neither
+  action appears in the crate.
 - **G18** event streams (`tv-rs` push instead of request/response) — the companion's
-  own list added it while this plan was written; it follows Tier B.
+  own list added it while this plan was written; it follows Tier B. **Open:** the only
+  `subscribe` in the tree is the agent's MQTT transport, which is not a facade push
+  API.
 
-### 2.6 X · Android TV as a target — the spike that decides (not a crate yet)
+### 2.5 X · Android TV as a target — the spike that decides (not a crate yet)
 
 The matrix deferred Android TV for ADB's trust model (developer mode, per-TV
 pairing). The peer landscape ([`03-matrix.md`](03-matrix.md#peer-landscape--the-same-work-in-other-languages))

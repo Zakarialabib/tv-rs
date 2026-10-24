@@ -55,7 +55,12 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 #[cfg(all(feature = "ws", feature = "rustls"))]
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 #[cfg(all(feature = "ws", feature = "rustls"))]
-use rustls::{ClientConfig, DigitallySignedStruct, RootCertStore, SignatureScheme};
+use rustls::{ClientConfig, DigitallySignedStruct, SignatureScheme};
+// Only the `Strict` policy's non-feature path builds a root store by hand; with
+// `platform-verifier` the operating system supplies one, so the import would be
+// unused — and an unused import is a clippy failure under `-D warnings`.
+#[cfg(not(feature = "platform-verifier"))]
+use rustls::RootCertStore;
 use thiserror::Error;
 #[cfg(feature = "ws")]
 use tokio_tungstenite::Connector;
@@ -331,13 +336,37 @@ pub fn rustls_config(policy: TlsPolicy) -> Result<ClientConfig, TlsError> {
         }
         TlsPolicy::Strict => {
             // Platform trust store; TVs with self-signed certs fail here by design.
-            let mut roots = RootCertStore::empty();
-            let native = rustls_native_certs::load_native_certs();
-            for cert in native.certs {
-                // Malformed entries in an OS store are not fatal for us.
-                let _ = roots.add(cert);
+            //
+            // Two ways to get it, and the feature decides which. `rustls-native-certs`
+            // reads a *system store*, which Android (a keystore) and iOS (its own
+            // roots) do not expose that way — so on those platforms this arm would
+            // find nothing to verify against. With `platform-verifier` the operating
+            // system is asked directly instead, and rustls stays the stack.
+            //
+            // Only this arm changes. `Pinned` and `TrustOnFirstUse` install their own
+            // verifiers above and never reach here, so the feature cannot weaken
+            // pinning — which is the property the rustls-only policy exists to keep.
+            #[cfg(feature = "platform-verifier")]
+            {
+                use rustls_platform_verifier::BuilderVerifierExt;
+
+                // The extension takes this builder, so the ring provider and the
+                // protocol versions chosen above are carried into the verifier.
+                builder
+                    .with_platform_verifier()
+                    .map_err(|error| TlsError::Build(error.to_string()))?
             }
-            builder.with_root_certificates(roots)
+
+            #[cfg(not(feature = "platform-verifier"))]
+            {
+                let mut roots = RootCertStore::empty();
+                let native = rustls_native_certs::load_native_certs();
+                for cert in native.certs {
+                    // Malformed entries in an OS store are not fatal for us.
+                    let _ = roots.add(cert);
+                }
+                builder.with_root_certificates(roots)
+            }
         }
     };
 
@@ -516,9 +545,29 @@ impl ServerCertVerifier for FingerprintVerifier {
 
 #[cfg(all(test, feature = "ws"))]
 mod tests {
+    /// The feature's whole contract: it changes where `Strict` gets its roots and
+    /// nothing else. A feature that also moved `Pinned` or `TrustOnFirstUse` would
+    /// silently weaken pinning, which is the property the rustls-only policy exists
+    /// to keep — so this asserts all four policies still build with it enabled.
+    #[cfg(feature = "platform-verifier")]
+    #[test]
+    fn the_platform_verifier_changes_only_the_strict_policy() {
+        assert!(
+            rustls_config(TlsPolicy::Strict).is_ok(),
+            "Strict asks the OS for roots"
+        );
+        assert!(rustls_config(TlsPolicy::Pinned(CertFingerprint::of_der(&[1, 2, 3]))).is_ok());
+        assert!(rustls_config(TlsPolicy::TrustOnFirstUse(cert_sink())).is_ok());
+        assert!(rustls_config(TlsPolicy::AcceptInvalid).is_ok());
+    }
+
     use tokio_tungstenite::Connector;
 
     use super::{connector, TlsPolicy};
+    // Gated with the test that needs them: with the feature off these would be
+    // unused imports, and clippy runs `-D warnings`.
+    #[cfg(feature = "platform-verifier")]
+    use super::{cert_sink, rustls_config, CertFingerprint};
 
     #[test]
     fn policy_defaults_to_strict() {

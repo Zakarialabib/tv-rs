@@ -102,6 +102,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`RokuDeviceInfo::mac()`** — the Wi-Fi address when the box is wireless, the
   Ethernet one when it is wired.
 
+### Added
+
+- **`platform-verifier`: the operating system's root store for `tv-rs-transport`**
+  (companion gap G7). `rustls-native-certs` reads a *system* store, which Android (a
+  keystore) and iOS (its own roots) do not expose — so a mobile build with
+  `TlsPolicy::Strict` had no roots to verify against. The new `platform-verifier`
+  feature asks the operating system instead, through `rustls-platform-verifier` pinned
+  at 0.7.1, the version whose API was verified against docs.rs rather than remembered.
+  Additive and narrow: **only the `Strict` arm changes**. `Pinned` and
+  `TrustOnFirstUse` install their own verifiers and never reach it, so the feature
+  cannot weaken pinning — asserted by a test that builds all four policies with it
+  enabled. The extension used is `BuilderVerifierExt::with_platform_verifier`, which
+  takes the existing builder so the workspace's ring provider and protocol versions
+  carry into the verifier; the no-arg `ConfigVerifierExt` would have discarded them.
+
 ### Changed
 
 - **A silent SSDP probe is now an error, not an empty list** (`tv-rs-discovery` +
