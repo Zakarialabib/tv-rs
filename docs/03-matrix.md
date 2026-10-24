@@ -69,8 +69,9 @@ Why each dash is a fact, not a gap:
   panel hours (`0x83`) behind the core's `supporting` feature. It advertises no
   aggregate **`Telemetry`** — MDC has no signal-strength history or uptime — and
   **never** advertises `ScreenCapture`: no MDC command captures the panel's
-  picture. See [`06-plan.md`](06-plan.md#1-release-030--blocked-on-a-token)'s
-  rejected-list for the sources behind that refusal.
+  picture. Each refusal above is sourced in [`01-playbook.md`](01-playbook.md), not
+  assumed: the vendor's own protocol documentation is what says the command is absent,
+  and the playbook is where those sources are recorded.
 
 **The rule the table enforces: an absent accessor means the protocol cannot do
 it** — knowable before any command is sent, and the same fact as the typed

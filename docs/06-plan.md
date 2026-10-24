@@ -9,38 +9,7 @@ history.
 
 ---
 
-## 1. Release `0.3.0` — blocked on a token
-
-The version bump, the lockfile, the ordered publish and every gate are done. The first
-upload is refused `403 Forbidden`: the available token is `publish-new`, and updating
-the thirteen existing crates needs `publish-update` (`tv-rs-mdc` alone would not, since
-it is new). Nothing else stands between `main` and this release.
-
-Everything on `main` ships in this release, which is why it is a minor bump: the
-breaking additions are `Remedy::Quarantine`, `DeviceOs::SamsungMdc`, the three
-telemetry capabilities, and the five LFD capability variants (`PanelLock`,
-`Orientation`, `NoSignalStatus`, and behind `supporting` `LampOrPanelHours` and
-`ScreenCapture`).
-
-`cargo xtask publish --version 0.3.0` rewrites every pin and publishes in dependency
-order — `tv-rs-core` first, then the leaves (`tv-rs-mdc` and the new `tv-rs-app`
-among them), then the crates that name them. The order is data, not prose:
-`xtask/src/main.rs::ORDER` is the single home, and
-[ADR-001](adr/001-crate-publication.md) records why it is shaped that way.
-
-**A note on the dry run.** `cargo xtask publish --version 0.3.0 --dry-run` verifies only
-the first crate. `cargo publish` resolves a tarball's dependencies from the registry,
-and the other fourteen crates depend on `0.3.0` siblings that are not on it yet — so
-the run stops at crate two with `candidate versions found which didn't match`. That is
-the release's state, not a defect: the ordered upload is what makes the real run work,
-because each crate is on the index before the next one resolves it. It is also why
-`ORDER` exists.
-
-**Exit:** fifteen crates at `0.3.0`, a fresh `cargo add tv-rs` consumer builds against
-`power_observation()` and `assess_telemetry`, docs.rs serves the new items, and the
-CHANGELOG and README agree with the registry.
-
-## 2. `tv-rs-app` — the TV app producer (SignageMaster handoff E6)
+## 1. `tv-rs-app` — the TV app producer (SignageMaster handoff E6)
 
 Package a **supplied** web/wasm payload as an installable TV app: a Tizen `.wgt`, a
 webOS app directory, and a plain web bundle. This is the one handoff item the
@@ -73,7 +42,7 @@ wrapper once the registry has the crate.
 open with the platform's own tooling; the manifest and key-map functions are covered
 by tests; SignageMaster deletes `platform-tv-wrapper` once this publishes.
 
-## 2b. Display probe merge (SignageMaster handoff E3b) — the consumer switch
+## 1b. Display probe merge (SignageMaster handoff E3b) — the consumer switch
 
 SignageMaster's `crates/device/src/hardware/display/` duplicated what
 `tv-rs-local` is for. **The tv-rs side landed on 2026-10-23**
@@ -88,18 +57,18 @@ linuxhw/EDID, CC BY 4.0) and run on a live Windows host.
 What is open is the consumer's half: SignageMaster replaces `edid::parse_edid_bytes`
 (and its `edidkit` dependency) and `read_edid_from_registry` with the calls above,
 then deletes its copy. Not moved, by design: DDC/CI brightness and display rotation
-in its `win32.rs` are output *control*, which is [item 7](#7-ddcci-in-tv-rs-local)
+in its `win32.rs` are output *control*, which is [item 6](#6-ddcci-in-tv-rs-local)
 and the expansion plan's `tv-rs-local` v2 — not part of the probe.
 
 **Exit:** SignageMaster depends on `tv-rs-local` for EDID identity and deletes
 `edid.rs`; this section is deleted.
 
-## 3. Companion-app gaps — the tv-rs side
+## 2. Companion-app gaps — the tv-rs side
 
 Requested by the companion app (`companion-app/docs/TV-RS-GAPS.md`, ranked by its
 `BACKEND-PLAN.md`). Every gap below was verified open on `main` before it was written
 down. **One PR per gap, with its test and a CHANGELOG entry; the section is deleted
-when it lands.** The gap work ships in [0.4.0](#10-release-040).
+when it lands.** The gap work ships in [0.4.0](#9-release-040).
 
 Tier A shapes the contract, so it goes before the companion writes its `src-tauri`.
 Tier B makes the Remote real, per vendor — reorder it by the TVs on the bench.
@@ -113,7 +82,7 @@ advertised only where it can be delivered), **A5** (a platform-refused call is
 `Blocked`/`RequestPermission`, not an unreachable television) and **B2's Roku half**
 (`/query/active-app`).
 
-### 3.2 A4 · G4 (the remainder) — MAC learning on Samsung and webOS
+### 2.1 A4 · G4 (the remainder) — MAC learning on Samsung and webOS
 
 Wake landed for all three vendors: Roku goes over ECP `PowerOn`, and Tizen and webOS
 broadcast a magic packet once a caller supplies the address
@@ -132,17 +101,7 @@ is the honest answer until someone traces one.
 [`01-playbook.md`](01-playbook.md) the way the other protocol facts are), `learn_mac()`
 returning the address on both vendors, and a test pinning the parsed field.
 
-### 3.3 B1 · G10a — webOS key input — **done**
-
-The pointer/input socket (`getPointerInputSocket`) is implemented: `crates/webos/src/pointer.rs`
-owns the frame encoder, the `socketPath` extraction and a `PointerWire`/`PointerFactory` pair,
-and `WebosSessionPool::send_key` keeps one pointer socket per TV and reuses it across presses
-(reopened once on failure). The facade maps `Key` → button name (`webos_key`) and now
-advertises `Capability::Key` for webOS; registration requests `CONTROL_INPUT_TEXT` and
-`CONTROL_MOUSE_AND_KEYBOARD`, without which the TV refuses the path. Still unverified against
-a real panel — the fake TV cannot answer SSAP, so the wire form is pinned by tests only.
-
-### 3.4 B2 · G10b (the remainder) — foreground on Tizen
+### 2.2 B2 · G10b (the remainder) — foreground on Tizen
 
 Roku landed: `GET /query/active-app` (verified against Roku's External Control
 Protocol documentation, recorded in [`01-playbook.md`](01-playbook.md) §5) parses to
@@ -162,29 +121,24 @@ code.
 **Exit:** the endpoint traced and recorded, `TizenClient` returning the foreground app
 id, `foreground()` answering on Tizen, and a test pinning the parsed shape.
 
-### 3.5 B3 · G5 — installed apps on Tizen and webOS
+### 2.3 B3 · G5 — installed apps on Tizen and webOS
 
 webOS `listLaunchPoints`; Tizen `ed.installedApp.get` over the remote channel. Today
 only Roku lists apps.
 
-### 3.6 B4 · G10c — mute read, and input select
-
-`VolumeControl` has `volume()` and `set_mute()` but no `muted()`; input select is
-missing on webOS (`switchInput`) and Tizen (at least `KEY_HDMI1..4`).
-
-### 3.7 B5 · G6 — text entry
+### 2.4 B5 · G6 — text entry
 
 Tizen `ms.remote.control` `SendInputString` (base64), webOS IME `insertText`, Roku
 `Lit_<char>` key presses — for search boxes on the TV.
 
-### 3.8 C1 · G7 — Android readiness
+### 2.5 C1 · G7 — Android readiness
 
 A distinct error when **zero datagrams** were received (no multicast permission) as
 opposed to zero TVs answering; a `rustls-platform-verifier` feature for
 `tv-rs-transport`; `cfg`-gate `tv-rs-local` so Android and iOS do not build a
 desktop EDID probe.
 
-### 3.9 D — the rest, in the companion's order
+### 2.6 D — the rest, in the companion's order
 
 - **G3** streaming discovery (`discover_stream()` or a callback; dedup stays in the
   scanner) — Devices › Find streams results as TVs answer.
@@ -201,7 +155,7 @@ desktop EDID probe.
 - **G18** event streams (`tv-rs` push instead of request/response) — the companion's
   own list added it while this plan was written; it follows Tier B.
 
-### 3.10 X · Android TV as a target — the spike that decides (not a crate yet)
+### 2.7 X · Android TV as a target — the spike that decides (not a crate yet)
 
 The matrix deferred Android TV for ADB's trust model (developer mode, per-TV
 pairing). The peer landscape ([`03-matrix.md`](03-matrix.md#peer-landscape--the-same-work-in-other-languages))
@@ -229,7 +183,7 @@ no re-deferral of A5/C1 — the phone-side sender work rides its own plan items.
 row); the playbook's Android TV paragraph reflects the verdict; the matrix
 deferred list is updated the day a crate is decided either way.
 
-## 4. `tv-rs-sim` — verify the hardware exits without hardware
+## 3. `tv-rs-sim` — verify the hardware exits without hardware
 
 Every exit above that says "on a real TV" needs something that answers like one. This
 is a fake panel that speaks the **real** protocols — Tizen remote channel (TLS,
@@ -245,7 +199,7 @@ transcripts are checked against the protocol facts in
 [`01-playbook.md`](01-playbook.md); a doc records which exits are now CI-verified and
 which still need a panel.
 
-## 5. `tv-rs-sony` — Bravia REST + IRCC
+## 4. `tv-rs-sony` — Bravia REST + IRCC
 
 Sony's consumer and pro panels expose a documented JSON-REST API plus IRCC-IP for key
 presses, authenticated with a pre-shared key. It is the smallest remaining vendor
@@ -254,7 +208,7 @@ integration: power, input, volume, app launch, and key codes.
 **Exit:** passes the conformance suite; capability set is honest (no absolute volume if
 the API only takes steps); pairing failure maps to `Auth` with `Remedy::Reprovision`.
 
-## 6. Native CEC — only after a measurement
+## 5. Native CEC — only after a measurement
 
 `tv-rs-cec` shells out to `cec-client`. That is a deliberate trade (no `unsafe`, no C
 toolchain), and it is fine until someone shows the subprocess latency hurts. If that
@@ -264,7 +218,7 @@ confined to one module; keep the subprocess adapter as the default.
 **Exit:** a number, not an opinion — p50/p95 for a standby command through each path,
 and no new botched error paths.
 
-## 7. DDC/CI in `tv-rs-local`
+## 6. DDC/CI in `tv-rs-local`
 
 Brightness and input for the display the machine is _attached to_, over `/dev/i2c`
 (`VCP 0x10`, `VCP 0x60`). It belongs in `tv-rs-local` because that crate already owns
@@ -273,7 +227,7 @@ Brightness and input for the display the machine is _attached to_, over `/dev/i2
 **Exit:** Linux-only, feature-gated, reads VCP codes on a real monitor, and returns a
 typed error where i2c is unavailable.
 
-## 8. Hardware verification — the only unmet gate
+## 7. Hardware verification — the only unmet gate
 
 `cargo xtask hw-test --write-doc` fills `docs/hil-results.md` the moment a television
 answers SSDP. Until then every protocol claim in this repository is
@@ -283,7 +237,7 @@ documented-and-mocked.
 what was commanded and what came back — or an explicit "not verified" line, which is
 also a result.
 
-## 9. Local media caching and multi-screen sync
+## 8. Local media caching and multi-screen sync
 
 `tv-rs-media` serves a remote panel's stream. The same node should cache to local disk
 and drive several panels from one producer without pulling the source through the
@@ -292,7 +246,7 @@ network twice: a player-level cache plus a sync coordinator on `tv-rs-media`.
 **Exit:** a local cache hit is measurable and reportable; two-panel sync shows no double
 network transfer for a shared source; no regression in the existing `Media` traits.
 
-## 10. Release `0.4.0`
+## 9. Release `0.4.0`
 
 Every open item above, shipped in the order of this page: `tv-rs-core`, protocol
 crates, `tv-rs-mdc`, then the agent, media and facade. Under the policy in
