@@ -470,6 +470,13 @@ impl VolumeControl for MockBackend {
         *self.muted.lock().expect("mock lock") = muted;
         Ok(())
     }
+
+    async fn mute(&self) -> Result<Option<bool>, TvError> {
+        if !self.capabilities.contains(Capability::Volume) {
+            return Err(self.unsupported(Capability::Volume));
+        }
+        Ok(Some(*self.muted.lock().expect("mock lock")))
+    }
 }
 
 #[async_trait]

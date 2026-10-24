@@ -191,6 +191,12 @@ impl VolumeControl for MdcDevice {
     async fn set_mute(&self, muted: bool, _cmd: CommandId) -> Result<(), TvError> {
         Ok(self.client.set_mute(muted).await?)
     }
+
+    /// MDC's status frame carries no mute bit this crate reads yet, so the answer
+    /// is "cannot tell" rather than a guess.
+    async fn mute(&self) -> Result<Option<bool>, TvError> {
+        Ok(None)
+    }
 }
 
 #[async_trait]

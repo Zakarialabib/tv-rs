@@ -40,7 +40,7 @@ use serde_json::Value;
 use tokio::sync::Mutex;
 
 use crate::client::{WebosClient, WebosSession};
-use crate::error::Result;
+use crate::error::{Result, WebosError};
 use crate::pointer::{
     extract_socket_path, BoxedPointerFactory, LivePointerFactory, PointerFrame, PointerWire,
 };
@@ -373,6 +373,40 @@ impl<F: WebosSessionFactory> WebosSessionPool<F> {
         Ok(())
     }
 
+    /// Reads the mute state through the pooled session.
+    ///
+    /// webOS answers `ssap://audio/getMute` with `{"mute": bool}`; anything else
+    /// is a protocol error rather than a silent `false`, because a wrong `false`
+    /// is exactly the blind toggle this read exists to remove.
+    pub async fn get_mute(&self, client: &WebosClient) -> Result<bool> {
+        match self
+            .dispatch(client, &Op::Request(SsapUri::AudioGetMute, None))
+            .await?
+        {
+            OpOutcome::Value(value) => value
+                .get("mute")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| WebosError::Protocol("getMute carried no `mute` field".to_owned())),
+            _ => unreachable!("a request op yields a value"),
+        }
+    }
+
+    /// Switches the active input through the pooled session.
+    ///
+    /// `input_id` is the webOS id (`HDMI_1`, `tv`, …); mapping a vendor-neutral
+    /// input onto it is the caller's job.
+    pub async fn switch_input(&self, client: &WebosClient, input_id: &str) -> Result<()> {
+        self.dispatch(
+            client,
+            &Op::Request(
+                SsapUri::TvSwitchInput,
+                Some(serde_json::json!({ "inputId": input_id })),
+            ),
+        )
+        .await?;
+        Ok(())
+    }
+
     /// Reads the foreground application through the pooled session.
     pub async fn foreground_app(&self, client: &WebosClient) -> Result<Option<String>> {
         match self.dispatch(client, &Op::ForegroundApp).await? {
@@ -594,6 +628,7 @@ pub mod testkit {
                 SsapUri::NetworkInputGetPointerSocket => json!({
                     "socketPath": "wss://10.0.0.9:3001/resources/h/netinput.pointer.sock"
                 }),
+                SsapUri::AudioGetMute => json!({ "mute": true }),
                 _ => Value::Null,
             })
         }
@@ -772,6 +807,24 @@ mod tests {
         assert_eq!(opens.load(Ordering::SeqCst), 1, "session must be reused");
         assert_eq!(served.load(Ordering::SeqCst), 3);
         assert_eq!(pool.len().await, 1);
+    }
+
+    #[tokio::test]
+    async fn mute_read_and_input_switch_share_the_pooled_session() {
+        let (opens, served) = counters();
+        let pool = WebosSessionPool::with_factory(factory(opens.clone(), 0, served));
+        let client = WebosClient::new("10.0.0.5");
+
+        assert!(pool.get_mute(&client).await.expect("mute read"));
+        pool.switch_input(&client, "HDMI_2")
+            .await
+            .expect("input switch");
+
+        assert_eq!(
+            opens.load(Ordering::SeqCst),
+            1,
+            "both commands reused one session"
+        );
     }
 
     #[tokio::test]

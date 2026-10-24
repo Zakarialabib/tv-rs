@@ -58,6 +58,7 @@ impl TvClient {
                 set.insert(Capability::Foreground);
                 set.insert(Capability::Volume);
                 set.insert(Capability::Key);
+                set.insert(Capability::InputSelect);
             }
             Self::Roku { .. } => {
                 set.insert(Capability::Key);
@@ -294,16 +295,26 @@ impl AppLaunch for TvClient {
 
 #[async_trait]
 impl InputSelect for TvClient {
+    /// webOS exposes no reliable "which input is live" read, so this is `None`
+    /// rather than a guess; the UI shows an unknown input dot.
     async fn active_input(&self) -> Result<Option<Input>, TvError> {
-        Err(TvError::Unsupported(Capability::InputSelect))
+        match self {
+            Self::Webos { .. } => Ok(None),
+            _ => Err(TvError::Unsupported(Capability::InputSelect)),
+        }
     }
 
-    async fn select_input(
-        &self,
-        _input: Input,
-        _cmd: tv_rs_core::CommandId,
-    ) -> Result<(), TvError> {
-        Err(TvError::Unsupported(Capability::InputSelect))
+    /// webOS switches with `ssap://tv/switchInput`.
+    async fn select_input(&self, input: Input, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
+        match self {
+            Self::Webos { client, pool, .. } => {
+                let input_id = webos_input(input)?;
+                pool.switch_input(client, &input_id)
+                    .await
+                    .map_err(|error| map::webos(&error, Capability::InputSelect))
+            }
+            _ => Err(TvError::Unsupported(Capability::InputSelect)),
+        }
     }
 }
 
@@ -317,6 +328,20 @@ impl VolumeControl for TvClient {
                 .map(Some)
                 .map_err(|error| map::webos(&error, Capability::Volume)),
             _ => Err(TvError::Unsupported(Capability::Volume)),
+        }
+    }
+
+    /// Reads the mute state. webOS answers `ssap://audio/getMute`; the others
+    /// cannot say yet, which is `Ok(None)` rather than an error — a vendor that
+    /// can toggle mute but not read it is not a failure.
+    async fn mute(&self) -> Result<Option<bool>, TvError> {
+        match self {
+            Self::Webos { client, pool, .. } => pool
+                .get_mute(client)
+                .await
+                .map(Some)
+                .map_err(|error| map::webos(&error, Capability::Volume)),
+            _ => Ok(None),
         }
     }
 
@@ -412,6 +437,23 @@ fn tizen_key(key: Key) -> Result<TizenRemoteKey, TvError> {
 }
 
 /// Maps a core key onto the Roku ECP key vocabulary.
+/// Maps a vendor-neutral input to the id webOS' `switchInput` expects.
+///
+/// The ids are the ones `ssap://tv/getExternalInputList` reports: `HDMI_1`,
+/// `HDMI_2`, … (1-based), and `tv` for the tuner. USB is media rather than an
+/// input, so it is refused instead of guessed at. Unverified on a real panel —
+/// there is no LG set here — so the ids are pinned by tests, not a screenshot.
+fn webos_input(input: Input) -> Result<String, TvError> {
+    Ok(match input {
+        Input::Hdmi(port) if port >= 1 => format!("HDMI_{port}"),
+        Input::Tv => "tv".to_owned(),
+        Input::Other(name) => name,
+        Input::Hdmi(_) | Input::Usb(_) => {
+            return Err(TvError::Unsupported(Capability::InputSelect));
+        }
+    })
+}
+
 /// Maps a vendor-neutral key to the webOS pointer channel's button name.
 ///
 /// webOS has no remote-key endpoint: SSAP exposes no `KEY_*` message, so a
@@ -531,6 +573,7 @@ mod tests {
                     Capability::Key,
                     Capability::AppLaunch,
                     Capability::Foreground,
+                    Capability::InputSelect,
                     Capability::Volume,
                 ],
             ),
@@ -669,6 +712,34 @@ mod tests {
         assert_eq!(webos_key(Key::VolumeUp).expect("mapped"), "VOLUMEUP");
         assert_eq!(webos_key(Key::FastForward).expect("mapped"), "FASTFORWARD");
         assert_eq!(webos_key(Key::Digit(7)).expect("mapped"), "7");
+    }
+
+    #[test]
+    fn webos_maps_inputs_to_switch_input_ids() {
+        // The ids `ssap://tv/getExternalInputList` reports, 1-based.
+        assert_eq!(webos_input(Input::Hdmi(1)).expect("mapped"), "HDMI_1");
+        assert_eq!(webos_input(Input::Hdmi(4)).expect("mapped"), "HDMI_4");
+        assert_eq!(webos_input(Input::Tv).expect("mapped"), "tv");
+        assert_eq!(
+            webos_input(Input::Other("AV_1".into())).expect("mapped"),
+            "AV_1"
+        );
+    }
+
+    #[test]
+    fn webos_refuses_inputs_it_has_no_id_for() {
+        // USB is media, not an input, and HDMI ports are 1-based.
+        for input in [Input::Hdmi(0), Input::Usb(1)] {
+            // `Input` is not `Copy`, so name it before it is consumed.
+            let label = format!("{input:?}");
+            assert!(
+                matches!(
+                    webos_input(input),
+                    Err(TvError::Unsupported(Capability::InputSelect))
+                ),
+                "{label} should be refused"
+            );
+        }
     }
 
     #[test]

@@ -19,14 +19,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   was never used), `MockBackend` reports its own state, and MDC returns `None`
   rather than guessing.
 
-### Fixed
-
-- `tv-rs-mdc` did not compile: `TransportError::from_io` takes `&io::Error` and the
-  mapping passed it by value.
-- `tv-rs-agent`'s `HealerLadder` became non-exhaustive when `Remedy::RequestPermission`
-  was added. It now maps that remedy to `Quarantine`: only the user can grant a
-  permission, so retrying only burns battery.
-
 
 ### Fixed
 

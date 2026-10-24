@@ -415,6 +415,12 @@ pub trait VolumeControl: Send + Sync {
 
     /// Mutes or unmutes.
     async fn set_mute(&self, muted: bool, cmd: CommandId) -> Result<(), TvError>;
+
+    /// Reads the mute state, when the platform can say.
+    ///
+    /// `Ok(None)` means "cannot tell" — the UI shows an unknown mute dot rather
+    /// than the blind toggle it was forced into while this did not exist.
+    async fn mute(&self) -> Result<Option<bool>, TvError>;
 }
 
 /// Panel brightness.

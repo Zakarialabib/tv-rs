@@ -54,6 +54,8 @@ pub enum SsapUri {
     AudioSetMute,
     /// Read the current mute state.
     AudioGetMute,
+    /// Switch the active input (`{"inputId": "HDMI_1"}`).
+    TvSwitchInput,
     /// Turn the TV off.
     SystemTurnOff,
     /// Turn the TV screen off while keeping the main CPU awake.
@@ -91,6 +93,7 @@ impl SsapUri {
             Self::AudioGetVolume => "ssap://audio/getVolume",
             Self::AudioSetMute => "ssap://audio/setMute",
             Self::AudioGetMute => "ssap://audio/getMute",
+            Self::TvSwitchInput => "ssap://tv/switchInput",
             Self::SystemTurnOff => "ssap://system/turnOff",
             Self::TvTurnOffScreen => "ssap://com.webos.service.tv.power/turnOffScreen",
             Self::MediaPause => "ssap://media.controls/pause",
