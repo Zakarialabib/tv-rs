@@ -121,39 +121,19 @@ code.
 **Exit:** the endpoint traced and recorded, `TizenClient` returning the foreground app
 id, `foreground()` answering on Tizen, and a test pinning the parsed shape.
 
-### 2.3 B3 · G5 — installed apps on Tizen and webOS
-
-**Corrected while auditing, because two of the three premises were wrong.**
-
-- **The facade has no `apps()` arm at all.** `AppLaunch` is implemented for the
-  capabilities the fleet grid reads (`launch`, `foreground`) but not for listing what is
-  installed, so the "which apps are on this TV" column has no source — for *any* vendor,
-  including Roku.
-- **webOS: the URI is `listApps`, not `listLaunchPoints`.** `SsapUri::SystemLauncherListApps`
-  already maps to `ssap://com.webos.applicationManager/listApps`, but no method calls it and
-  the response shape (`launchPoints[]` with id/title/icon) is not recorded in the playbook,
-  so it needs the same provenance pass as B2's Roku endpoint before it is code.
-- **Tizen: `ed.installedApp.get` is unverified here.** Not in the crate, not in the
-  playbook. Same rule as the other Samsung gaps: a capability without a verified vendor
-  command does not exist.
-
-**Exit:** `AppLaunch::apps()` answering on Roku and webOS with the installed list, the
-webOS response shape recorded in the playbook with its source, and Tizen left honestly
-unsupported (or verified and implemented) rather than guessed.
-
-### 2.4 B5 · G6 — text entry
+### 2.3 B5 · G6 — text entry
 
 Tizen `ms.remote.control` `SendInputString` (base64), webOS IME `insertText`, Roku
 `Lit_<char>` key presses — for search boxes on the TV.
 
-### 2.5 C1 · G7 — Android readiness
+### 2.4 C1 · G7 — Android readiness
 
 A distinct error when **zero datagrams** were received (no multicast permission) as
 opposed to zero TVs answering; a `rustls-platform-verifier` feature for
 `tv-rs-transport`; `cfg`-gate `tv-rs-local` so Android and iOS do not build a
 desktop EDID probe.
 
-### 2.6 D — the rest, in the companion's order
+### 2.5 D — the rest, in the companion's order
 
 - **G3** streaming discovery (`discover_stream()` or a callback; dedup stays in the
   scanner) — Devices › Find streams results as TVs answer.
@@ -170,7 +150,7 @@ desktop EDID probe.
 - **G18** event streams (`tv-rs` push instead of request/response) — the companion's
   own list added it while this plan was written; it follows Tier B.
 
-### 2.7 X · Android TV as a target — the spike that decides (not a crate yet)
+### 2.6 X · Android TV as a target — the spike that decides (not a crate yet)
 
 The matrix deferred Android TV for ADB's trust model (developer mode, per-TV
 pairing). The peer landscape ([`03-matrix.md`](03-matrix.md#peer-landscape--the-same-work-in-other-languages))

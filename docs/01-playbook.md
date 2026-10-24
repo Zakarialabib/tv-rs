@@ -125,7 +125,19 @@ ssap://audio/setVolume           {"volume": 15}
 ssap://audio/getVolume
 ssap://system/turnOff
 ssap://com.webos.applicationManager/getForegroundAppInfo
+ssap://com.webos.applicationManager/listApps
 ```
+
+`listApps` answers `{"apps":[{"id":"com.webos.app.netflix","title":"Netflix"}]}`: the
+catalogue of installed applications, and an entry with no `id` is skipped rather than
+shown as a blank row. The shape is documented for the same Lune bus by webOS OSE
+(`webosose.org/docs/reference/ls2-api/com-webos-service-applicationmanager/`, which names
+the method `listLaunchPoints` and lists `launchPoints[].id` and `launchPoints[].title` as
+required fields) and by LG's own Application Manager reference
+(`webostv.developer.lge.com/develop/references/application-manager`); an independent client
+library (`hobbyquaker/lgtv2`) maps the same reply to id → title. The crate's URI is
+`listApps`, the name webOS uses on consumer televisions; `listLaunchPoints` is the name
+the open-source tree documents.
 
 Traps:
 

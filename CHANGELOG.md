@@ -16,10 +16,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   never used); Roku answers `/query/apps` through the facade now, rather than
   only from the caller. Entries with no id are skipped and a missing title stays
   `None`.
-
-
-### Added
-
 - **webOS input switching** (`ssap://tv/switchInput`): `WebosSessionPool::switch_input`
   plus an `InputSelect` implementation for `TvClient::Webos`, so the companion's
   Inputs sheet appears on an LG set. `active_input()` answers `None` — webOS has no
@@ -30,7 +26,65 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   "cannot tell". webOS answers `ssap://audio/getMute` (the URI already existed and
   was never used), `MockBackend` reports its own state, and MDC returns `None`
   rather than guessing.
-
+- **An Android block no longer reads as "TV off" (companion gap A5)**: from Android
+  17 (target SDK 37) a LAN socket needs the runtime `ACCESS_LOCAL_NETWORK`
+  permission, and until the user grants it the platform refuses the call — `EPERM`
+  from a blocked socket, which the NDK reports as
+  `ANDROID_NETWORK_BLOCKED_REASON_LNP`. Every socket error used to be stringified
+  into `TransportError::Unreachable`, which routes to *Retry*, so the UI offered
+  *Wake* forever for a television that was awake and merely unreachable by this app.
+  Core gains `TransportError::Blocked { reason }` with a `from_io()` classifier —
+  the `EPERM` check compiles only on `target_os = "android"`, so desktop
+  classification is unchanged — and `Remedy::RequestPermission`, because the UI must
+  say "grant access" rather than "wake", with a `hint()` that names the grant. The
+  facade's tizen, webOS, discovery and power mappings and MDC's socket arm route
+  through the classifier, so a refused SSDP send is a blocked call instead of an
+  empty discovery list. The healer maps the new remedy to `Quarantine`: the
+  permission belongs to the platform, so retrying burns battery and waking wakes
+  nothing.
+- **Installed applications through the facade — companion gap G5**: `AppLaunch::installed_apps()`
+  now has real arms, so the fleet grid's "what is on this television" column has a source.
+  webOS enumerates through `ssap://com.webos.applicationManager/listApps` (the pool already
+  parsed it; the facade never called it) and Roku through `/query/apps` — both answers map to
+  `AppRef { id, name }`. The refusal names its own capability: `Capability::AppList` is new, and
+  Tizen answers `Unsupported(AppList)` rather than `Unsupported(AppLaunch)`, because the remote
+  channel starts an application it cannot enumerate and the two facts are independent. Advertised
+  only where delivered, and the webOS reply shape is recorded in the playbook with its sources.
+- **Roku foreground reads (`tv-rs-roku` + the facade — companion gap G10b, Roku half)**:
+  `RokuClient::query_active_app()` fetches `GET /query/active-app` and
+  `parse_active_app()` turns it into `RokuActiveApp` — the active app's id and name,
+  plus any screensaver covering it. The facade's `foreground()` answers on Roku now and
+  advertises `Capability::Foreground`, which is what an "on screen" card reads. The
+  home screen reports `Roku` with no `id`, so that answers `None` rather than inventing
+  an application; the three documented shapes (app, home screen, screensaver) each have
+  a test. Tizen's half stays open: no foreground command for the consumer remote
+  channel is verified in this workspace, and the candidate endpoint needs provenance
+  before it becomes code.
+- **webOS key input (`tv-rs-webos` + the facade — companion gap G10a)**: a press is
+  now a `type:button` frame on the pointer socket `getPointerInputSocket` hands
+  back. `PointerWire` / `PointerFactory` keep that connection testable without a
+  television, and `WebosSessionPool::send_key` holds one pointer socket per TV,
+  reuses it across presses and reopens it once on failure.
+  `WEBOS_DEFAULT_PERMISSIONS` gains `CONTROL_INPUT_TEXT` and
+  `CONTROL_MOUSE_AND_KEYBOARD` — the input service refuses the path without them,
+  so a registration that omitted them paired fine and then had a dead D-pad. The
+  facade maps `Key` to the channel's own button vocabulary (`webos_key`) and now
+  advertises `Capability::Key` for webOS. **Unverified on a real panel**: the fake
+  TV cannot answer SSAP, so the wire form is pinned by unit tests.
+- **Wake, and the address it needs (companion gap A4)**: `TvClient` can wake a panel
+  at last. Roku goes over ECP — `PowerControl::wake()` calls the `PowerOn` keypress the
+  client already had, because a Roku answers while the screen is dark. Tizen and webOS
+  drop their network stack when they sleep, so their only path is a broadcast magic
+  packet: `TvClient::with_mac("aa:bb:...")` supplies the address and `wake()` then
+  broadcasts it through `tv_rs_power::wake_on_lan`. `Capability::Wake` is advertised
+  exactly where a wake can be delivered — always on Roku, on the other two once a MAC
+  is known — never merely because the trait exists. `TvClient::learn_mac()` reads
+  Roku's own `/query/device-info` (Wi-Fi address preferred over wired) and refuses on
+  Samsung and webOS rather than guessing at an endpoint; `DeviceDescriptor::mac`
+  reports whatever the handle knows, so a fleet can persist it. A malformed address is
+  reported as `ProtocolError::Malformed` instead of being broadcast.
+- **`RokuDeviceInfo::mac()`** — the Wi-Fi address when the box is wireless, the
+  Ethernet one when it is wired.
 
 ### Fixed
 
@@ -51,74 +105,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Every capability's serde output is now asserted equal to its `as_str()` label,
   so the derive and the label cannot drift. Two redundant `#[must_use]`s on
   functions returning `Result` are gone.
-
-
-### Added
-
-- **An Android block no longer reads as "TV off" (companion gap A5)**: from Android
-  17 (target SDK 37) a LAN socket needs the runtime `ACCESS_LOCAL_NETWORK`
-  permission, and until the user grants it the platform refuses the call — `EPERM`
-  from a blocked socket, which the NDK reports as
-  `ANDROID_NETWORK_BLOCKED_REASON_LNP`. Every socket error used to be stringified
-  into `TransportError::Unreachable`, which routes to *Retry*, so the UI offered
-  *Wake* forever for a television that was awake and merely unreachable by this app.
-  Core gains `TransportError::Blocked { reason }` with a `from_io()` classifier —
-  the `EPERM` check compiles only on `target_os = "android"`, so desktop
-  classification is unchanged — and `Remedy::RequestPermission`, because the UI must
-  say "grant access" rather than "wake", with a `hint()` that names the grant. The
-  facade's tizen, webOS, discovery and power mappings and MDC's socket arm route
-  through the classifier, so a refused SSDP send is a blocked call instead of an
-  empty discovery list. The healer maps the new remedy to `Quarantine`: the
-  permission belongs to the platform, so retrying burns battery and waking wakes
-  nothing.
-
-- **Installed applications through the facade — companion gap G5**: `AppLaunch::installed_apps()`
-  now has real arms, so the fleet grid's "what is on this television" column has a source.
-  webOS enumerates through `ssap://com.webos.applicationManager/listApps` (the pool already
-  parsed it; the facade never called it) and Roku through `/query/apps` — both answers map to
-  `AppRef { id, name }`. The refusal names its own capability: `Capability::AppList` is new, and
-  Tizen answers `Unsupported(AppList)` rather than `Unsupported(AppLaunch)`, because the remote
-  channel starts an application it cannot enumerate and the two facts are independent. Advertised
-  only where delivered, and the webOS reply shape is recorded in the playbook with its sources.
-
-- **Roku foreground reads (`tv-rs-roku` + the facade — companion gap G10b, Roku half)**:
-  `RokuClient::query_active_app()` fetches `GET /query/active-app` and
-  `parse_active_app()` turns it into `RokuActiveApp` — the active app's id and name,
-  plus any screensaver covering it. The facade's `foreground()` answers on Roku now and
-  advertises `Capability::Foreground`, which is what an "on screen" card reads. The
-  home screen reports `Roku` with no `id`, so that answers `None` rather than inventing
-  an application; the three documented shapes (app, home screen, screensaver) each have
-  a test. Tizen's half stays open: no foreground command for the consumer remote
-  channel is verified in this workspace, and the candidate endpoint needs provenance
-  before it becomes code.
-
-- **webOS key input (`tv-rs-webos` + the facade — companion gap G10a)**: a press is
-  now a `type:button` frame on the pointer socket `getPointerInputSocket` hands
-  back. `PointerWire` / `PointerFactory` keep that connection testable without a
-  television, and `WebosSessionPool::send_key` holds one pointer socket per TV,
-  reuses it across presses and reopens it once on failure.
-  `WEBOS_DEFAULT_PERMISSIONS` gains `CONTROL_INPUT_TEXT` and
-  `CONTROL_MOUSE_AND_KEYBOARD` — the input service refuses the path without them,
-  so a registration that omitted them paired fine and then had a dead D-pad. The
-  facade maps `Key` to the channel's own button vocabulary (`webos_key`) and now
-  advertises `Capability::Key` for webOS. **Unverified on a real panel**: the fake
-  TV cannot answer SSAP, so the wire form is pinned by unit tests.
-
-- **Wake, and the address it needs (companion gap A4)**: `TvClient` can wake a panel
-  at last. Roku goes over ECP — `PowerControl::wake()` calls the `PowerOn` keypress the
-  client already had, because a Roku answers while the screen is dark. Tizen and webOS
-  drop their network stack when they sleep, so their only path is a broadcast magic
-  packet: `TvClient::with_mac("aa:bb:...")` supplies the address and `wake()` then
-  broadcasts it through `tv_rs_power::wake_on_lan`. `Capability::Wake` is advertised
-  exactly where a wake can be delivered — always on Roku, on the other two once a MAC
-  is known — never merely because the trait exists. `TvClient::learn_mac()` reads
-  Roku's own `/query/device-info` (Wi-Fi address preferred over wired) and refuses on
-  Samsung and webOS rather than guessing at an endpoint; `DeviceDescriptor::mac`
-  reports whatever the handle knows, so a fleet can persist it. A malformed address is
-  reported as `ProtocolError::Malformed` instead of being broadcast.
-
-- **`RokuDeviceInfo::mac()`** — the Wi-Fi address when the box is wireless, the
-  Ethernet one when it is wired.
 
 ## [0.3.0] - 2026-10-24
 
