@@ -107,18 +107,28 @@ Tier B makes the Remote real, per vendor — reorder it by the TVs on the bench.
 Landed so far, each recorded in [CHANGELOG.md](../CHANGELOG.md): **A2** (one error
 type, exhaustive remedy maps, the webOS registration split), **A1** (the facade owns
 the connection pools, with `close_all()` and a `testkit` proof that twenty presses
-open one channel) and **A3** (the core `serde` feature and its wire contract).
+open one channel), **A3** (the core `serde` feature and its wire contract) and **A4**
+(wake on all three vendors, `with_mac`, `learn_mac` on Roku, and `Capability::Wake`
+advertised only where it can be delivered).
 
-### 3.2 A4 · G13 + G4 — nothing can wake
+### 3.2 A4 · G4 (the remainder) — MAC learning on Samsung and webOS
 
-`wake()` returns `Unsupported(Wake)` for every vendor, `RokuClient::power_on` exists
-and is unused, and `DiscoveredTv` carries no MAC, so no `WolSender` can be built.
+Wake landed for all three vendors: Roku goes over ECP `PowerOn`, and Tizen and webOS
+broadcast a magic packet once a caller supplies the address
+(`TvClient::with_mac`), with `Capability::Wake` advertised only where it can actually
+be delivered. What is open is the convenience half — learning the address instead of
+asking for it.
 
-**Exit:** Roku wakes via ECP `PowerOn`; the MAC is learned while the TV is awake
-(Samsung `:8001/api/v2/` `wifiMac`, Roku device-info, webOS `getSystemInfo`) and kept
-in `DeviceDescriptor::mac`; `wake()` with a MAC sends a magic packet; each failure
-carries the vendor's own hint ("Fast TV start", "Turn on via Wi-Fi", "Power On with
-Mobile").
+`TvClient::learn_mac()` answers on Roku (`/query/device-info`, Wi-Fi address preferred
+over wired). On Samsung and webOS it refuses, because **neither endpoint this item
+originally named has a verified source in this workspace**: the playbook records no
+`:8001/api/v2/` `wifiMac` field and no `ssap://system/getSystemInfo` MAC, and the rule
+here is that a capability without a verified vendor command does not exist. Refusing
+is the honest answer until someone traces one.
+
+**Exit:** a provenance-traced source for each endpoint (added to
+[`01-playbook.md`](01-playbook.md) the way the other protocol facts are), `learn_mac()`
+returning the address on both vendors, and a test pinning the parsed field.
 
 ### 3.3 A5 · G14 — an Android block must not read as "TV off"
 

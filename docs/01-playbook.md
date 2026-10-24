@@ -43,7 +43,12 @@ Traps:
 `_googlecast._tcp.local`). Not implemented here.
 
 **ARP** — resolving an IP to a MAC so Wake-on-LAN can target a sleeping device.
-Also not implemented; ask the user for the MAC once and store it.
+The ARP probe itself is not implemented: a magic packet is addressed to a MAC, and the
+facade takes one from the caller (`TvClient::with_mac`) or reads it off a Roku
+(`/query/device-info` carries `<wifi-mac>` / `<ethernet-mac>`) rather than walking the
+LAN's ARP table. Store the address once and reuse it — that is what
+`DeviceDescriptor::mac` is for. Samsung and webOS have no verified MAC query here, so
+`learn_mac()` refuses on them rather than guessing at an endpoint.
 
 ## §2 Power
 

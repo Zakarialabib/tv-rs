@@ -54,6 +54,17 @@ pub struct RokuDeviceInfo {
 }
 
 impl RokuDeviceInfo {
+    /// The hardware address the device reports, preferring Wi-Fi.
+    ///
+    /// A wired Roku fills `ethernet-mac` and leaves `wifi-mac` empty; a wireless
+    /// one does the reverse. Either identifies the box, so the first present wins.
+    #[must_use]
+    pub fn mac(&self) -> Option<String> {
+        self.wifi_mac.clone().or_else(|| self.ethernet_mac.clone())
+    }
+}
+
+impl RokuDeviceInfo {
     /// The reported power state as a typed value.
     ///
     /// Returns [`crate::RokuPowerMode::Unknown`] when the firmware omitted `<power-mode>`

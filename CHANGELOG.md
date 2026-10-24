@@ -20,6 +20,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   advertises `Capability::Key` for webOS. **Unverified on a real panel**: the fake
   TV cannot answer SSAP, so the wire form is pinned by unit tests.
 
+- **Wake, and the address it needs (companion gap A4)**: `TvClient` can wake a panel
+  at last. Roku goes over ECP — `PowerControl::wake()` calls the `PowerOn` keypress the
+  client already had, because a Roku answers while the screen is dark. Tizen and webOS
+  drop their network stack when they sleep, so their only path is a broadcast magic
+  packet: `TvClient::with_mac("aa:bb:...")` supplies the address and `wake()` then
+  broadcasts it through `tv_rs_power::wake_on_lan`. `Capability::Wake` is advertised
+  exactly where a wake can be delivered — always on Roku, on the other two once a MAC
+  is known — never merely because the trait exists. `TvClient::learn_mac()` reads
+  Roku's own `/query/device-info` (Wi-Fi address preferred over wired) and refuses on
+  Samsung and webOS rather than guessing at an endpoint; `DeviceDescriptor::mac`
+  reports whatever the handle knows, so a fleet can persist it. A malformed address is
+  reported as `ProtocolError::Malformed` instead of being broadcast.
+
+- **`RokuDeviceInfo::mac()`** — the Wi-Fi address when the box is wireless, the
+  Ethernet one when it is wired.
+
 ## [0.3.0] - 2026-10-24
 
 ### Added
@@ -54,6 +70,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the error alone cannot. webOS `RegistrationFailed` now carries `presented_key`:
   a **declined prompt** maps to `Auth(PairingRequired)`, a **revoked stored key** to
   `Auth(TokenExpired)` — the app can finally offer the right button.
+
 - **Optional serialization of the core device model (`tv_rs_core/serde`)**: the new
   `serde` feature (off by default) derives `Serialize`/`Deserialize` for the core
   data types — `Capability`, `Key`, `Input`, `AppRef`, `DeviceDescriptor`,
@@ -62,19 +79,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `{"verified_at_ms": u64, "age_ms": u64, "confidence": "high"|"inferred"|"unknown",
   "value": T}`. No extra dependency in the default build, and the companion can
   hand the core types straight to its `types.ts` instead of maintaining a DTO fork.
+
 - **`tv_rs::map` — the one home of vendor-error mapping**: three exhaustive
   per-vendor functions (`tizen`, `webos`, `roku`) plus `discovery` and `power`.
   No wildcard arms — a new vendor error variant is a compile error until someone
   assigns its remedy, and a table-driven test walks every variant. Consumers of the
   protocol crates directly (the CLI) route through the same functions.
+
 - **`DiscoveredTv.to_client` / facade errors for unknown devices** answer with
   `UnsupportedDevice`, which unlike the old `UnsupportedVendor` carries the address
   a fleet dashboard can act on.
+
 - **webOS session pool (`tv-rs-webos`)**: one registered SSAP session per TV,
   reused across commands instead of paying a dial + `register` handshake per call
   (which without a stored key meant an on-screen prompt per command). Idle limit
   60 s, a dead session reopens exactly once before the failure surfaces, and
   the pool serialises requests per TV to match the protocol.
+
 - **webOS pointer channel**: `SsapUri::NetworkInputGetPointerSocket` plus
   `PointerSocket` — a second WebSocket computed from the per-session
   `socketPath` the TV returns, carrying byte-exact plain-text pointer frames
@@ -96,28 +117,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   refuses key presses: SSAP has no key endpoint, and the pointer socket that does is a
   separate item. Proven without hardware — `cargo test -p tv-rs --features testkit`
   presses twenty keys through the facade and asserts exactly one channel was opened.
+
 - **`testkit` features in `tv-rs-tizen`, `tv-rs-webos` and `tv-rs`**: counting channel
   and session factories, so a downstream crate can prove connection reuse without a
   television. Off by default; a released build carries no test code.
-
-### Changed
-
-- Facade inherent methods (`open_url`, `power_off`, `power_state`,
-  `power_observation`, `launch_app`) and all seven `DeviceHandle` trait impls return
-  core errors directly; vendor-bound calls are mapped at the call site with the
-  capability the call site needed `to_core` deleted.
-
-## [0.3.0] - 2026-10-22
-
-Fifteen crates. The telemetry lane lands (`tv-rs-core` telemetry + capabilities,
-`tv-rs-agent` policy and its graduated remediation ladder), `tv-rs-mdc` joins as the
-commercial-signage protocol and speaks RS-232 as well as TCP, the LFD capability
-surfaces arrive in core and MDC, and `DeviceOs::SamsungMdc`, `Remedy::Quarantine` and
-five new capability variants make the 0.x-breaking bump to `0.3.0`. The specification
-documents are gone: rustdoc, `docs/architecture.md` and this file carry the design,
-and `docs/06-plan.md` is the only plan.
-
-### Added
 
 - **`tv-rs-app` — a TV app producer**: package a supplied web/wasm payload as an
   installable TV app. Tizen `config.xml` and webOS `appinfo.json` generation, the
@@ -136,6 +139,7 @@ and `docs/06-plan.md` is the only plan.
 in-memory channel to prove the codec is shared rather than copied. `serial`is off
 by default, so a cloud agent that only talks to networked panels compiles no serial
 stack, and an absent device is a typed`MdcError::Io` rather than a hang.
+
 - **Commercial LFD capability surfaces** (`tv-rs-core` + `tv-rs-mdc`): a 40-inch
   wall panel is not a TV remote, and the vocabulary therefor is now in the device
   model. `Capability` grows `PanelLock`, `Orientation` and `NoSignalStatus` as
@@ -146,6 +150,7 @@ stack, and an absent device is a typed`MdcError::Io` rather than a hang.
   `ScreenCapturer` (`ScreenFrame`). The mock backend advertises and answers all
   of them from settable state, and the conformance suite covers truth table and
   `Unsupported` routing for all five.
+
 - **The LFD subset on MDC**: `tv-rs-mdc` advertises and implements exactly what
   its protocol speaks — panel lock (`0x5F`), content orientation
   (`0xC8`/`0x82`; `MdcOrientation` maps onto `tv_rs_core::Orientation`),
@@ -155,10 +160,12 @@ stack, and an absent device is a typed`MdcError::Io` rather than a hang.
   invalid-selection case of `0x0D`. That `0x0D` reply also carries panel temperature
   and input-source state, which is why the health surface exists: MDC does report
   those two, and an earlier draft of this file said it did not.
+
 - **Tizen states its absence**: the consumer remote channel (8001/8002) exposes
   none of the LFD subset, so `TvClient` advertises none of it — documented in the
   facade's capability table and the state matrix rather than faked behind a
   adapter that cannot work.
+
 - **Graduated remediation ladder** (`tv-rs-agent::remedy`): the agent no longer stops
   at a telemetry verdict. A panel that is hot but not critical is **dimmed**
   (`Capability::Brightness`) and deferred; a panel whose temperature or link is
@@ -192,94 +199,26 @@ stack, and an absent device is a typed`MdcError::Io` rather than a hang.
   well-fed, it is unknown. Plus the `TelemetryProvider` trait and the
   `Brightness`/`Reboot`/`Telemetry` capabilities, with `BrightnessControl`,
   `Rebootable` and `Probe` to drive them.
+
 - **Telemetry policy** (`tv-rs-agent`): `assess_telemetry()` turns a snapshot and
   thresholds into `Healthy` / `Wait` / `Quarantine` as a pure function — no clock, no
   counter, no "third reading" state machine. The runner skips a hot panel instead of
   commanding it, quarantines a critical one, and a failed telemetry read never blocks
   reconciliation.
+
 - **`DeviceOs::SamsungMdc`**, because an MDC panel is not "unknown": no pairing, no
   WebSocket, a display id instead of a remote.
 
-
-- **Public EDID parser and active-display EDID enumeration in `tv-rs-local`
-  (SignageMaster handoff E3b)**: `tv_rs_local::parse_edid(&[u8]) -> Result<Edid,
-  EdidError>` reads the base block per VESA E-EDID 1.4 §3 — PNP manufacturer id,
-  product code, serial (numeric and descriptor), week/year, version, digital input,
-  size in cm, the product-name descriptor and the preferred `DetailedTiming` (pixel
-  clock, active/blank, image mm, `refresh_hz()`), extension count and a reported (not
-  enforced) checksum. `display_edids() -> Vec<DisplayEdid>` returns the raw bytes and
-  the parsed block for every active display: on Windows from
-  `HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY\<id>\<instance>\Device Parameters\EDID`,
-  addressed through the monitor's device interface path; on Linux from
-  `/sys/class/drm`. The Windows probe uses that EDID when WMI has no record, and the
-  Linux probe now fills `model` and `serial` from it. Tested against two real EDIDs
-  from linuxhw/EDID (CC BY 4.0).
-
-- **One error taxonomy at the facade (companion gap A2)**: `tv_rs::TvError` is now a
-  re-export of `tv_rs_core::TvError` — the facade's parallel enum is deleted, not
-  deprecated. Core gains `TvError::UnsupportedDevice { address, reason }` (a device
-  answered and matched no signature) and `TvError::UnsupportedOperation { vendor,
-  operation }` (the vendor has no such protocol message), both routing to
-  `Remedy::Disable`, and a `hint()` method that returns a user-facing sentence where
-  the error alone cannot. webOS `RegistrationFailed` now carries `presented_key`:
-  a **declined prompt** maps to `Auth(PairingRequired)`, a **revoked stored key** to
-  `Auth(TokenExpired)` — the app can finally offer the right button.
-- **Optional serialization of the core device model (`tv_rs_core/serde`)**: the new
-  `serde` feature (off by default) derives `Serialize`/`Deserialize` for the core
-  data types — `Capability`, `Key`, `Input`, `AppRef`, `DeviceDescriptor`,
-  `PowerState`, `TvError`, `Remedy`, `ObservedState` — with the wire contract that
-  goes to the companion: `Key::Digit(n)` → `"digit_n"`, `ObservedField` →
-  `{"verified_at_ms": u64, "age_ms": u64, "confidence": "high"|"inferred"|"unknown",
-  "value": T}`. No extra dependency in the default build, and the companion can
-  hand the core types straight to its `types.ts` instead of maintaining a DTO fork.
-- **`tv_rs::map` — the one home of vendor-error mapping**: three exhaustive
-  per-vendor functions (`tizen`, `webos`, `roku`) plus `discovery` and `power`.
-  No wildcard arms — a new vendor error variant is a compile error until someone
-  assigns its remedy, and a table-driven test walks every variant. Consumers of the
-  protocol crates directly (the CLI) route through the same functions.
-- **`DiscoveredTv.to_client` / facade errors for unknown devices** answer with
-  `UnsupportedDevice`, which unlike the old `UnsupportedVendor` carries the address
-  a fleet dashboard can act on.
-- **webOS session pool (`tv-rs-webos`)**: one registered SSAP session per TV,
-  reused across commands instead of paying a dial + `register` handshake per call
-  (which without a stored key meant an on-screen prompt per command). Idle limit
-  60 s, a dead session reopens exactly once before the failure surfaces, and
-  the pool serialises requests per TV to match the protocol.
-- **webOS pointer channel**: `SsapUri::NetworkInputGetPointerSocket` plus
-  `PointerSocket` — a second WebSocket computed from the per-session
-  `socketPath` the TV returns, carrying byte-exact plain-text pointer frames
-  (`type:move` / `type:button` / `type:click` / `type:scroll`, always with the
-  `down:` flag, blank-line terminated). Fire-and-forget as the TV acknowledges
-  nothing; `close()` gives the last frame the 120 ms grace the TV needs before
-  dropping near-close writes. Provenance-traced to four independent
-  implementations and one measured writeup (webOS 23). New enum variant; per
-  the 0.x policy that is a minor bump.
-
-- **The facade holds the connection pools (companion gap A1)**: `TvClient`'s Tizen
-  and webOS variants now carry the pool next to the protocol client, so a key press,
-  a volume change or a foreground read reuses one connection per TV instead of paying
-  TCP + TLS + handshake on every call — the cost the facade was paying while
-  `TizenConnectionPool` sat unused. Each pool is shared behind an `Arc`, so cloning a
-  handle clones the *connection*, not the right to open another one; `TvClient::close_all()`
-  releases them for mobile backgrounding; and the factories are erased
-  (`DynConnectionPool` / `DynSessionPool`) so a caller can inject its own. webOS still
-  refuses key presses: SSAP has no key endpoint, and the pointer socket that does is a
-  separate item. Proven without hardware — `cargo test -p tv-rs --features testkit`
-  presses twenty keys through the facade and asserts exactly one channel was opened.
-- **`testkit` features in `tv-rs-tizen`, `tv-rs-webos` and `tv-rs`**: counting channel
-  and session factories, so a downstream crate can prove connection reuse without a
-  television. Off by default; a released build carries no test code.
-
 ### Changed
-
-- **`Remedy::Quarantine`** joins the taxonomy, and `StateError::Quarantined` maps to
-  it: the capability still exists, the device's condition forbids using it — which is
-  the difference from `Disable`.
 
 - Facade inherent methods (`open_url`, `power_off`, `power_state`,
   `power_observation`, `launch_app`) and all seven `DeviceHandle` trait impls return
   core errors directly; vendor-bound calls are mapped at the call site with the
   capability the call site needed `to_core` deleted.
+
+- **`Remedy::Quarantine`** joins the taxonomy, and `StateError::Quarantined` maps to
+  it: the capability still exists, the device's condition forbids using it — which is
+  the difference from `Disable`.
 
 ### Removed
 
@@ -501,3 +440,4 @@ First published release: eleven crates on crates.io, all at `0.1.0`.
 - mDNS/Bonjour discovery and Android TV ADB are not implemented.
 - No crate has been verified against physical hardware in CI; use the `hil`
   harness.
+

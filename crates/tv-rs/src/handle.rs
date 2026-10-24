@@ -11,13 +11,15 @@
 //!
 //! | Vendor | power | wake | key | app | foreground | input | volume | panel lock | orientation | panel health |
 //! |---|---|---|---|---|---|---|---|---|---|---|
-//! | Tizen | ✓ | — | ✓ | ✓ | — | — | — | — | — | — |
-//! | webOS | ✓ | — | — | ✓ | ✓ | — | ✓ | — | — | — |
-//! | Roku | ✓ | — | ✓ | ✓ | — | — | — | — | — | — |
+//! | Tizen | ✓ | MAC | ✓ | ✓ | — | — | — | — | — | — |
+//! | webOS | ✓ | MAC | ✓ | ✓ | ✓ | — | ✓ | — | — | — |
+//! | Roku | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — | — |
 //!
-//! `wake` is absent because a discovered device does not carry its MAC yet, and a
-//! wake without one is a lie. `key` is absent on webOS because SSAP has no remote
-//! key endpoint — it wants a pointer-input socket. `volume` is absent on Tizen and
+//! `wake` reads `MAC` where the vendor drops its network stack when it sleeps:
+//! the only wake path there is a broadcast magic packet, which needs an address
+//! neither SSDP nor the pairing token carries — so the capability appears once
+//! [`TvClient::with_mac`] has supplied one. Roku answers power-on over ECP while
+//! the screen is dark, so it needs neither. `volume` is absent on Tizen and
 //! Roku because both expose relative keys, not an absolute level, so `set_volume`
 //! cannot be honoured. The LFD columns are absent everywhere **per protocol**: the
 //! consumer remote channels (Tizen 8001/8002, SSAP, ECP) have no panel-lock,
@@ -28,10 +30,12 @@
 
 use async_trait::async_trait;
 
+use tv_rs_core::ProtocolError;
 use tv_rs_core::{
     AppLaunch, AppRef, Capability, CapabilitySet, DeviceDescriptor, DeviceHandle, DeviceId,
     DeviceOs, Input, InputSelect, Key, KeyInput, PowerControl, PowerState, TvError, VolumeControl,
 };
+use tv_rs_power::MacAddress;
 use tv_rs_roku::RokuKey;
 use tv_rs_tizen::TizenRemoteKey;
 
@@ -55,12 +59,81 @@ impl TvClient {
                 set.insert(Capability::Volume);
                 set.insert(Capability::Key);
             }
-            Self::Roku(_) => {
+            Self::Roku { .. } => {
                 set.insert(Capability::Key);
                 set.insert(Capability::AppLaunch);
+                // ECP answers power-on while the screen is dark, so a Roku needs
+                // neither a MAC nor a magic packet to be woken.
+                set.insert(Capability::Wake);
             }
         }
+        // The other two drop their network stack when they sleep, so a magic
+        // packet is the only path — a capability only once there is an address to
+        // send it to.
+        if self.mac().is_some() {
+            set.insert(Capability::Wake);
+        }
         set
+    }
+
+    /// The hardware address this handle knows, if any.
+    #[must_use]
+    pub fn mac(&self) -> Option<&str> {
+        match self {
+            Self::Tizen { mac, .. } | Self::Webos { mac, .. } | Self::Roku { mac, .. } => {
+                mac.as_deref()
+            }
+        }
+    }
+
+    /// Remember the panel's hardware address.
+    ///
+    /// A magic packet is addressed to a MAC and neither the SSDP reply nor the
+    /// pairing token carries one, so a fleet learns it once — from the TV's own
+    /// network settings, or from [`TvClient::learn_mac`] where the vendor answers
+    /// — and hands it back here. With it, `wake()` broadcasts a packet for the
+    /// vendors that need one, and `descriptor().mac` reports it.
+    #[must_use]
+    pub fn with_mac(mut self, mac: impl Into<String>) -> Self {
+        let mac = mac.into();
+        match &mut self {
+            Self::Tizen { mac: slot, .. }
+            | Self::Webos { mac: slot, .. }
+            | Self::Roku { mac: slot, .. } => *slot = Some(mac),
+        }
+        self
+    }
+
+    /// Ask the TV for its own hardware address, and remember it.
+    ///
+    /// Roku answers from `/query/device-info`, preferring the Wi-Fi address over
+    /// the wired one. Tizen and webOS have no verified equivalent in this
+    /// workspace, so they refuse the operation rather than guess at an endpoint:
+    /// the caller supplies their address instead.
+    ///
+    /// # Errors
+    ///
+    /// Returns the mapped vendor error when the query fails, and
+    /// [`TvError::UnsupportedOperation`] where no verified query exists.
+    pub async fn learn_mac(&mut self) -> Result<Option<String>, TvError> {
+        match self {
+            Self::Roku { client, mac } => {
+                let info = client
+                    .query_device_info()
+                    .await
+                    .map_err(|error| map::roku(&error, Capability::PowerState))?;
+                *mac = info.mac();
+                Ok(mac.clone())
+            }
+            Self::Tizen { .. } => Err(TvError::UnsupportedOperation {
+                vendor: "samsung",
+                operation: "learn_mac",
+            }),
+            Self::Webos { .. } => Err(TvError::UnsupportedOperation {
+                vendor: "lg",
+                operation: "learn_mac",
+            }),
+        }
     }
 
     /// Drop every pooled connection this handle owns.
@@ -77,7 +150,7 @@ impl TvClient {
         match self {
             Self::Tizen { pool, .. } => pool.clear().await,
             Self::Webos { pool, .. } => pool.clear().await,
-            Self::Roku(_) => 0,
+            Self::Roku { .. } => 0,
         }
     }
 }
@@ -90,7 +163,12 @@ impl DeviceHandle for TvClient {
     }
 
     fn descriptor(&self) -> DeviceDescriptor {
-        DeviceDescriptor::new(self.id(), device_os(self.vendor()), host_of(self.address()))
+        let descriptor =
+            DeviceDescriptor::new(self.id(), device_os(self.vendor()), host_of(self.address()));
+        match self.mac() {
+            Some(mac) => descriptor.with_mac(mac),
+            None => descriptor,
+        }
     }
 
     fn capabilities(&self) -> CapabilitySet {
@@ -134,7 +212,29 @@ impl PowerControl for TvClient {
     }
 
     async fn wake(&self) -> Result<(), TvError> {
-        Err(TvError::Unsupported(Capability::Wake))
+        match self {
+            // ECP answers while the screen is dark: no packet, no MAC.
+            Self::Roku { client, .. } => client
+                .power_on()
+                .await
+                .map_err(|error| map::roku(&error, Capability::Wake)),
+            // Tizen and webOS drop their network stack when they sleep, so the
+            // broadcast packet is the only path — and it needs the address the
+            // caller supplied. Without one this is a refusal, not a guess.
+            Self::Tizen { .. } | Self::Webos { .. } => match self.mac() {
+                Some(mac) => {
+                    let address = mac.parse::<MacAddress>().map_err(|_| {
+                        TvError::Protocol(ProtocolError::Malformed(format!(
+                            "`{mac}` is not a hardware address"
+                        )))
+                    })?;
+                    tv_rs_power::wake_on_lan(&address)
+                        .await
+                        .map_err(|error| map::power(&error))
+                }
+                None => Err(TvError::Unsupported(Capability::Wake)),
+            },
+        }
     }
 
     async fn sleep(&self) -> Result<(), TvError> {
@@ -146,7 +246,7 @@ impl PowerControl for TvClient {
 impl KeyInput for TvClient {
     async fn key_press(&self, key: Key, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
         match self {
-            Self::Tizen { client, pool } => {
+            Self::Tizen { client, pool, .. } => {
                 let key = tizen_key(key)?;
                 pool.send_key(client, key)
                     .await
@@ -155,13 +255,13 @@ impl KeyInput for TvClient {
             // webOS has no remote-key endpoint: SSAP drives the pointer-input
             // socket instead, which is not implemented yet (plan item B1). A
             // refusal is the honest answer — pressing nothing is not a key.
-            Self::Webos { client, pool } => {
+            Self::Webos { client, pool, .. } => {
                 let name = webos_key(key)?;
                 pool.send_key(client, name)
                     .await
                     .map_err(|error| map::webos(&error, Capability::Key))
             }
-            Self::Roku(client) => {
+            Self::Roku { client, .. } => {
                 let key = roku_key(key)?;
                 client
                     .send_keypress(key)
@@ -180,7 +280,7 @@ impl AppLaunch for TvClient {
 
     async fn foreground(&self) -> Result<Option<AppRef>, TvError> {
         match self {
-            Self::Webos { client, pool } => {
+            Self::Webos { client, pool, .. } => {
                 let app_id = pool
                     .foreground_app(client)
                     .await
@@ -211,7 +311,7 @@ impl InputSelect for TvClient {
 impl VolumeControl for TvClient {
     async fn volume(&self) -> Result<Option<u8>, TvError> {
         match self {
-            Self::Webos { client, pool } => pool
+            Self::Webos { client, pool, .. } => pool
                 .get_volume(client)
                 .await
                 .map(Some)
@@ -222,7 +322,7 @@ impl VolumeControl for TvClient {
 
     async fn set_volume(&self, level: u8, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
         match self {
-            Self::Webos { client, pool } => pool
+            Self::Webos { client, pool, .. } => pool
                 .set_volume(client, level)
                 .await
                 .map_err(|error| map::webos(&error, Capability::Volume)),
@@ -232,7 +332,7 @@ impl VolumeControl for TvClient {
 
     async fn set_mute(&self, muted: bool, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
         match self {
-            Self::Webos { client, pool } => pool
+            Self::Webos { client, pool, .. } => pool
                 .set_mute(client, muted)
                 .await
                 .map_err(|error| map::webos(&error, Capability::Volume)),
@@ -394,6 +494,7 @@ mod tests {
             pool: Arc::new(DynConnectionPool::with_factory(Box::new(
                 LiveChannelFactory,
             ))),
+            mac: None,
         }
     }
 
@@ -401,11 +502,15 @@ mod tests {
         TvClient::Webos {
             client: WebosClient::new("10.0.0.3"),
             pool: Arc::new(DynSessionPool::with_factory(Box::new(LiveSessionFactory))),
+            mac: None,
         }
     }
 
     fn roku() -> TvClient {
-        TvClient::Roku(RokuClient::new("10.0.0.4"))
+        TvClient::Roku {
+            client: RokuClient::new("10.0.0.4"),
+            mac: None,
+        }
     }
 
     #[test]
@@ -433,6 +538,7 @@ mod tests {
                 roku(),
                 vec![
                     Capability::PowerState,
+                    Capability::Wake,
                     Capability::Key,
                     Capability::AppLaunch,
                 ],
@@ -446,9 +552,13 @@ mod tests {
     fn accessors_agree_with_the_advertised_set() {
         for client in [tizen(), webos(), roku()] {
             let set = client.capabilities();
-            assert!(
-                !set.contains(Capability::Wake),
-                "no backend can wake without a known MAC"
+            // Wake is real on Roku (ECP answers while the screen is dark) and on
+            // the others only once a caller has supplied the address a magic
+            // packet needs — never merely because the trait exists.
+            assert_eq!(
+                set.contains(Capability::Wake),
+                client.mac().is_some() || matches!(client.vendor(), TvVendor::Roku),
+                "wake is advertised exactly where it can be delivered"
             );
             assert_eq!(set.contains(Capability::Key), client.as_key().is_some());
             assert!(client.as_app().is_some());
@@ -476,6 +586,77 @@ mod tests {
         let client = tizen();
         let error = PowerControl::wake(&client).await.expect_err("no MAC known");
         assert!(matches!(error, TvError::Unsupported(Capability::Wake)));
+    }
+
+    #[test]
+    fn a_supplied_mac_is_remembered_and_advertised() {
+        let client = tizen().with_mac("aa:bb:cc:dd:ee:ff");
+        assert_eq!(client.mac(), Some("aa:bb:cc:dd:ee:ff"));
+        assert!(
+            client.capabilities().contains(Capability::Wake),
+            "a known address is what makes the capability honest"
+        );
+        assert_eq!(
+            client.descriptor().mac.as_deref(),
+            Some("aa:bb:cc:dd:ee:ff"),
+            "the descriptor is where a fleet reads identity"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_supplied_mac_reaches_the_wake_path() {
+        // The packet is broadcast, so this asserts the routing rather than the
+        // network: what matters is that a known address is no longer refused.
+        let client = tizen().with_mac("aa:bb:cc:dd:ee:ff");
+        let result = PowerControl::wake(&client).await;
+        assert!(
+            !matches!(result, Err(TvError::Unsupported(_))),
+            "a known MAC must not be refused: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_malformed_mac_is_reported_rather_than_broadcast() {
+        let client = tizen().with_mac("not-a-mac");
+        let error = PowerControl::wake(&client).await.expect_err("bad address");
+        assert!(matches!(error, TvError::Protocol(_)), "{error:?}");
+    }
+
+    #[tokio::test]
+    async fn roku_wakes_over_ecp_not_with_a_packet() {
+        // Port 1 refuses instantly, so this is fast: the point is that Roku
+        // routes to ECP rather than answering `Unsupported`.
+        let client = TvClient::Roku {
+            client: RokuClient::with_base_url("http://127.0.0.1:1"),
+            mac: None,
+        };
+        let error = PowerControl::wake(&client)
+            .await
+            .expect_err("nothing listens");
+        assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
+    }
+
+    #[tokio::test]
+    async fn learn_mac_refuses_where_no_verified_query_exists() {
+        let mut tizen = tizen();
+        let error = tizen.learn_mac().await.expect_err("no verified query");
+        assert!(
+            matches!(
+                error,
+                TvError::UnsupportedOperation {
+                    vendor: "samsung",
+                    ..
+                }
+            ),
+            "{error:?}"
+        );
+
+        let mut webos = webos();
+        let error = webos.learn_mac().await.expect_err("no verified query");
+        assert!(
+            matches!(error, TvError::UnsupportedOperation { vendor: "lg", .. }),
+            "{error:?}"
+        );
     }
 
     #[test]
@@ -648,6 +829,7 @@ mod tests {
                 0,
                 sent.clone(),
             )))),
+            mac: None,
         };
 
         for _ in 0..20 {
@@ -684,6 +866,7 @@ mod tests {
                 0,
                 served.clone(),
             )))),
+            mac: None,
         };
 
         for _ in 0..5 {
@@ -717,6 +900,7 @@ mod tests {
                 0,
                 sent.clone(),
             )))),
+            mac: None,
         };
 
         KeyInput::key_press(&client, Key::Up, tv_rs_core::CommandId::new())

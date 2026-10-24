@@ -135,6 +135,13 @@ pub enum TvClient {
         /// Shared behind an [`Arc`], so cloning a handle clones the *connection*,
         /// not the right to open another one.
         pool: Arc<DynConnectionPool>,
+        /// The panel's hardware address, once a caller has supplied it.
+        ///
+        /// Samsung drops its network stack when it sleeps, so a magic packet is
+        /// the only wake path — and a packet is addressed to a MAC. Neither the
+        /// SSDP reply nor the pairing token carries one, so it arrives through
+        /// [`TvClient::with_mac`].
+        mac: Option<String>,
     },
     /// LG webOS: SSAP over WebSocket.
     ///
@@ -148,11 +155,22 @@ pub enum TvClient {
         ///
         /// Shared behind an [`Arc`], so cloning a handle clones the *session*.
         pool: Arc<DynSessionPool>,
+        /// The panel's hardware address, once a caller has supplied it; the Tizen
+        /// variant explains why waking needs one.
+        mac: Option<String>,
     },
     /// Roku OS: ECP REST.
     ///
     /// Stateless — ECP is plain HTTP with no session to keep, so there is no pool.
-    Roku(RokuClient),
+    Roku {
+        /// The ECP client: address and base URL.
+        client: RokuClient,
+        /// The address `/query/device-info` reports, once it has been read.
+        ///
+        /// Roku wakes over ECP and needs no packet, so this is inventory rather
+        /// than a lever — it is what a fleet dashboard shows as the box's identity.
+        mac: Option<String>,
+    },
 }
 
 /// The pools hold live sockets and have no useful `Debug` form, so the handle
@@ -168,7 +186,7 @@ impl fmt::Debug for TvClient {
                 .debug_struct("Webos")
                 .field("client", client)
                 .finish_non_exhaustive(),
-            Self::Roku(client) => f.debug_tuple("Roku").field(client).finish(),
+            Self::Roku { client, .. } => f.debug_tuple("Roku").field(client).finish(),
         }
     }
 }
@@ -212,6 +230,7 @@ impl TvClient {
                     pool: Arc::new(DynConnectionPool::with_factory(Box::new(
                         LiveChannelFactory,
                     ))),
+                    mac: None,
                 })
             }
             TvVendor::Lg => {
@@ -222,9 +241,13 @@ impl TvClient {
                 Ok(Self::Webos {
                     client,
                     pool: Arc::new(DynSessionPool::with_factory(Box::new(LiveSessionFactory))),
+                    mac: None,
                 })
             }
-            TvVendor::Roku => Ok(Self::Roku(RokuClient::new(tv.ip.clone()))),
+            TvVendor::Roku => Ok(Self::Roku {
+                client: RokuClient::new(tv.ip.clone()),
+                mac: None,
+            }),
             TvVendor::Unknown => Err(TvError::UnsupportedDevice {
                 address: tv.ip.clone(),
                 reason: "device did not advertise a known vendor signature".to_string(),
@@ -258,6 +281,7 @@ impl TvClient {
                     pool: Arc::new(DynConnectionPool::with_factory(Box::new(
                         LiveChannelFactory,
                     ))),
+                    mac: None,
                 })
             }
             TvVendor::Lg => {
@@ -270,9 +294,13 @@ impl TvClient {
                 Ok(Self::Webos {
                     client,
                     pool: Arc::new(DynSessionPool::with_factory(Box::new(LiveSessionFactory))),
+                    mac: None,
                 })
             }
-            TvVendor::Roku => Ok(Self::Roku(RokuClient::new(tv.ip.clone()))),
+            TvVendor::Roku => Ok(Self::Roku {
+                client: RokuClient::new(tv.ip.clone()),
+                mac: None,
+            }),
             TvVendor::Unknown => Err(TvError::UnsupportedDevice {
                 address: tv.ip.clone(),
                 reason: "device did not advertise a known vendor signature".to_string(),
@@ -300,7 +328,7 @@ impl TvClient {
     /// panel") — the webOS path has no open_url-deferred gap to sense.
     pub async fn open_url(&self, url: &str) -> Result<()> {
         match self {
-            Self::Webos { client, pool } => pool
+            Self::Webos { client, pool, .. } => pool
                 .open_url(client, url)
                 .await
                 .map_err(|error| map::webos(&error, Capability::AppLaunch)),
@@ -308,7 +336,7 @@ impl TvClient {
                 vendor: "samsung",
                 operation: "open_url",
             }),
-            Self::Roku(_) => Err(TvError::UnsupportedOperation {
+            Self::Roku { .. } => Err(TvError::UnsupportedOperation {
                 vendor: "roku",
                 operation: "open_url",
             }),
@@ -320,7 +348,7 @@ impl TvClient {
         match self {
             Self::Tizen { .. } => TvVendor::Samsung,
             Self::Webos { .. } => TvVendor::Lg,
-            Self::Roku(_) => TvVendor::Roku,
+            Self::Roku { .. } => TvVendor::Roku,
         }
     }
 
@@ -333,7 +361,7 @@ impl TvClient {
         match self {
             Self::Tizen { client, .. } => client.host(),
             Self::Webos { client, .. } => client.host(),
-            Self::Roku(client) => client.base_url(),
+            Self::Roku { client, .. } => client.base_url(),
         }
     }
 
@@ -356,7 +384,7 @@ impl TvClient {
     /// The Roku client, when this handle targets a Roku device.
     pub fn as_roku(&self) -> Option<&RokuClient> {
         match self {
-            Self::Roku(client) => Some(client),
+            Self::Roku { client, .. } => Some(client),
             _ => None,
         }
     }
@@ -372,15 +400,15 @@ impl TvClient {
     /// [`Capability::PowerState`]. Every mapping lives in [`map`].
     pub async fn power_off(&self) -> Result<()> {
         match self {
-            Self::Tizen { client, pool } => pool
+            Self::Tizen { client, pool, .. } => pool
                 .send_key(client, TizenRemoteKey::PowerOff)
                 .await
                 .map_err(|error| map::tizen(&error, Capability::PowerState)),
-            Self::Webos { client, pool } => pool
+            Self::Webos { client, pool, .. } => pool
                 .power_off(client)
                 .await
                 .map_err(|error| map::webos(&error, Capability::PowerState)),
-            Self::Roku(client) => {
+            Self::Roku { client, .. } => {
                 client
                     .power_off()
                     .await
@@ -429,7 +457,7 @@ impl TvClient {
     /// `Off`.
     pub async fn power_observation(&self) -> Result<ObservedField<PowerState>> {
         match self {
-            Self::Roku(client) => Ok(ObservedField::from_read(map_roku_power(
+            Self::Roku { client, .. } => Ok(ObservedField::from_read(map_roku_power(
                 client
                     .power_state()
                     .await
@@ -474,11 +502,11 @@ impl TvClient {
                     .map_err(|error| map::tizen(&error, Capability::AppLaunch))?;
                 Ok(())
             }
-            Self::Webos { client, pool } => pool
+            Self::Webos { client, pool, .. } => pool
                 .launch_app(client, app_id)
                 .await
                 .map_err(|error| map::webos(&error, Capability::AppLaunch)),
-            Self::Roku(client) => {
+            Self::Roku { client, .. } => {
                 client
                     .launch_app(app_id)
                     .await
