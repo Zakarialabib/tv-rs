@@ -33,7 +33,7 @@ use tv_rs_core::{
     DeviceOs, Input, InputSelect, Key, KeyInput, PowerControl, PowerState, TvError, VolumeControl,
 };
 use tv_rs_roku::RokuKey;
-use tv_rs_tizen::{TizenRemoteKey, TizenSession};
+use tv_rs_tizen::TizenRemoteKey;
 
 use crate::client::TvClient;
 use crate::map;
@@ -45,11 +45,11 @@ impl TvClient {
     pub fn core_capabilities(&self) -> CapabilitySet {
         let mut set = CapabilitySet::empty().with(Capability::PowerState);
         match self {
-            Self::Tizen(_) => {
+            Self::Tizen { .. } => {
                 set.insert(Capability::Key);
                 set.insert(Capability::AppLaunch);
             }
-            Self::Webos(_) => {
+            Self::Webos { .. } => {
                 set.insert(Capability::AppLaunch);
                 set.insert(Capability::Foreground);
                 set.insert(Capability::Volume);
@@ -60,6 +60,24 @@ impl TvClient {
             }
         }
         set
+    }
+
+    /// Drop every pooled connection this handle owns.
+    ///
+    /// A mobile caller needs this: a backgrounded app must not keep a WebSocket
+    /// open to a television, and the OS will not close one for it. The pools are
+    /// what hold those sockets, so this is the only way to release them without
+    /// dropping the handle. Returns the number of connections dropped — Roku
+    /// holds none, because ECP is stateless.
+    ///
+    /// Calling it twice is not an error: the second call drops nothing and
+    /// returns zero.
+    pub async fn close_all(&self) -> usize {
+        match self {
+            Self::Tizen { pool, .. } => pool.clear().await,
+            Self::Webos { pool, .. } => pool.clear().await,
+            Self::Roku(_) => 0,
+        }
     }
 }
 
@@ -127,16 +145,16 @@ impl PowerControl for TvClient {
 impl KeyInput for TvClient {
     async fn key_press(&self, key: Key, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
         match self {
-            Self::Tizen(client) => {
+            Self::Tizen { client, pool } => {
                 let key = tizen_key(key)?;
-                let mut session = TizenSession::connect(client)
-                    .await
-                    .map_err(|error| map::tizen(&error, Capability::Key))?;
-                session
-                    .send_key(key)
+                pool.send_key(client, key)
                     .await
                     .map_err(|error| map::tizen(&error, Capability::Key))
             }
+            // webOS has no remote-key endpoint: SSAP drives the pointer-input
+            // socket instead, which is not implemented yet (plan item B1). A
+            // refusal is the honest answer — pressing nothing is not a key.
+            Self::Webos { .. } => Err(TvError::Unsupported(Capability::Key)),
             Self::Roku(client) => {
                 let key = roku_key(key)?;
                 client
@@ -144,7 +162,6 @@ impl KeyInput for TvClient {
                     .await
                     .map_err(|error| map::roku(&error, Capability::Key))
             }
-            Self::Webos(_) => Err(TvError::Unsupported(Capability::Key)),
         }
     }
 }
@@ -157,13 +174,9 @@ impl AppLaunch for TvClient {
 
     async fn foreground(&self) -> Result<Option<AppRef>, TvError> {
         match self {
-            Self::Webos(client) => {
-                let mut session = client
-                    .connect()
-                    .await
-                    .map_err(|error| map::webos(&error, Capability::Foreground))?;
-                let app_id = session
-                    .foreground_app()
+            Self::Webos { client, pool } => {
+                let app_id = pool
+                    .foreground_app(client)
                     .await
                     .map_err(|error| map::webos(&error, Capability::Foreground))?;
                 Ok(app_id.map(AppRef::new))
@@ -192,49 +205,31 @@ impl InputSelect for TvClient {
 impl VolumeControl for TvClient {
     async fn volume(&self) -> Result<Option<u8>, TvError> {
         match self {
-            Self::Webos(client) => {
-                let mut session = client
-                    .connect()
-                    .await
-                    .map_err(|error| map::webos(&error, Capability::Volume))?;
-                session
-                    .get_volume()
-                    .await
-                    .map(Some)
-                    .map_err(|error| map::webos(&error, Capability::Volume))
-            }
+            Self::Webos { client, pool } => pool
+                .get_volume(client)
+                .await
+                .map(Some)
+                .map_err(|error| map::webos(&error, Capability::Volume)),
             _ => Err(TvError::Unsupported(Capability::Volume)),
         }
     }
 
     async fn set_volume(&self, level: u8, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
         match self {
-            Self::Webos(client) => {
-                let mut session = client
-                    .connect()
-                    .await
-                    .map_err(|error| map::webos(&error, Capability::Volume))?;
-                session
-                    .set_volume(level)
-                    .await
-                    .map_err(|error| map::webos(&error, Capability::Volume))
-            }
+            Self::Webos { client, pool } => pool
+                .set_volume(client, level)
+                .await
+                .map_err(|error| map::webos(&error, Capability::Volume)),
             _ => Err(TvError::Unsupported(Capability::Volume)),
         }
     }
 
     async fn set_mute(&self, muted: bool, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
         match self {
-            Self::Webos(client) => {
-                let mut session = client
-                    .connect()
-                    .await
-                    .map_err(|error| map::webos(&error, Capability::Volume))?;
-                session
-                    .set_mute(muted)
-                    .await
-                    .map_err(|error| map::webos(&error, Capability::Volume))
-            }
+            Self::Webos { client, pool } => pool
+                .set_mute(client, muted)
+                .await
+                .map_err(|error| map::webos(&error, Capability::Volume)),
             _ => Err(TvError::Unsupported(Capability::Volume)),
         }
     }
@@ -339,17 +334,27 @@ fn roku_key(key: Key) -> Result<RokuKey, TvError> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use tv_rs_roku::RokuClient;
-    use tv_rs_tizen::TizenClient;
-    use tv_rs_webos::WebosClient;
+    use tv_rs_tizen::{DynConnectionPool, LiveChannelFactory, TizenClient};
+    use tv_rs_webos::{DynSessionPool, LiveSessionFactory, WebosClient};
 
     fn tizen() -> TvClient {
-        TvClient::Tizen(TizenClient::new("10.0.0.2"))
+        TvClient::Tizen {
+            client: TizenClient::new("10.0.0.1"),
+            pool: Arc::new(DynConnectionPool::with_factory(Box::new(
+                LiveChannelFactory,
+            ))),
+        }
     }
 
     fn webos() -> TvClient {
-        TvClient::Webos(WebosClient::new("10.0.0.3"))
+        TvClient::Webos {
+            client: WebosClient::new("10.0.0.3"),
+            pool: Arc::new(DynSessionPool::with_factory(Box::new(LiveSessionFactory))),
+        }
     }
 
     fn roku() -> TvClient {
@@ -559,5 +564,103 @@ mod tests {
             }
             other => panic!("expected Auth(NotPermitted), got {other:?}"),
         }
+    }
+
+    /// Plan §3.2 exit: twenty key presses must share one accepted connection.
+    ///
+    /// The counting factory comes from `tv-rs-tizen`'s `testkit` feature, so this
+    /// proves the *facade* routes through the pool instead of dialling per press —
+    /// with no television in the loop.
+    #[cfg(feature = "testkit")]
+    #[tokio::test]
+    async fn twenty_key_presses_share_one_channel() {
+        use std::sync::atomic::Ordering;
+
+        use tv_rs_tizen::testkit::{counters, factory};
+
+        let (opens, sent) = counters();
+        let client = TvClient::Tizen {
+            client: TizenClient::new("10.0.0.1"),
+            pool: Arc::new(DynConnectionPool::with_factory(Box::new(factory(
+                opens.clone(),
+                0,
+                sent.clone(),
+            )))),
+        };
+
+        for _ in 0..20 {
+            KeyInput::key_press(&client, Key::Up, tv_rs_core::CommandId::new())
+                .await
+                .expect("the fake channel serves");
+        }
+
+        assert_eq!(
+            opens.load(Ordering::SeqCst),
+            1,
+            "twenty presses must not open twenty channels"
+        );
+        assert_eq!(
+            sent.load(Ordering::SeqCst),
+            20,
+            "every press must reach the TV"
+        );
+    }
+
+    /// The webOS half of the same exit: repeated reads reuse one session.
+    #[cfg(feature = "testkit")]
+    #[tokio::test]
+    async fn webos_volume_reads_share_one_session() {
+        use std::sync::atomic::Ordering;
+
+        use tv_rs_webos::testkit::{counters, factory};
+
+        let (opens, served) = counters();
+        let client = TvClient::Webos {
+            client: WebosClient::new("10.0.0.3"),
+            pool: Arc::new(DynSessionPool::with_factory(Box::new(factory(
+                opens.clone(),
+                0,
+                served.clone(),
+            )))),
+        };
+
+        for _ in 0..5 {
+            assert_eq!(
+                VolumeControl::volume(&client)
+                    .await
+                    .expect("the fake session serves"),
+                Some(42)
+            );
+        }
+
+        assert_eq!(
+            opens.load(Ordering::SeqCst),
+            1,
+            "one session for five reads"
+        );
+    }
+
+    /// `close_all` is the mobile-backgrounding lever: it must actually drop the
+    /// socket, and calling it again must be harmless.
+    #[cfg(feature = "testkit")]
+    #[tokio::test]
+    async fn close_all_drops_the_pooled_connection() {
+        use tv_rs_tizen::testkit::{counters, factory};
+
+        let (opens, sent) = counters();
+        let client = TvClient::Tizen {
+            client: TizenClient::new("10.0.0.1"),
+            pool: Arc::new(DynConnectionPool::with_factory(Box::new(factory(
+                opens.clone(),
+                0,
+                sent.clone(),
+            )))),
+        };
+
+        KeyInput::key_press(&client, Key::Up, tv_rs_core::CommandId::new())
+            .await
+            .expect("the fake channel serves");
+        assert_eq!(client.close_all().await, 1, "the open channel is dropped");
+        assert_eq!(client.close_all().await, 0, "a second call drops nothing");
     }
 }

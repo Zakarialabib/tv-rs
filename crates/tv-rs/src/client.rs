@@ -5,6 +5,9 @@
 //! vendor-specific stays in `tv-rs-tizen` / `tv-rs-webos` / `tv-rs-roku` and is
 //! reachable through the typed accessors on [`TvClient`].
 
+use std::fmt;
+use std::sync::Arc;
+
 use crate::error::{Result, TvError};
 use crate::map;
 use crate::types::{DiscoveredTv, TvVendor};
@@ -12,9 +15,9 @@ use tv_rs_core::{Capability, ObservedField};
 use tv_rs_discovery::{SsdpDeviceDescriptor, SsdpMsearchResponse, SsdpScanner};
 use tv_rs_power::PowerState;
 use tv_rs_roku::{RokuClient, RokuPowerMode};
-use tv_rs_tizen::{TizenClient, TizenRemoteKey, TizenSession};
+use tv_rs_tizen::{DynConnectionPool, LiveChannelFactory, TizenClient, TizenRemoteKey};
 use tv_rs_transport::TlsPolicy;
-use tv_rs_webos::WebosClient;
+use tv_rs_webos::{DynSessionPool, LiveSessionFactory, WebosClient};
 
 /// Classify a discovered device by its SSDP reply and UPnP descriptor.
 ///
@@ -117,14 +120,57 @@ pub async fn discover_with(scanner: &SsdpScanner) -> Result<Vec<DiscoveredTv>> {
 /// ([`power_off`](TvClient::power_off), [`launch_app`](TvClient::launch_app))
 /// cover only the operations that have an equivalent on all three vendors;
 /// everything else goes through the typed accessors.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum TvClient {
     /// Samsung Tizen: remote channel plus DIAL.
-    Tizen(TizenClient),
+    ///
+    /// The pool is not optional: Samsung drops idle remote channels, so a
+    /// facade that dialled per press would pay a handshake (and, with no stored
+    /// token, an on-screen PIN prompt) on every key.
+    Tizen {
+        /// The protocol client: address, TLS policy and pairing token.
+        client: TizenClient,
+        /// One remote channel per TV, reopened once when a send fails.
+        ///
+        /// Shared behind an [`Arc`], so cloning a handle clones the *connection*,
+        /// not the right to open another one.
+        pool: Arc<DynConnectionPool>,
+    },
     /// LG webOS: SSAP over WebSocket.
-    Webos(WebosClient),
+    ///
+    /// The pool is not optional here either: connecting without a stored
+    /// `client-key` raises the on-screen "Allow?" prompt, so one session per TV
+    /// is what keeps a volume change from interrupting a show.
+    Webos {
+        /// The protocol client: address, TLS policy and client key.
+        client: WebosClient,
+        /// One registered SSAP session per TV, reopened once when a request fails.
+        ///
+        /// Shared behind an [`Arc`], so cloning a handle clones the *session*.
+        pool: Arc<DynSessionPool>,
+    },
     /// Roku OS: ECP REST.
+    ///
+    /// Stateless — ECP is plain HTTP with no session to keep, so there is no pool.
     Roku(RokuClient),
+}
+
+/// The pools hold live sockets and have no useful `Debug` form, so the handle
+/// reports which vendor it is and what it is aimed at, and stops there.
+impl fmt::Debug for TvClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Tizen { client, .. } => f
+                .debug_struct("Tizen")
+                .field("client", client)
+                .finish_non_exhaustive(),
+            Self::Webos { client, .. } => f
+                .debug_struct("Webos")
+                .field("client", client)
+                .finish_non_exhaustive(),
+            Self::Roku(client) => f.debug_tuple("Roku").field(client).finish(),
+        }
+    }
 }
 
 /// The port the quirks table says this panel actually listens on, if any.
@@ -161,14 +207,22 @@ impl TvClient {
                 if let Some(port) = quirk_port("samsung", tv.model_name.as_deref()) {
                     client = client.pinned_port(port);
                 }
-                Ok(Self::Tizen(client))
+                Ok(Self::Tizen {
+                    client,
+                    pool: Arc::new(DynConnectionPool::with_factory(Box::new(
+                        LiveChannelFactory,
+                    ))),
+                })
             }
             TvVendor::Lg => {
                 let mut client = WebosClient::new(tv.ip.clone()).with_wss();
                 if let Some(port) = quirk_port("lg", tv.model_name.as_deref()) {
                     client = client.pinned_port(port);
                 }
-                Ok(Self::Webos(client))
+                Ok(Self::Webos {
+                    client,
+                    pool: Arc::new(DynSessionPool::with_factory(Box::new(LiveSessionFactory))),
+                })
             }
             TvVendor::Roku => Ok(Self::Roku(RokuClient::new(tv.ip.clone()))),
             TvVendor::Unknown => Err(TvError::UnsupportedDevice {
@@ -199,7 +253,12 @@ impl TvClient {
                 if let Some(port) = quirk_port("samsung", tv.model_name.as_deref()) {
                     client = client.pinned_port(port);
                 }
-                Ok(Self::Tizen(client))
+                Ok(Self::Tizen {
+                    client,
+                    pool: Arc::new(DynConnectionPool::with_factory(Box::new(
+                        LiveChannelFactory,
+                    ))),
+                })
             }
             TvVendor::Lg => {
                 let mut client = WebosClient::new(tv.ip.clone())
@@ -208,7 +267,10 @@ impl TvClient {
                 if let Some(port) = quirk_port("lg", tv.model_name.as_deref()) {
                     client = client.pinned_port(port);
                 }
-                Ok(Self::Webos(client))
+                Ok(Self::Webos {
+                    client,
+                    pool: Arc::new(DynSessionPool::with_factory(Box::new(LiveSessionFactory))),
+                })
             }
             TvVendor::Roku => Ok(Self::Roku(RokuClient::new(tv.ip.clone()))),
             TvVendor::Unknown => Err(TvError::UnsupportedDevice {
@@ -238,18 +300,11 @@ impl TvClient {
     /// panel") — the webOS path has no open_url-deferred gap to sense.
     pub async fn open_url(&self, url: &str) -> Result<()> {
         match self {
-            Self::Webos(client) => {
-                let mut session = client
-                    .connect()
-                    .await
-                    .map_err(|error| map::webos(&error, Capability::AppLaunch))?;
-                session
-                    .open_url(url)
-                    .await
-                    .map_err(|error| map::webos(&error, Capability::AppLaunch))?;
-                Ok(())
-            }
-            Self::Tizen(_) => Err(TvError::UnsupportedOperation {
+            Self::Webos { client, pool } => pool
+                .open_url(client, url)
+                .await
+                .map_err(|error| map::webos(&error, Capability::AppLaunch)),
+            Self::Tizen { .. } => Err(TvError::UnsupportedOperation {
                 vendor: "samsung",
                 operation: "open_url",
             }),
@@ -263,8 +318,8 @@ impl TvClient {
     /// The vendor this handle targets.
     pub fn vendor(&self) -> TvVendor {
         match self {
-            Self::Tizen(_) => TvVendor::Samsung,
-            Self::Webos(_) => TvVendor::Lg,
+            Self::Tizen { .. } => TvVendor::Samsung,
+            Self::Webos { .. } => TvVendor::Lg,
             Self::Roku(_) => TvVendor::Roku,
         }
     }
@@ -276,8 +331,8 @@ impl TvClient {
     /// address in a uniform form.
     pub fn address(&self) -> &str {
         match self {
-            Self::Tizen(client) => client.host(),
-            Self::Webos(client) => client.host(),
+            Self::Tizen { client, .. } => client.host(),
+            Self::Webos { client, .. } => client.host(),
             Self::Roku(client) => client.base_url(),
         }
     }
@@ -285,7 +340,7 @@ impl TvClient {
     /// The Tizen client, when this handle targets a Samsung TV.
     pub fn as_tizen(&self) -> Option<&TizenClient> {
         match self {
-            Self::Tizen(client) => Some(client),
+            Self::Tizen { client, .. } => Some(client),
             _ => None,
         }
     }
@@ -293,7 +348,7 @@ impl TvClient {
     /// The webOS client, when this handle targets an LG TV.
     pub fn as_webos(&self) -> Option<&WebosClient> {
         match self {
-            Self::Webos(client) => Some(client),
+            Self::Webos { client, .. } => Some(client),
             _ => None,
         }
     }
@@ -317,27 +372,14 @@ impl TvClient {
     /// [`Capability::PowerState`]. Every mapping lives in [`map`].
     pub async fn power_off(&self) -> Result<()> {
         match self {
-            Self::Tizen(client) => {
-                let mut session = TizenSession::connect(client)
-                    .await
-                    .map_err(|error| map::tizen(&error, Capability::PowerState))?;
-                session
-                    .send_key(TizenRemoteKey::PowerOff)
-                    .await
-                    .map_err(|error| map::tizen(&error, Capability::PowerState))?;
-                Ok(())
-            }
-            Self::Webos(client) => {
-                let mut session = client
-                    .connect()
-                    .await
-                    .map_err(|error| map::webos(&error, Capability::PowerState))?;
-                session
-                    .power_off()
-                    .await
-                    .map_err(|error| map::webos(&error, Capability::PowerState))?;
-                Ok(())
-            }
+            Self::Tizen { client, pool } => pool
+                .send_key(client, TizenRemoteKey::PowerOff)
+                .await
+                .map_err(|error| map::tizen(&error, Capability::PowerState)),
+            Self::Webos { client, pool } => pool
+                .power_off(client)
+                .await
+                .map_err(|error| map::webos(&error, Capability::PowerState)),
             Self::Roku(client) => {
                 client
                     .power_off()
@@ -393,7 +435,7 @@ impl TvClient {
                     .await
                     .map_err(|error| map::roku(&error, Capability::PowerState))?,
             ))),
-            Self::Tizen(client) => {
+            Self::Tizen { client, .. } => {
                 let probe = format!("{}:{}", client.host(), client.port());
                 Ok(ObservedField::from_inference(
                     tv_rs_power::poll_power_state(&probe)
@@ -401,7 +443,7 @@ impl TvClient {
                         .map_err(|error| map::power(&error))?,
                 ))
             }
-            Self::Webos(client) => {
+            Self::Webos { client, .. } => {
                 let probe = format!("{}:{}", client.host(), client.port());
                 Ok(ObservedField::from_inference(
                     tv_rs_power::poll_power_state(&probe)
@@ -425,24 +467,17 @@ impl TvClient {
     /// [`Capability::AppLaunch`].
     pub async fn launch_app(&self, app_id: &str) -> Result<()> {
         match self {
-            Self::Tizen(client) => {
+            Self::Tizen { client, .. } => {
                 client
                     .launch_app_via_dial(app_id, None)
                     .await
                     .map_err(|error| map::tizen(&error, Capability::AppLaunch))?;
                 Ok(())
             }
-            Self::Webos(client) => {
-                let mut session = client
-                    .connect()
-                    .await
-                    .map_err(|error| map::webos(&error, Capability::AppLaunch))?;
-                session
-                    .launch_app(app_id)
-                    .await
-                    .map_err(|error| map::webos(&error, Capability::AppLaunch))?;
-                Ok(())
-            }
+            Self::Webos { client, pool } => pool
+                .launch_app(client, app_id)
+                .await
+                .map_err(|error| map::webos(&error, Capability::AppLaunch)),
             Self::Roku(client) => {
                 client
                     .launch_app(app_id)
@@ -474,7 +509,7 @@ mod tests {
         };
         let client = TvClient::from_discovered(&tv).expect("samsung is supported");
         match &client {
-            TvClient::Tizen(tizen) => {
+            TvClient::Tizen { client: tizen, .. } => {
                 assert_eq!(
                     tizen.pinned_port_number(),
                     Some(8002),
@@ -488,7 +523,7 @@ mod tests {
         tv.model_name = Some("UE40".to_string());
         let client = TvClient::from_discovered(&tv).expect("samsung is supported");
         match &client {
-            TvClient::Tizen(tizen) => assert_eq!(tizen.pinned_port_number(), None),
+            TvClient::Tizen { client: tizen, .. } => assert_eq!(tizen.pinned_port_number(), None),
             other => panic!("expected a Tizen client, got {other:?}"),
         }
     }

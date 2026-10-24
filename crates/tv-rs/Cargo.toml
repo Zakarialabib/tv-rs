@@ -41,6 +41,12 @@ conformance = ["tv-rs-core/conformance"]
 # refused connection per command.
 quirks = ["tv-rs-core/quirks"]
 
+# Test doubles from the protocol crates (`tv-rs-tizen/testkit`, `tv-rs-webos/testkit`),
+# so the facade can prove it reuses one pooled connection per TV (plan item 3.2)
+# without a television in the loop. Off by default: a released build carries no
+# test code.
+testkit = ["tv-rs-tizen/testkit", "tv-rs-webos/testkit"]
+
 # The LFD surfaces that most deployments never touch (panel/lamp hours and
 # still-frame capture): the cloud agent deliberately carries no unused image
 # path, so enabling this feature is what exposes them for testing.
