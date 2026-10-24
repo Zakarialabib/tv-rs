@@ -4,89 +4,9 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-10-24
 
-### Added
-
-- **Public EDID parser and active-display EDID enumeration in `tv-rs-local`
-  (SignageMaster handoff E3b)**: `tv_rs_local::parse_edid(&[u8]) -> Result<Edid,
-  EdidError>` reads the base block per VESA E-EDID 1.4 §3 — PNP manufacturer id,
-  product code, serial (numeric and descriptor), week/year, version, digital input,
-  size in cm, the product-name descriptor and the preferred `DetailedTiming` (pixel
-  clock, active/blank, image mm, `refresh_hz()`), extension count and a reported (not
-  enforced) checksum. `display_edids() -> Vec<DisplayEdid>` returns the raw bytes and
-  the parsed block for every active display: on Windows from
-  `HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY\<id>\<instance>\Device Parameters\EDID`,
-  addressed through the monitor's device interface path; on Linux from
-  `/sys/class/drm`. The Windows probe uses that EDID when WMI has no record, and the
-  Linux probe now fills `model` and `serial` from it. Tested against two real EDIDs
-  from linuxhw/EDID (CC BY 4.0).
-
-- **One error taxonomy at the facade (companion gap A2)**: `tv_rs::TvError` is now a
-  re-export of `tv_rs_core::TvError` — the facade's parallel enum is deleted, not
-  deprecated. Core gains `TvError::UnsupportedDevice { address, reason }` (a device
-  answered and matched no signature) and `TvError::UnsupportedOperation { vendor,
-  operation }` (the vendor has no such protocol message), both routing to
-  `Remedy::Disable`, and a `hint()` method that returns a user-facing sentence where
-  the error alone cannot. webOS `RegistrationFailed` now carries `presented_key`:
-  a **declined prompt** maps to `Auth(PairingRequired)`, a **revoked stored key** to
-  `Auth(TokenExpired)` — the app can finally offer the right button.
-- **Optional serialization of the core device model (`tv_rs_core/serde`)**: the new
-  `serde` feature (off by default) derives `Serialize`/`Deserialize` for the core
-  data types — `Capability`, `Key`, `Input`, `AppRef`, `DeviceDescriptor`,
-  `PowerState`, `TvError`, `Remedy`, `ObservedState` — with the wire contract that
-  goes to the companion: `Key::Digit(n)` → `"digit_n"`, `ObservedField` →
-  `{"verified_at_ms": u64, "age_ms": u64, "confidence": "high"|"inferred"|"unknown",
-  "value": T}`. No extra dependency in the default build, and the companion can
-  hand the core types straight to its `types.ts` instead of maintaining a DTO fork.
-- **`tv_rs::map` — the one home of vendor-error mapping**: three exhaustive
-  per-vendor functions (`tizen`, `webos`, `roku`) plus `discovery` and `power`.
-  No wildcard arms — a new vendor error variant is a compile error until someone
-  assigns its remedy, and a table-driven test walks every variant. Consumers of the
-  protocol crates directly (the CLI) route through the same functions.
-- **`DiscoveredTv.to_client` / facade errors for unknown devices** answer with
-  `UnsupportedDevice`, which unlike the old `UnsupportedVendor` carries the address
-  a fleet dashboard can act on.
-- **webOS session pool (`tv-rs-webos`)**: one registered SSAP session per TV,
-  reused across commands instead of paying a dial + `register` handshake per call
-  (which without a stored key meant an on-screen prompt per command). Idle limit
-  60 s, a dead session reopens exactly once before the failure surfaces, and
-  the pool serialises requests per TV to match the protocol.
-- **webOS pointer channel**: `SsapUri::NetworkInputGetPointerSocket` plus
-  `PointerSocket` — a second WebSocket computed from the per-session
-  `socketPath` the TV returns, carrying byte-exact plain-text pointer frames
-  (`type:move` / `type:button` / `type:click` / `type:scroll`, always with the
-  `down:` flag, blank-line terminated). Fire-and-forget as the TV acknowledges
-  nothing; `close()` gives the last frame the 120 ms grace the TV needs before
-  dropping near-close writes. Provenance-traced to four independent
-  implementations and one measured writeup (webOS 23). New enum variant; per
-  the 0.x policy that is a minor bump.
-
-- **The facade holds the connection pools (companion gap A1)**: `TvClient`'s Tizen
-  and webOS variants now carry the pool next to the protocol client, so a key press,
-  a volume change or a foreground read reuses one connection per TV instead of paying
-  TCP + TLS + handshake on every call — the cost the facade was paying while
-  `TizenConnectionPool` sat unused. Each pool is shared behind an `Arc`, so cloning a
-  handle clones the *connection*, not the right to open another one; `TvClient::close_all()`
-  releases them for mobile backgrounding; and the factories are erased
-  (`DynConnectionPool` / `DynSessionPool`) so a caller can inject its own. webOS still
-  refuses key presses: SSAP has no key endpoint, and the pointer socket that does is a
-  separate item. Proven without hardware — `cargo test -p tv-rs --features testkit`
-  presses twenty keys through the facade and asserts exactly one channel was opened.
-- **`testkit` features in `tv-rs-tizen`, `tv-rs-webos` and `tv-rs`**: counting channel
-  and session factories, so a downstream crate can prove connection reuse without a
-  television. Off by default; a released build carries no test code.
-
-### Changed
-
-- Facade inherent methods (`open_url`, `power_off`, `power_state`,
-  `power_observation`, `launch_app`) and all seven `DeviceHandle` trait impls return
-  core errors directly; vendor-bound calls are mapped at the call site with the
-  capability the call site needed `to_core` deleted.
-
-## [0.3.0] - 2026-10-22
-
-Fourteen crates. The telemetry lane lands (`tv-rs-core` telemetry + capabilities,
+Fifteen crates. The telemetry lane lands (`tv-rs-core` telemetry + capabilities,
 `tv-rs-agent` policy and its graduated remediation ladder), `tv-rs-mdc` joins as the
 commercial-signage protocol and speaks RS-232 as well as TCP, the LFD capability
 surfaces arrive in core and MDC, and `DeviceOs::SamsungMdc`, `Remedy::Quarantine` and
@@ -177,11 +97,86 @@ stack, and an absent device is a typed`MdcError::Io` rather than a hang.
 - **`DeviceOs::SamsungMdc`**, because an MDC panel is not "unknown": no pairing, no
   WebSocket, a display id instead of a remote.
 
+
+- **Public EDID parser and active-display EDID enumeration in `tv-rs-local`
+  (SignageMaster handoff E3b)**: `tv_rs_local::parse_edid(&[u8]) -> Result<Edid,
+  EdidError>` reads the base block per VESA E-EDID 1.4 §3 — PNP manufacturer id,
+  product code, serial (numeric and descriptor), week/year, version, digital input,
+  size in cm, the product-name descriptor and the preferred `DetailedTiming` (pixel
+  clock, active/blank, image mm, `refresh_hz()`), extension count and a reported (not
+  enforced) checksum. `display_edids() -> Vec<DisplayEdid>` returns the raw bytes and
+  the parsed block for every active display: on Windows from
+  `HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY\<id>\<instance>\Device Parameters\EDID`,
+  addressed through the monitor's device interface path; on Linux from
+  `/sys/class/drm`. The Windows probe uses that EDID when WMI has no record, and the
+  Linux probe now fills `model` and `serial` from it. Tested against two real EDIDs
+  from linuxhw/EDID (CC BY 4.0).
+
+- **One error taxonomy at the facade (companion gap A2)**: `tv_rs::TvError` is now a
+  re-export of `tv_rs_core::TvError` — the facade's parallel enum is deleted, not
+  deprecated. Core gains `TvError::UnsupportedDevice { address, reason }` (a device
+  answered and matched no signature) and `TvError::UnsupportedOperation { vendor,
+  operation }` (the vendor has no such protocol message), both routing to
+  `Remedy::Disable`, and a `hint()` method that returns a user-facing sentence where
+  the error alone cannot. webOS `RegistrationFailed` now carries `presented_key`:
+  a **declined prompt** maps to `Auth(PairingRequired)`, a **revoked stored key** to
+  `Auth(TokenExpired)` — the app can finally offer the right button.
+- **Optional serialization of the core device model (`tv_rs_core/serde`)**: the new
+  `serde` feature (off by default) derives `Serialize`/`Deserialize` for the core
+  data types — `Capability`, `Key`, `Input`, `AppRef`, `DeviceDescriptor`,
+  `PowerState`, `TvError`, `Remedy`, `ObservedState` — with the wire contract that
+  goes to the companion: `Key::Digit(n)` → `"digit_n"`, `ObservedField` →
+  `{"verified_at_ms": u64, "age_ms": u64, "confidence": "high"|"inferred"|"unknown",
+  "value": T}`. No extra dependency in the default build, and the companion can
+  hand the core types straight to its `types.ts` instead of maintaining a DTO fork.
+- **`tv_rs::map` — the one home of vendor-error mapping**: three exhaustive
+  per-vendor functions (`tizen`, `webos`, `roku`) plus `discovery` and `power`.
+  No wildcard arms — a new vendor error variant is a compile error until someone
+  assigns its remedy, and a table-driven test walks every variant. Consumers of the
+  protocol crates directly (the CLI) route through the same functions.
+- **`DiscoveredTv.to_client` / facade errors for unknown devices** answer with
+  `UnsupportedDevice`, which unlike the old `UnsupportedVendor` carries the address
+  a fleet dashboard can act on.
+- **webOS session pool (`tv-rs-webos`)**: one registered SSAP session per TV,
+  reused across commands instead of paying a dial + `register` handshake per call
+  (which without a stored key meant an on-screen prompt per command). Idle limit
+  60 s, a dead session reopens exactly once before the failure surfaces, and
+  the pool serialises requests per TV to match the protocol.
+- **webOS pointer channel**: `SsapUri::NetworkInputGetPointerSocket` plus
+  `PointerSocket` — a second WebSocket computed from the per-session
+  `socketPath` the TV returns, carrying byte-exact plain-text pointer frames
+  (`type:move` / `type:button` / `type:click` / `type:scroll`, always with the
+  `down:` flag, blank-line terminated). Fire-and-forget as the TV acknowledges
+  nothing; `close()` gives the last frame the 120 ms grace the TV needs before
+  dropping near-close writes. Provenance-traced to four independent
+  implementations and one measured writeup (webOS 23). New enum variant; per
+  the 0.x policy that is a minor bump.
+
+- **The facade holds the connection pools (companion gap A1)**: `TvClient`'s Tizen
+  and webOS variants now carry the pool next to the protocol client, so a key press,
+  a volume change or a foreground read reuses one connection per TV instead of paying
+  TCP + TLS + handshake on every call — the cost the facade was paying while
+  `TizenConnectionPool` sat unused. Each pool is shared behind an `Arc`, so cloning a
+  handle clones the *connection*, not the right to open another one; `TvClient::close_all()`
+  releases them for mobile backgrounding; and the factories are erased
+  (`DynConnectionPool` / `DynSessionPool`) so a caller can inject its own. webOS still
+  refuses key presses: SSAP has no key endpoint, and the pointer socket that does is a
+  separate item. Proven without hardware — `cargo test -p tv-rs --features testkit`
+  presses twenty keys through the facade and asserts exactly one channel was opened.
+- **`testkit` features in `tv-rs-tizen`, `tv-rs-webos` and `tv-rs`**: counting channel
+  and session factories, so a downstream crate can prove connection reuse without a
+  television. Off by default; a released build carries no test code.
+
 ### Changed
 
 - **`Remedy::Quarantine`** joins the taxonomy, and `StateError::Quarantined` maps to
   it: the capability still exists, the device's condition forbids using it — which is
   the difference from `Disable`.
+
+- Facade inherent methods (`open_url`, `power_off`, `power_state`,
+  `power_observation`, `launch_app`) and all seven `DeviceHandle` trait impls return
+  core errors directly; vendor-bound calls are mapped at the call site with the
+  capability the call site needed `to_core` deleted.
 
 ### Removed
 
