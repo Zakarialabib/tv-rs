@@ -102,6 +102,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`RokuDeviceInfo::mac()`** — the Wi-Fi address when the box is wireless, the
   Ethernet one when it is wired.
 
+### Changed
+
+- **A silent SSDP probe is now an error, not an empty list** (`tv-rs-discovery` +
+  the facade — companion gap G7). Discovery counted no datagrams: when `send_to`
+  succeeded and nothing came back, the scan returned an empty `Vec`, which reads as
+  "no displays on this network". Silence is a different statement and usually the
+  wrong one — the multicast was dropped, which on Android means the app has not
+  been granted local-network access. The scanner now counts the datagrams it
+  receives and, when that count is zero, returns `DiscoveryError::SilentProbe`. The
+  message names *both* explanations (nothing listening, or the local network
+  unreachable) because neither is knowable from here, and the facade maps it to
+  `TransportError::Blocked`, reusing A5's "grant access" remedy and `hint()` rather
+  than inventing a third bucket. An empty list still means the network answered and
+  no display was among the replies.
+
 ### Fixed
 
 - **The `serde` feature compiles now.** It never did: `Serialize`/`Deserialize`

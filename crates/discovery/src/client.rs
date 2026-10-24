@@ -170,6 +170,7 @@ impl SsdpScanner {
             .await?;
 
         let mut responses: Vec<SsdpMsearchResponse> = Vec::new();
+        let mut datagrams = 0usize;
         let mut seen: Vec<String> = Vec::new();
         let mut buffer = vec![0u8; RECV_BUFFER_SIZE];
         let deadline = tokio::time::Instant::now() + self.timeout;
@@ -182,6 +183,7 @@ impl SsdpScanner {
 
             match tokio::time::timeout(remaining, socket.recv_from(&mut buffer)).await {
                 Ok(Ok((len, peer))) => {
+                    datagrams += 1;
                     let raw = String::from_utf8_lossy(&buffer[..len]);
                     let response = parse_msearch_response(&raw, &peer.ip().to_string())?;
 
@@ -197,6 +199,14 @@ impl SsdpScanner {
                 Ok(Err(err)) => return Err(DiscoveryError::Io(err)),
                 Err(_) => break,
             }
+        }
+
+        if datagrams == 0 {
+            // Nothing answered. An empty list would read as "no displays on this
+            // network", which is a different statement and usually the wrong one.
+            return Err(DiscoveryError::SilentProbe {
+                target: target.to_string(),
+            });
         }
 
         Ok(responses)

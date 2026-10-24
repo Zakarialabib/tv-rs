@@ -143,12 +143,23 @@ control greyed out rather than silently typing nothing.
 **Exit:** the webOS IME surface and the Tizen `SendInputString` payload traced into the
 playbook with their sources, then `type_text()` answering on both.
 
-### 2.4 C1 · G7 — Android readiness
+### 2.4 C1 · G7 (the remainder) — Android readiness
 
-A distinct error when **zero datagrams** were received (no multicast permission) as
-opposed to zero TVs answering; a `rustls-platform-verifier` feature for
-`tv-rs-transport`; `cfg`-gate `tv-rs-local` so Android and iOS do not build a
-desktop EDID probe.
+**The silent probe landed.** The scanner counts the datagrams it receives and returns
+`DiscoveryError::SilentProbe` when that count is zero, so "nothing answered" is no
+longer reported as "no displays". The message names both explanations (nothing
+listening, or the local network unreachable) because neither is knowable from here,
+and the facade maps it to `TransportError::Blocked` — reusing A5's "grant access"
+remedy rather than inventing a third bucket. An empty list still means the network
+answered and no display was among the replies.
+
+**Still open:**
+
+- **`rustls-platform-verifier` as a `tv-rs-transport` feature.** The workspace is
+  rustls-only by policy (Simple-Signage requirement), and platform-native certificate
+  verification is what an Android or iOS build needs instead of bundling a root set.
+- **`cfg`-gate `tv-rs-local`.** Its desktop EDID probe compiles into every build of
+  that crate today, including mobile ones where it cannot run.
 
 ### 2.5 D — the rest, in the companion's order
 
