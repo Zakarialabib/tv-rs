@@ -108,6 +108,27 @@ Where: [`crates/transport/src/unsupported.rs`](../crates/transport/src/unsupport
 
 **`TizenConnectionPool`** — one WebSocket channel per TV; a failed send reopens
 it once and replays the frame, because TVs drop idle sockets. Where: [`crates/tizen/src/pool.rs`](../crates/tizen/src/pool.rs).
+The facade's Tizen variant holds one, so a key press reuses the channel instead of
+paying a handshake per press.
+
+**`WebosSessionPool`** — the same idea for LG: one registered SSAP session per TV,
+because connecting without a stored `client-key` raises the on-screen "Allow?"
+prompt. Where: [`crates/webos/src/pool.rs`](../crates/webos/src/pool.rs).
+
+**`DynConnectionPool` / `DynSessionPool`** — a pool with its factory erased
+(`TizenConnectionPool<Box<dyn TizenChannelFactory + Send + Sync>>` and its webOS
+twin), which is what lets a facade store one pool type while a caller still supplies
+its own factory. Where: [`crates/tizen/src/pool.rs`](../crates/tizen/src/pool.rs),
+[`crates/webos/src/pool.rs`](../crates/webos/src/pool.rs).
+
+**`TvClient::close_all()`** — drops every pooled connection the handle owns and
+returns how many; the lever a mobile app pulls when it goes to the background,
+since the OS will not close a WebSocket for it. Where: [`crates/tv-rs/src/handle.rs`](../crates/tv-rs/src/handle.rs).
+
+**`testkit`** — the counting channel/session factories behind the `testkit` feature of
+`tv-rs-tizen`, `tv-rs-webos` and `tv-rs` (off by default). They are how connection
+reuse is proved in CI without a television: twenty key presses through the facade must
+open exactly one channel. Where: [`crates/tizen/src/pool.rs`](../crates/tizen/src/pool.rs).
 
 **`SamsungTokenStore`** — file-backed pairing tokens keyed by IP. A corrupt file
 is quarantined instead of aborting startup, and an empty token never overwrites a

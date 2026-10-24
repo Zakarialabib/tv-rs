@@ -31,7 +31,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the error alone cannot. webOS `RegistrationFailed` now carries `presented_key`:
   a **declined prompt** maps to `Auth(PairingRequired)`, a **revoked stored key** to
   `Auth(TokenExpired)` — the app can finally offer the right button.
-+- **Optional serialization of the core device model (`tv_rs_core/serde`)**: the new
+- **Optional serialization of the core device model (`tv_rs_core/serde`)**: the new
   `serde` feature (off by default) derives `Serialize`/`Deserialize` for the core
   data types — `Capability`, `Key`, `Input`, `AppRef`, `DeviceDescriptor`,
   `PowerState`, `TvError`, `Remedy`, `ObservedState` — with the wire contract that
@@ -39,7 +39,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `{"verified_at_ms": u64, "age_ms": u64, "confidence": "high"|"inferred"|"unknown",
   "value": T}`. No extra dependency in the default build, and the companion can
   hand the core types straight to its `types.ts` instead of maintaining a DTO fork.
-  See `docs/03-matrix.md` and `docs/06-plan.md` item 3.3.
 - **`tv_rs::map` — the one home of vendor-error mapping**: three exhaustive
   per-vendor functions (`tizen`, `webos`, `roku`) plus `discovery` and `power`.
   No wildcard arms — a new vendor error variant is a compile error until someone
@@ -62,6 +61,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dropping near-close writes. Provenance-traced to four independent
   implementations and one measured writeup (webOS 23). New enum variant; per
   the 0.x policy that is a minor bump.
+
+- **The facade holds the connection pools (companion gap A1)**: `TvClient`'s Tizen
+  and webOS variants now carry the pool next to the protocol client, so a key press,
+  a volume change or a foreground read reuses one connection per TV instead of paying
+  TCP + TLS + handshake on every call — the cost the facade was paying while
+  `TizenConnectionPool` sat unused. Each pool is shared behind an `Arc`, so cloning a
+  handle clones the *connection*, not the right to open another one; `TvClient::close_all()`
+  releases them for mobile backgrounding; and the factories are erased
+  (`DynConnectionPool` / `DynSessionPool`) so a caller can inject its own. webOS still
+  refuses key presses: SSAP has no key endpoint, and the pointer socket that does is a
+  separate item. Proven without hardware — `cargo test -p tv-rs --features testkit`
+  presses twenty keys through the facade and asserts exactly one channel was opened.
+- **`testkit` features in `tv-rs-tizen`, `tv-rs-webos` and `tv-rs`**: counting channel
+  and session factories, so a downstream crate can prove connection reuse without a
+  television. Off by default; a released build carries no test code.
 
 ### Changed
 

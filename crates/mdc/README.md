@@ -22,7 +22,7 @@ before that. Everything else in this workspace's published set is at `0.2.0` tod
 - Reads and writes power, input, volume, mute and brightness.
 - Reads the aggregated status command (`0x00`) with typed power, volume, mute,
   input and aspect fields.
-- Speaks the LFD subset a signage panel actually needs: panel key lock (`0x5F`),
+- Speaks the LFD subset a commercial panel actually needs: panel key lock (`0x5F`),
   content orientation (`0xC8`/`0x82`), signal state and panel health (`0x0D` —
   lamp fault, input-source error, panel temperature, fan), and panel on-time
   (`0x83` behind the `supporting` feature).

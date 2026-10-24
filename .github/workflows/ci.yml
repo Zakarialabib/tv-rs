@@ -73,6 +73,10 @@ jobs:
       - run: cargo test -p tv-rs --features conformance
       # Quirk-driven port pinning lives on the facade, so its own test needs the feature.
       - run: cargo test -p tv-rs --features quirks
+      # Connection reuse (plan item 3.2) is proved with counting test doubles from
+      # the protocol crates: twenty key presses through the facade must open one
+      # channel. No television is involved.
+      - run: cargo test -p tv-rs --features testkit
       - run: cargo check -p tv-rs --features quirks
       # The optional providers pull reqwest/rumqttc; default builds stay lean.
       - run: cargo test -p tv-rs-agent --features "http mqtt"
@@ -93,7 +97,9 @@ jobs:
       - run: cargo check -p tv-rs-power
       - run: cargo check -p tv-rs-roku
       - run: cargo check -p tv-rs-tizen
+      - run: cargo check -p tv-rs-tizen --features testkit
       - run: cargo check -p tv-rs-webos
+      - run: cargo check -p tv-rs-webos --features testkit
       - run: cargo check -p tv-rs-media
       - run: cargo check -p tv-rs-cec
       - run: cargo check -p tv-rs-cec --features client

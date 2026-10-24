@@ -1,6 +1,6 @@
 # Documentation
 
-Fourteen crates, one facade, one idea: speak each TV's own protocol and never hide
+Fifteen published crates, one facade, one idea: speak each TV's own protocol and never hide
 a failure behind a panic. These pages are the long version of that. This index
 routes to everything that exists in `docs/` — nothing here, and nothing missing.
 
@@ -20,7 +20,6 @@ routes to everything that exists in `docs/` — nothing here, and nothing missin
 | —   | [`07-adoption.md`](07-adoption.md)                           | The contract for adopting this workspace inside an application: what the app owns, what the crate owns, the no-duplication rules.                                                                                 |
 | —   | [`hil-results.md`](hil-results.md)                           | What has actually run against a physical TV. Today: nothing.                                                                                                                                                      |
 | —   | [`adr/`](adr/)                                               | [001 — crate publication](adr/001-crate-publication.md), [002 — workspace layout](adr/002-workspace-layout.md).                                                                                                   |
-| —   | [`internal/`](internal/)                                     | Notes kept out of the public set: [deferred-auth](internal/deferred-auth.md) (why four deferred surfaces stay deferred), [capability-honesty](internal/capability-honesty.md) (where the capability table lives). |
 
 ## Conventions used here
 

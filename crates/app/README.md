@@ -20,7 +20,7 @@ use std::path::Path;
 use tv_rs_app::{package, AppDescriptor, PackageRequest, Target};
 
 let descriptor = AppDescriptor::new("com.example.wall", "Lobby wall", "1.0.0")
-    .with_vendor("Example Signage")
+    .with_vendor("Example Retail")
     .with_icon("icon.png");
 
 let artifact = package(&PackageRequest::new(

@@ -270,7 +270,7 @@ different trust model from the protocols above. A second door, researched
 pre-installed service, no developer mode). The device's name and MAC parse out
 of the **server** certificate the TV presents on the pairing port — no pairing
 needed to read it. Protocol facts are crystallized in the webos/androidtv
-research briefs; the spike that decides between them is plan item 3.13 in
+research briefs; the spike that decides between them is plan item 3.11 in
 [`06-plan.md`](06-plan.md).
 
 All three are sender protocols or separate trust models; a partial
@@ -295,8 +295,9 @@ and deletes its copy. Audio, USB and sensor probes are **not** moving here.
 Gaps found 2026-10-23 (SignageMaster path is now `crates/device/src/hardware/display/`):
 `tv-rs-local` has no public EDID byte parser (SignageMaster's `parse_edid_bytes` in
 `edid.rs` returns product code, serial and width/height in cm; `tv-rs-local`'s
-`parse_edid` is private and Linux-only) and no Windows registry EDID read. E3b has no
-item in [06-plan.md](06-plan.md) yet.
+`parse_edid` is private and Linux-only) and no Windows registry EDID read. Both are
+now landed — see [plan item 2b](06-plan.md) and the CHANGELOG — leaving the consumer
+switch as the open half.
 
 **Streaming boundary** — SignageMaster is extracting a separate `streaming-core`
 workspace (MJPEG, HLS, WebRTC, RTSP relay). `tv-rs-media` stays the minimal byte server

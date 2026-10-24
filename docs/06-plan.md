@@ -103,35 +103,13 @@ when it lands.** The gap work ships in [0.4.0](#10-release-040).
 
 Tier A shapes the contract, so it goes before the companion writes its `src-tauri`.
 Tier B makes the Remote real, per vendor — reorder it by the TVs on the bench.
-A2 landed on 2026-10-23 (one error type, exhaustive remedy maps, the webOS
-registration split); its record lives in [CHANGELOG.md](../CHANGELOG.md).
 
-### 3.2 A1 · G11 — sessions are not reused
+Landed so far, each recorded in [CHANGELOG.md](../CHANGELOG.md): **A2** (one error
+type, exhaustive remedy maps, the webOS registration split), **A1** (the facade owns
+the connection pools, with `close_all()` and a `testkit` proof that twenty presses
+open one channel) and **A3** (the core `serde` feature and its wire contract).
 
-`impl KeyInput for TvClient` calls `TizenSession::connect` on every key press — TCP,
-TLS and the `ms.channel.connect` handshake each time (300–1500 ms), while
-`TizenConnectionPool` sits unused; webOS connects per request too.
-
-**Exit:** the facade owns the pools (Tizen's existing pool plus a webOS session
-pool), idle timeout ~60 s, one reconnect on error, and a public `close_all()` for
-mobile backgrounding — proven by [`tv-rs-sim`](#4-tv-rs-sim--verify-the-hardware-exits-without-hardware):
-twenty key presses, one accepted connection.
-
-### 3.3 A3 · G1 + G2 — serializable core types
-
-No core type is `Serialize`, so every consumer hand-writes DTOs; `ObservedField`
-holds a monotonic `Instant`, which cannot be serialised at all.
-
-**Shape (decided):** an optional `serde` feature, off by default (non-serde users pay
-nothing), `rename_all = "snake_case"`, `Key::Digit(n)` → `"digit_n"`, and
-`ObservedField` serialising **both** `verified_at_ms` and `age_ms` so a UI can show an
-age or a timestamp. The wire format is a published contract: documented in the crate
-README.
-
-**Exit:** the core types round-trip as JSON; `tv_rs::TvVendor` serialises as
-`"samsung"`, not `"Samsung"`; a test pins the wire shape of every serialisable type.
-
-### 3.4 A4 · G13 + G4 — nothing can wake
+### 3.2 A4 · G13 + G4 — nothing can wake
 
 `wake()` returns `Unsupported(Wake)` for every vendor, `RokuClient::power_on` exists
 and is unused, and `DiscoveredTv` carries no MAC, so no `WolSender` can be built.
@@ -142,7 +120,7 @@ in `DeviceDescriptor::mac`; `wake()` with a MAC sends a magic packet; each failu
 carries the vendor's own hint ("Fast TV start", "Turn on via Wi-Fi", "Power On with
 Mobile").
 
-### 3.5 A5 · G14 — an Android block must not read as "TV off"
+### 3.3 A5 · G14 — an Android block must not read as "TV off"
 
 From Android 17 (target SDK 37) LAN sockets need runtime `ACCESS_LOCAL_NETWORK`:
 TCP connects time out and UDP sends fail `EPERM`, both mapped today to
@@ -155,38 +133,38 @@ TCP connects time out and UDP sends fail `EPERM`, both mapped today to
 `ANDROID_NETWORK_BLOCKED_REASON_LNP` map to `Blocked`; zero datagrams received is
 distinguishable from zero TVs answered; desktop paths are untouched.
 
-### 3.6 B1 · G10a — webOS key input
+### 3.4 B1 · G10a — webOS key input
 
 Without the pointer/input socket (`getPointerInputSocket`) the LG D-pad is dead.
 
-### 3.7 B2 · G10b — foreground on Roku and Tizen
+### 3.5 B2 · G10b — foreground on Roku and Tizen
 
 Roku `/query/active-app`, Tizen's foreground app: the "on screen" card and the
 fleet's app check need them.
 
-### 3.8 B3 · G5 — installed apps on Tizen and webOS
+### 3.6 B3 · G5 — installed apps on Tizen and webOS
 
 webOS `listLaunchPoints`; Tizen `ed.installedApp.get` over the remote channel. Today
 only Roku lists apps.
 
-### 3.9 B4 · G10c — mute read, and input select
+### 3.7 B4 · G10c — mute read, and input select
 
 `VolumeControl` has `volume()` and `set_mute()` but no `muted()`; input select is
 missing on webOS (`switchInput`) and Tizen (at least `KEY_HDMI1..4`).
 
-### 3.10 B5 · G6 — text entry
+### 3.8 B5 · G6 — text entry
 
 Tizen `ms.remote.control` `SendInputString` (base64), webOS IME `insertText`, Roku
 `Lit_<char>` key presses — for search boxes on the TV.
 
-### 3.11 C1 · G7 — Android readiness
+### 3.9 C1 · G7 — Android readiness
 
 A distinct error when **zero datagrams** were received (no multicast permission) as
 opposed to zero TVs answering; a `rustls-platform-verifier` feature for
 `tv-rs-transport`; `cfg`-gate `tv-rs-local` so Android and iOS do not build a
 desktop EDID probe.
 
-### 3.12 D — the rest, in the companion's order
+### 3.10 D — the rest, in the companion's order
 
 - **G3** streaming discovery (`discover_stream()` or a callback; dedup stays in the
   scanner) — Devices › Find streams results as TVs answer.
@@ -203,7 +181,7 @@ desktop EDID probe.
 - **G18** event streams (`tv-rs` push instead of request/response) — the companion's
   own list added it while this plan was written; it follows Tier B.
 
-### 3.13 X · Android TV as a target — the spike that decides (not a crate yet)
+### 3.11 X · Android TV as a target — the spike that decides (not a crate yet)
 
 The matrix deferred Android TV for ADB's trust model (developer mode, per-TV
 pairing). The peer landscape ([`03-matrix.md`](03-matrix.md#peer-landscape))
