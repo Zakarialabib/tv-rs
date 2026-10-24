@@ -192,7 +192,7 @@ impl Edid {
 /// [`EdidError::TooShort`] for fewer than 128 bytes and
 /// [`EdidError::BadHeader`] when the fixed header is missing. A bad checksum
 /// is not an error; see [`Edid::checksum_valid`].
-#[allow(clippy::chunks_exact_to_as_chunks)]
+#[allow(unknown_lints, clippy::chunks_exact_to_as_chunks)]
 pub fn parse_edid(bytes: &[u8]) -> Result<Edid, EdidError> {
     if bytes.len() < EDID_BLOCK_LEN {
         return Err(EdidError::TooShort(bytes.len()));

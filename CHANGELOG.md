@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **MDC client conformance testing and publish readiness (`tv-rs-mdc`)**: added a
+  conformance test in `crates/mdc/tests/tcp.rs` running `tv_rs_core::conformance::run`
+  against `MdcDevice`, verified feature gating of LFD surfaces (`LampOrPanelHours`
+  gated behind `supporting`, `ScreenCapture` never advertised), confirmed clean
+  resolution in `xtask publish --dry-run`, and recorded the `UNVERIFIED` status
+  row in `docs/hil-results.md`.
+
 - **Public EDID parser and active-display EDID enumeration in `tv-rs-local`
   (SignageMaster handoff E3b)**: `tv_rs_local::parse_edid(&[u8]) -> Result<Edid,
   EdidError>` reads the base block per VESA E-EDID 1.4 §3 — PNP manufacturer id,

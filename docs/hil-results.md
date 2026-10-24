@@ -13,6 +13,7 @@ currently documentation-derived.
 
 | Date | Vendor | Model | Year | Firmware | Discover | Pair | Key | Launch | Power read | Power off | Wake | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-10-24 | Samsung | tv-rs-mdc | not run | not run | not run | not run | not run | not run | not run | not run | not run | UNVERIFIED (no hardware run yet) |
 
 Leave a cell **not run** rather than guessing. A row with gaps is more useful than a
 row with assumptions.
