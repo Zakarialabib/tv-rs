@@ -10,7 +10,7 @@ use crate::error::TvError;
 /// address moves. Sources, in order of preference: the UPnP `UDN`, the Roku
 /// `device-id`, then a MAC address. An id is an opaque string — do not parse it.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeviceId(String);
 
 impl DeviceId {
@@ -172,6 +172,8 @@ impl DeviceDescriptor {
 
 /// What a television is doing right now, as far as it will say.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum PowerState {
     /// Awake and able to accept commands.
     On,

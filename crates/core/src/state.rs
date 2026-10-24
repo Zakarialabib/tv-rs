@@ -10,6 +10,8 @@ use crate::descriptor::PowerState;
 /// The ordering is meaningful: `Unknown < Inferred < High`, so a caller can write
 /// `if field.confidence >= Confidence::Inferred`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum Confidence {
     /// Nothing is known, or what was known has expired.
     #[default]

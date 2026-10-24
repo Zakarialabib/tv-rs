@@ -6,6 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The `serde` feature compiles now.** It never did: `Serialize`/`Deserialize`
+  were not imported in the files that used them, so
+  `cargo check -p tv-rs-core --features serde` failed outright — the feature had
+  never been built. Fixed with qualified derives
+  (`derive(serde::Serialize, serde::Deserialize)`), `rename_all = "snake_case"` on
+  the enums so `Capability::PowerState` → `"power_state"` and `Remedy::Retry` →
+  `"retry"`, and derives on `PowerState`, `Confidence` and `AppRef`, which had
+  none. `serde.rs`'s manual `Key`/`Input` impls passed `String` where
+  `serialize_str` wants `&str` and were missing `SerializeMap`; `from_str` had an
+  unworkable `'static` bound.
+- **`ObservedField` no longer promises a `verified_at_ms`.** An `Instant` is
+  monotonic and has no epoch, so an absolute timestamp is not derivable from it.
+  The field is gone; the wire carries `age_ms`, `confidence` and `value` — which is
+  what the companion's G2 was asking for.
+- Every capability's serde output is now asserted equal to its `as_str()` label,
+  so the derive and the label cannot drift. Two redundant `#[must_use]`s on
+  functions returning `Result` are gone.
+
+
 ### Added
 
 - **webOS key input (`tv-rs-webos` + the facade — companion gap G10a)**: a press is
