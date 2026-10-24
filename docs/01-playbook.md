@@ -162,6 +162,15 @@ on the local subnet. The most cooperative of the network protocols:
 | `/keypress/{Key}`    | POST   | emulates a remote button (`Home`, `Up`, `Select`, `Back`, `PowerOff`) |
 | `/launch/{appId}`    | POST   | starts an app                                                         |
 
+`/keypress/` also carries text. Roku's ECP documentation: "The key parameter can either
+be a key name … or a printable character value specified with the prefix `Lit_`. Printable
+ASCII character code values can be transmitted as-is with the `Lit_` prefix" — so
+`curl -d '' "http://<tv>:8060/keypress/Lit_r"` types `r`, one character per request. **The
+documented surface is printable ASCII** (0x20–0x7E); the encoding for anything else is not
+documented in that source, so a client must refuse a character it cannot prove rather than
+guess at a percent-encoding. Source: Roku's External Control Protocol documentation
+(`developer.roku.com`), with the same `Lit_` prefix confirmed by independent ECP clients.
+
 `/query/active-app` answers `<active-app><app id="12" type="appl" version="4.1.218">Netflix</app></active-app>`:
 the `app` element is the bare text `Roku` with **no** `id` when the user is on the home
 screen (nothing is in front — not an application called Roku), and a `<screensaver>`

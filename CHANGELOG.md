@@ -8,6 +8,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Text entry, Roku half (companion gap G6)**: `RokuClient::type_text()` types a string
+  one `keypress/Lit_<char>` request per character, and a new `TextInput` trait (with a
+  default that refuses) plus `Capability::TextInput` expose it through the facade —
+  `as_text()` and `type_text()`. Source: Roku's own ECP documentation, where the key
+  parameter may be "a printable character value specified with the prefix `Lit_`" and
+  "Printable ASCII character code values can be transmitted as-is". That surface is
+  printable ASCII, so a string holding anything else is refused **atomically** — the
+  whole string is validated before the first request, so a refusal never leaves half a
+  search term typed into the field. The refusal names `TextInput`, never `Key`, because
+  a device that can press buttons may have no way to take a string.
+  `Capability::TextInput` is declared last, which forced `CapabilitySet` to widen from
+  `u16` to `u32` (the sixteenth capability filled the old width); the widening is
+  additive and every capability keeps its index, so a set written by an older build
+  reads the same. webOS and Tizen keep the honest default: their text-entry surfaces are
+  named in the plan but not traced to a source in this workspace.
+
 - **`AppLaunch::installed_apps()`** — lists what is actually installed, with a
   default of `Unsupported` so a platform that cannot list says so instead of
   fabricating a catalogue. webOS answers

@@ -9,11 +9,11 @@
 //!
 //! [`TvClient`] advertises only what it can actually do today, per vendor:
 //!
-//! | Vendor | power | wake | key | app | app list | foreground | input | volume | panel lock | orientation | panel health |
-//! |---|---|---|---|---|---|---|---|---|---|---|---|---|
-//! | Tizen | ✓ | MAC | ✓ | ✓ | — | — | — | — | — | — | — |
-//! | webOS | ✓ | MAC | ✓ | ✓ | ✓ | ✓ | — | ✓ | — | — | — |
-//! | Roku | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — |
+//! | Vendor | power | wake | key | text | app | app list | foreground | input | volume | panel lock | orientation | panel health |
+//! |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+//! | Tizen | ✓ | MAC | ✓ | — | ✓ | — | — | — | — | — | — | — |
+//! | webOS | ✓ | MAC | ✓ | — | ✓ | ✓ | ✓ | — | ✓ | — | — | — |
+//! | Roku | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — |
 //!
 //! `wake` reads `MAC` where the vendor drops its network stack when it sleeps:
 //! the only wake path there is a broadcast magic packet, which needs an address
@@ -32,8 +32,9 @@ use async_trait::async_trait;
 
 use tv_rs_core::ProtocolError;
 use tv_rs_core::{
-    AppLaunch, AppRef, Capability, CapabilitySet, DeviceDescriptor, DeviceHandle, DeviceId,
-    DeviceOs, Input, InputSelect, Key, KeyInput, PowerControl, PowerState, TvError, VolumeControl,
+    AppLaunch, AppRef, Capability, CapabilitySet, CommandId, DeviceDescriptor, DeviceHandle,
+    DeviceId, DeviceOs, Input, InputSelect, Key, KeyInput, PowerControl, PowerState, TextInput,
+    TvError, VolumeControl,
 };
 use tv_rs_power::MacAddress;
 use tv_rs_roku::RokuKey;
@@ -74,6 +75,8 @@ impl TvClient {
                 set.insert(Capability::Foreground);
                 // `/query/apps` lists what is installed.
                 set.insert(Capability::AppList);
+                // `keypress/Lit_<char>` types printable ASCII.
+                set.insert(Capability::TextInput);
             }
         }
         // The other two drop their network stack when they sleep, so a magic
@@ -186,6 +189,12 @@ impl DeviceHandle for TvClient {
 
     fn as_power(&self) -> Option<&dyn PowerControl> {
         Some(self)
+    }
+
+    fn as_text(&self) -> Option<&dyn TextInput> {
+        self.core_capabilities()
+            .contains(Capability::TextInput)
+            .then_some(self as &dyn TextInput)
     }
 
     fn as_key(&self) -> Option<&dyn KeyInput> {
@@ -350,6 +359,28 @@ impl AppLaunch for TvClient {
             // launches what it cannot enumerate, and saying `AppLaunch` here would
             // claim the wrong thing.
             Self::Tizen { .. } => Err(TvError::Unsupported(Capability::AppList)),
+        }
+    }
+}
+
+#[async_trait]
+impl TextInput for TvClient {
+    /// Types a string into the focused field.
+    ///
+    /// Only Roku has a verified surface here (`keypress/Lit_<char>`). webOS's IME
+    /// and Tizen's `SendInputString` are named in the plan but are not traced to a
+    /// source in this workspace, so both keep the trait default, which names
+    /// [`Capability::TextInput`] — an unverified protocol operation does not
+    /// exist, and a search box that types nothing is worse than one that refuses.
+    async fn type_text(&self, text: &str, _cmd: CommandId) -> Result<(), TvError> {
+        match self {
+            Self::Roku { client, .. } => client
+                .type_text(text)
+                .await
+                .map_err(|error| map::roku(&error, Capability::TextInput)),
+            Self::Tizen { .. } | Self::Webos { .. } => {
+                Err(TvError::Unsupported(Capability::TextInput))
+            }
         }
     }
 }
@@ -648,6 +679,7 @@ mod tests {
                     Capability::AppLaunch,
                     Capability::Foreground,
                     Capability::AppList,
+                    Capability::TextInput,
                 ],
             ),
         ] {
@@ -681,6 +713,11 @@ mod tests {
                 set.contains(Capability::InputSelect),
                 client.as_input().is_some(),
                 "the input accessor follows the advertised set"
+            );
+            assert_eq!(
+                set.contains(Capability::TextInput),
+                client.as_text().is_some(),
+                "the text accessor follows the advertised set"
             );
         }
     }
@@ -802,6 +839,44 @@ mod tests {
             .await
             .expect_err("nothing listens");
         assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
+    }
+
+    /// Advertised where it is delivered: Roku's `Lit_<char>` is documented, and
+    /// webOS/Tizen have no traced text-entry surface at all.
+    #[test]
+    fn text_input_is_advertised_only_where_it_is_documented() {
+        assert!(roku().capabilities().contains(Capability::TextInput));
+        assert!(!webos().capabilities().contains(Capability::TextInput));
+        assert!(!tizen().capabilities().contains(Capability::TextInput));
+    }
+
+    /// The arm must be reached, not the trait default: port 1 refuses instantly, so
+    /// a transport error here proves the request was sent.
+    #[tokio::test]
+    async fn type_text_reaches_the_device() {
+        let client = TvClient::Roku {
+            client: RokuClient::with_base_url("http://127.0.0.1:1"),
+            mac: None,
+        };
+        let error = TextInput::type_text(&client, "hello", CommandId::new())
+            .await
+            .expect_err("nothing listens");
+        assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
+    }
+
+    /// webOS and Tizen refuse by naming `TextInput`, never `Key`: a device that can
+    /// press buttons may still have no way to take a string.
+    #[tokio::test]
+    async fn the_unverified_vendors_refuse_to_type() {
+        for client in [tizen(), webos()] {
+            let error = TextInput::type_text(&client, "hello", CommandId::new())
+                .await
+                .expect_err("no traced surface");
+            assert!(
+                matches!(error, TvError::Unsupported(Capability::TextInput)),
+                "{error:?}"
+            );
+        }
     }
 
     #[tokio::test]

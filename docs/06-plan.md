@@ -121,10 +121,27 @@ code.
 **Exit:** the endpoint traced and recorded, `TizenClient` returning the foreground app
 id, `foreground()` answering on Tizen, and a test pinning the parsed shape.
 
-### 2.3 B5 · G6 — text entry
+### 2.3 B5 · G6 (the remainder) — text entry on webOS and Tizen
 
-Tizen `ms.remote.control` `SendInputString` (base64), webOS IME `insertText`, Roku
-`Lit_<char>` key presses — for search boxes on the TV.
+Roku landed: `keypress/Lit_<char>`, one request per character, traced to Roku's own ECP
+documentation and recorded in [`01-playbook.md`](01-playbook.md) §5. The documented
+surface is **printable ASCII** — "Printable ASCII character code values can be
+transmitted as-is with the `Lit_` prefix" — and the encoding for anything else is not
+documented in that source, so `type_text` refuses such a string rather than guessing at
+a percent-encoding. `Capability::TextInput` is its own capability (declared after
+`AppList`, which is what forced the `CapabilitySet` bitset to widen from `u16` to `u32`)
+and the refusal names it, never `Capability::Key`: a device that can press buttons may
+still have no way to take a string.
+
+**webOS and Tizen are open, and neither premise is traced.** The plan names webOS IME
+`insertText` and Tizen `SendInputString` (base64); a search of the workspace finds no
+occurrence of either, and the playbook records no text-entry command for either vendor.
+Same rule as every other gap here — a capability without a verified vendor command does
+not exist — so both keep the trait default, which names `TextInput` and leaves the
+control greyed out rather than silently typing nothing.
+
+**Exit:** the webOS IME surface and the Tizen `SendInputString` payload traced into the
+playbook with their sources, then `type_text()` answering on both.
 
 ### 2.4 C1 · G7 — Android readiness
 

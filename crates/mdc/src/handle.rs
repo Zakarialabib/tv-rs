@@ -321,6 +321,12 @@ impl DeviceHandle for MdcDevice {
         None
     }
 
+    fn as_text(&self) -> Option<&dyn tv_rs_core::TextInput> {
+        // MDC has no text-entry command: a commercial panel's remote channel
+        // carries keys and inputs, never a string to type.
+        None
+    }
+
     fn as_input(&self) -> Option<&dyn InputSelect> {
         self.capabilities()
             .contains(Capability::InputSelect)

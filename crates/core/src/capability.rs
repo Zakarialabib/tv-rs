@@ -50,6 +50,13 @@ pub enum Capability {
     /// Grab a still frame of what the panel is showing.
     #[cfg(feature = "supporting")]
     ScreenCapture,
+    /// Type a string into a field on the device (a search box, a login).
+    ///
+    /// Its own capability rather than part of [`Capability::Key`]: on some platforms
+    /// a string is a single service call (an IME, a base64 payload) rather than a run
+    /// of key presses, so "has a keypad" and "can type a string" are independent
+    /// facts and the UI needs them separately.
+    TextInput,
     /// List the applications installed on the device.
     ///
     /// Its own capability rather than part of [`Capability::AppLaunch`]: a platform
@@ -83,6 +90,7 @@ impl Capability {
             Self::LampOrPanelHours => "lamp_or_panel_hours",
             #[cfg(feature = "supporting")]
             Self::ScreenCapture => "screen_capture",
+            Self::TextInput => "text_input",
             Self::AppList => "app_list",
         }
     }
@@ -90,11 +98,13 @@ impl Capability {
 
 /// The set of capabilities a device advertises.
 ///
-/// Deliberately not a bitflags crate: ten capabilities fit in a `u16`, and a
-/// hand-written set keeps the dependency list of the core honest.
+/// Deliberately not a bitflags crate: a hand-written set keeps the dependency list
+/// of the core honest. It widened from `u16` to `u32` when text entry arrived — the
+/// sixteenth capability filled the old width — and the widening is additive: every
+/// capability keeps its index, so a set written by an older build reads the same.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct CapabilitySet(u16);
+pub struct CapabilitySet(u32);
 
 impl CapabilitySet {
     /// An empty set.
@@ -161,6 +171,7 @@ const ALL_CAPABILITIES: &[Capability] = &[
     #[cfg(feature = "supporting")]
     Capability::ScreenCapture,
     Capability::AppList,
+    Capability::TextInput,
 ];
 
 const fn capability_index(capability: Capability) -> u16 {
@@ -183,6 +194,7 @@ const fn capability_index(capability: Capability) -> u16 {
         #[cfg(feature = "supporting")]
         Capability::ScreenCapture => 14,
         Capability::AppList => 15,
+        Capability::TextInput => 16,
     }
 }
 
@@ -414,6 +426,23 @@ pub trait AppLaunch: Send + Sync {
     }
 }
 
+/// Typing a string into a field on the device: a search box, a login form.
+///
+/// Distinct from [`KeyInput`]: a string can be one service call (an IME, a base64
+/// payload) rather than a run of key presses, so a device may be able to type
+/// without this trait and unable to type with it.
+#[async_trait]
+pub trait TextInput: Send + Sync {
+    /// Types `text` into the focused field.
+    ///
+    /// An empty string is a no-op. A character the platform cannot prove it can
+    /// send is refused rather than skipped — a search box that quietly drops a
+    /// character looks like it worked, and the caller needs to know it did not.
+    async fn type_text(&self, _text: &str, _cmd: CommandId) -> Result<(), TvError> {
+        Err(TvError::Unsupported(Capability::TextInput))
+    }
+}
+
 /// Input selection.
 #[async_trait]
 pub trait InputSelect: Send + Sync {
@@ -642,6 +671,9 @@ pub trait DeviceHandle: Send + Sync {
     /// Application control, or `None`.
     fn as_app(&self) -> Option<&dyn AppLaunch>;
 
+    /// Text entry, or `None`.
+    fn as_text(&self) -> Option<&dyn TextInput>;
+
     /// Input selection, or `None`.
     fn as_input(&self) -> Option<&dyn InputSelect>;
 
@@ -730,7 +762,10 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for capability in ALL_CAPABILITIES.iter().copied() {
             assert!(
-                seen.insert(1u16 << capability_index(capability)),
+                // The shift width must follow the set, not be pinned here: the set
+                // widened from u16 to u32 when the sixteenth capability arrived, and
+                // a hardcoded width is exactly how that would have been missed.
+                seen.insert(1u32 << capability_index(capability)),
                 "duplicate bit for {capability}"
             );
             assert!(CapabilitySet::of(capability).contains(capability));
