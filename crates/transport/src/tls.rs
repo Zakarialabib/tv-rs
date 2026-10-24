@@ -59,7 +59,10 @@ use rustls::{ClientConfig, DigitallySignedStruct, SignatureScheme};
 // Only the `Strict` policy's non-feature path builds a root store by hand; with
 // `platform-verifier` the operating system supplies one, so the import would be
 // unused — and an unused import is a clippy failure under `-D warnings`.
-#[cfg(not(feature = "platform-verifier"))]
+// Gated on `ws` + `rustls` as well: with `--no-default-features` this crate does
+// not depend on `rustls` at all, so an ungated import is an unresolved-import
+// error rather than an unused one. CI runs that exact configuration.
+#[cfg(all(feature = "ws", feature = "rustls", not(feature = "platform-verifier")))]
 use rustls::RootCertStore;
 use thiserror::Error;
 #[cfg(feature = "ws")]
