@@ -194,7 +194,13 @@ impl DeviceHandle for TvClient {
     }
 
     fn as_input(&self) -> Option<&dyn InputSelect> {
-        None
+        // webOS gained `switchInput`, so the accessor has to follow the advertised
+        // set the way `as_key` and `as_volume` do — the conformance suite checks
+        // exactly this pairing, and it caught the mismatch when the capability
+        // landed without it.
+        self.core_capabilities()
+            .contains(Capability::InputSelect)
+            .then_some(self as &dyn InputSelect)
     }
 
     fn as_volume(&self) -> Option<&dyn VolumeControl> {
@@ -622,9 +628,14 @@ mod tests {
                 set.contains(Capability::Volume),
                 client.as_volume().is_some()
             );
-            assert!(
-                client.as_input().is_none(),
-                "no backend implements input yet"
+            // The accessor must follow the advertised set for every capability —
+            // the conformance suite checks this pairing, and hardcoding "nobody
+            // implements input" is how this assert went stale the moment webOS
+            // gained `switchInput`.
+            assert_eq!(
+                set.contains(Capability::InputSelect),
+                client.as_input().is_some(),
+                "the input accessor follows the advertised set"
             );
         }
     }
