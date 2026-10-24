@@ -155,9 +155,21 @@ answered and no display was among the replies.
 
 **Still open:**
 
-- **`rustls-platform-verifier` as a `tv-rs-transport` feature.** The workspace is
-  rustls-only by policy (Simple-Signage requirement), and platform-native certificate
-  verification is what an Android or iOS build needs instead of bundling a root set.
+- **`rustls-platform-verifier` as a `tv-rs-transport` feature.** Scoped by
+  recon, because the plan's wording ("platform-native certificate verification")
+  points at the wrong target:
+  - `native-tls` **already exists** as a feature and already *is* the platform trust
+    store. It is banned in rustls-only consumers, which is policy — so the feature is
+    not "add native-tls".
+  - The actual gap is narrower: the rustls feature loads roots through
+    `rustls-native-certs`, which reads the *system* store. Android and iOS do not
+    expose one that way — Android has a keystore and iOS has its own roots — so an
+    unpinned policy on a mobile build has **no roots to verify against**. That is
+    exactly the case `rustls-platform-verifier` exists for.
+  - **Shape it must take:** an *additive* feature that supplies the root store for
+    the unpinned policy only. `TlsPolicy::Pinned` and `TrustOnFirstUse` must keep
+    their own verifiers, and nothing may silently weaken pinning — the repo's rule is
+    that verification never silently weakens.
 
 **Already satisfied — the plan's premise was stale.** `tv-rs-local` was said to build a
 desktop EDID probe into mobile builds; it does not. The probe is `cfg`-gated per
