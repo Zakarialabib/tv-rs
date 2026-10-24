@@ -168,6 +168,25 @@ impl TizenConnectionPool<LiveChannelFactory> {
     }
 }
 
+/// A channel factory behind a box, so a pool can hold a factory it does not name.
+///
+/// This is what lets a facade store one pool type while still accepting a
+/// caller-supplied factory — a different transport, or a test double.
+pub type BoxedChannelFactory = Box<dyn TizenChannelFactory + Send + Sync>;
+
+#[async_trait]
+impl TizenChannelFactory for BoxedChannelFactory {
+    async fn open(&self, client: &TizenClient) -> Result<Box<dyn TizenChannel>> {
+        (**self).open(client).await
+    }
+}
+
+/// The pool with its factory erased: the type a facade can store.
+///
+/// [`TizenConnectionPool::new`] gives the live factory; a caller that wants its
+/// own builds one with `DynConnectionPool::with_factory(Box::new(their_factory))`.
+pub type DynConnectionPool = TizenConnectionPool<BoxedChannelFactory>;
+
 impl Default for TizenConnectionPool<LiveChannelFactory> {
     fn default() -> Self {
         Self::new()
@@ -296,21 +315,34 @@ impl<F: TizenChannelFactory> TizenConnectionPool<F> {
     }
 }
 
-#[cfg(test)]
-mod tests {
+#[cfg(any(test, feature = "testkit"))]
+pub mod testkit {
+    //! Counting test doubles for [`TizenConnectionPool`].
+    //!
+    //! The pool behaviour that matters — one channel reused across sends, a dead
+    //! channel reopened exactly once — is only observable through a factory that
+    //! counts how many channels were opened. A television cannot be asked to drop
+    //! a socket on cue, so the counting factory lives here: this crate's own tests
+    //! use it, and any downstream crate that enables the `testkit` feature (the
+    //! facade's pool-routing test does) gets the same honest double.
+    //!
+    //! Nothing in this module touches a network.
+
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
-    // `super::*` brings tokio's async Mutex; the fake channel needs a plain one.
-    use std::sync::Mutex as StdMutex;
+    use std::sync::{Arc, Mutex as StdMutex};
 
-    use super::*;
-    use crate::error::TizenError;
+    use async_trait::async_trait;
 
-    /// Channel that spends from a shared budget of simulated failures.
+    use super::{TizenChannel, TizenChannelFactory};
+    use crate::client::TizenClient;
+    use crate::error::{Result, TizenError};
+    use crate::types::TizenRemoteKey;
+
+    /// A channel that spends from a shared budget of simulated failures.
     ///
     /// A shared budget is what makes the retry observable: the first channel
     /// fails, the reopened one succeeds.
-    struct FakeChannel {
+    pub struct FakeChannel {
         failures: Arc<StdMutex<usize>>,
         sent: Arc<AtomicUsize>,
     }
@@ -334,7 +366,8 @@ mod tests {
         }
     }
 
-    struct FakeFactory {
+    /// A factory that counts opens and hands out [`FakeChannel`]s.
+    pub struct FakeFactory {
         opens: Arc<AtomicUsize>,
         failures: Arc<StdMutex<usize>>,
         sent: Arc<AtomicUsize>,
@@ -352,17 +385,32 @@ mod tests {
     }
 
     /// `(opens, sent)` counters, both starting at zero.
-    fn counters() -> (Arc<AtomicUsize>, Arc<AtomicUsize>) {
+    #[must_use]
+    pub fn counters() -> (Arc<AtomicUsize>, Arc<AtomicUsize>) {
         (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)))
     }
 
-    fn factory(opens: Arc<AtomicUsize>, failures: usize, sent: Arc<AtomicUsize>) -> FakeFactory {
+    /// A factory that opens `failures` dead channels before serving.
+    #[must_use]
+    pub fn factory(
+        opens: Arc<AtomicUsize>,
+        failures: usize,
+        sent: Arc<AtomicUsize>,
+    ) -> FakeFactory {
         FakeFactory {
             opens,
             failures: Arc::new(StdMutex::new(failures)),
             sent,
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::Ordering;
+
+    use super::testkit::{counters, factory};
+    use super::*;
 
     #[tokio::test]
     async fn reuses_one_channel_for_repeated_sends() {

@@ -61,7 +61,17 @@ pub use payload::{
     TizenChannelEmitPayload, TizenChannelLaunchData, TizenDialLaunchResponse,
     TizenLegacyLaunchPayload, TizenRemoteCommand, TizenRemoteCommandParams,
 };
-pub use pool::{LiveChannelFactory, TizenChannel, TizenChannelFactory, TizenConnectionPool};
+pub use pool::{
+    BoxedChannelFactory, DynConnectionPool, LiveChannelFactory, TizenChannel, TizenChannelFactory,
+    TizenConnectionPool,
+};
+
+/// Counting test doubles for the connection pool.
+///
+/// Behind the `testkit` feature so a released build carries no test code: a
+/// downstream crate that wants to prove it reuses one channel enables it.
+#[cfg(feature = "testkit")]
+pub use pool::testkit;
 pub use protocol::{DialLauncher, WebSocketHandshake};
 pub use remote::{normalize_host, LaunchRoute, LaunchStrategy, PairingOutcome, TizenRemote};
 pub use token_store::{load_token, save_token, PairedTv, SamsungTokenStore};

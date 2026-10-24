@@ -29,5 +29,11 @@ url.workspace = true
 tokio.workspace = true
 wiremock.workspace = true
 
+[features]
+# Counting test doubles for the connection pool (`tv_rs_tizen::testkit`), so a
+# downstream crate can prove channel reuse without a television. Off by default:
+# a released build carries no test code.
+testkit = []
+
 [lints]
 workspace = true

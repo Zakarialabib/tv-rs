@@ -232,6 +232,25 @@ impl WebosSessionPool<LiveSessionFactory> {
     }
 }
 
+/// A session factory behind a box, so a pool can hold a factory it does not name.
+///
+/// This is what lets a facade store one pool type while still accepting a
+/// caller-supplied factory — a different transport, or a test double.
+pub type BoxedSessionFactory = Box<dyn WebosSessionFactory + Send + Sync>;
+
+#[async_trait]
+impl WebosSessionFactory for BoxedSessionFactory {
+    async fn open(&self, client: &WebosClient) -> Result<Box<dyn WebosSessionWire>> {
+        (**self).open(client).await
+    }
+}
+
+/// The pool with its factory erased: the type a facade can store.
+///
+/// [`WebosSessionPool::new`] gives the live factory; a caller that wants its own
+/// builds one with `DynSessionPool::with_factory(Box::new(their_factory))`.
+pub type DynSessionPool = WebosSessionPool<BoxedSessionFactory>;
+
 impl Default for WebosSessionPool<LiveSessionFactory> {
     fn default() -> Self {
         Self::new()
@@ -397,20 +416,35 @@ fn take_value(outcome: Result<OpOutcome>) -> Result<Value> {
     }
 }
 
-#[cfg(test)]
-mod tests {
+#[cfg(any(test, feature = "testkit"))]
+pub mod testkit {
+    //! Counting test doubles for [`WebosSessionPool`].
+    //!
+    //! The pool behaviour that matters — one registered session reused across
+    //! commands, a dead session reopened exactly once, an idle session dropped —
+    //! is only observable through a factory that counts opens. A television
+    //! cannot be asked to drop a socket on cue, so the counting factory lives
+    //! here: this crate's own tests use it, and any downstream crate that enables
+    //! the `testkit` feature gets the same honest double.
+    //!
+    //! Nothing in this module touches a network.
+
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex as StdMutex};
 
-    use super::*;
-    use crate::error::WebosError;
-    use serde_json::json;
+    use async_trait::async_trait;
+    use serde_json::Value;
 
-    /// Session that spends from a shared budget of simulated failures.
+    use super::{WebosSessionFactory, WebosSessionWire};
+    use crate::client::WebosClient;
+    use crate::error::{Result, WebosError};
+    use crate::types::SsapUri;
+
+    /// A session that spends from a shared budget of simulated failures.
     ///
     /// A shared budget is what makes the retry observable: the first session
     /// fails, the reopened one succeeds.
-    struct FakeSession {
+    pub struct FakeSession {
         failures: Arc<StdMutex<usize>>,
         served: Arc<AtomicUsize>,
         volume: u8,
@@ -466,7 +500,8 @@ mod tests {
         }
     }
 
-    struct FakeFactory {
+    /// A factory that counts opens and hands out [`FakeSession`]s.
+    pub struct FakeFactory {
         opens: Arc<AtomicUsize>,
         failures: Arc<StdMutex<usize>>,
         served: Arc<AtomicUsize>,
@@ -485,17 +520,34 @@ mod tests {
     }
 
     /// `(opens, served)` counters, both starting at zero.
-    fn counters() -> (Arc<AtomicUsize>, Arc<AtomicUsize>) {
+    #[must_use]
+    pub fn counters() -> (Arc<AtomicUsize>, Arc<AtomicUsize>) {
         (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)))
     }
 
-    fn factory(opens: Arc<AtomicUsize>, failures: usize, served: Arc<AtomicUsize>) -> FakeFactory {
+    /// A factory that opens `failures` dead sessions before serving.
+    #[must_use]
+    pub fn factory(
+        opens: Arc<AtomicUsize>,
+        failures: usize,
+        served: Arc<AtomicUsize>,
+    ) -> FakeFactory {
         FakeFactory {
             opens,
             failures: Arc::new(StdMutex::new(failures)),
             served,
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::Ordering;
+
+    use serde_json::json;
+
+    use super::testkit::{counters, factory};
+    use super::*;
 
     #[tokio::test]
     async fn reuses_one_session_for_repeated_commands() {

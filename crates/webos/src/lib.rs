@@ -61,7 +61,17 @@ pub use payload::{
     SsapRegisterResponsePayload, SsapRequest, SsapResponse,
 };
 pub use pointer::{extract_socket_path, PointerFrame, PointerSocket};
-pub use pool::{LiveSessionFactory, WebosSessionFactory, WebosSessionPool, WebosSessionWire};
+pub use pool::{
+    BoxedSessionFactory, DynSessionPool, LiveSessionFactory, WebosSessionFactory, WebosSessionPool,
+    WebosSessionWire,
+};
+
+/// Counting test doubles for the session pool.
+///
+/// Behind the `testkit` feature so a released build carries no test code: a
+/// downstream crate that wants to prove it reuses one session enables it.
+#[cfg(feature = "testkit")]
+pub use pool::testkit;
 pub use protocol::SsapController;
 pub use tv_rs_transport::TlsPolicy;
 pub use types::{

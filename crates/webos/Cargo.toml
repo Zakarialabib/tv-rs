@@ -23,5 +23,11 @@ url.workspace = true
 [dev-dependencies]
 tokio.workspace = true
 
+[features]
+# Counting test doubles for the session pool (`tv_rs_webos::testkit`), so a
+# downstream crate can prove session reuse without a television. Off by default:
+# a released build carries no test code.
+testkit = []
+
 [lints]
 workspace = true
