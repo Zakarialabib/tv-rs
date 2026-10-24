@@ -237,25 +237,21 @@ impl PowerControl for TvClient {
 
     async fn wake(&self) -> Result<(), TvError> {
         match self {
-            // ECP answers while the screen is dark: no packet, no MAC.
-            Self::Roku { client, .. } => client
-                .power_on()
-                .await
-                .map_err(|error| map::roku(&error, Capability::Wake)),
+            // ECP answers while the screen is dark, so this is normally enough. A
+            // set that is fully off answers nothing at all, and then the packet is
+            // the only path — but only when a caller supplied an address.
+            Self::Roku { client, .. } => match client.power_on().await {
+                Ok(()) => Ok(()),
+                Err(error) => match self.mac() {
+                    Some(mac) => wake_with_packet(mac).await,
+                    None => Err(map::roku(&error, Capability::Wake)),
+                },
+            },
             // Tizen and webOS drop their network stack when they sleep, so the
             // broadcast packet is the only path — and it needs the address the
             // caller supplied. Without one this is a refusal, not a guess.
             Self::Tizen { .. } | Self::Webos { .. } => match self.mac() {
-                Some(mac) => {
-                    let address = mac.parse::<MacAddress>().map_err(|_| {
-                        TvError::Protocol(ProtocolError::Malformed(format!(
-                            "`{mac}` is not a hardware address"
-                        )))
-                    })?;
-                    tv_rs_power::wake_on_lan(&address)
-                        .await
-                        .map_err(|error| map::power(&error))
-                }
+                Some(mac) => wake_with_packet(mac).await,
                 None => Err(TvError::Unsupported(Capability::Wake)),
             },
         }
@@ -529,6 +525,21 @@ fn tizen_key(key: Key) -> Result<TizenRemoteKey, TvError> {
 }
 
 /// Maps a core key onto the Roku ECP key vocabulary.
+/// Sends the magic packet a sleeping panel needs.
+///
+/// A packet is addressed to a hardware address, so a malformed one is a
+/// `Protocol::Malformed` rather than a silent no-op.
+async fn wake_with_packet(mac: &str) -> Result<(), TvError> {
+    let address = mac.parse::<MacAddress>().map_err(|_| {
+        TvError::Protocol(ProtocolError::Malformed(format!(
+            "`{mac}` is not a hardware address"
+        )))
+    })?;
+    tv_rs_power::wake_on_lan(&address)
+        .await
+        .map_err(|error| map::power(&error))
+}
+
 /// Maps a vendor-neutral input to the id webOS' `switchInput` expects.
 ///
 /// The ids are the ones `ssap://tv/getExternalInputList` reports: `HDMI_1`,

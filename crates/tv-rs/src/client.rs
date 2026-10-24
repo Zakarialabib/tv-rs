@@ -100,8 +100,29 @@ pub async fn discover() -> Result<Vec<DiscoveredTv>> {
 /// Returns the [`tv_rs_core::TvError`] taxonomy the other facade calls return
 /// (see [`map::discovery`] for how discovery errors are classified).
 pub async fn discover_with(scanner: &SsdpScanner) -> Result<Vec<DiscoveredTv>> {
+    discover_stream(scanner, |_| {}).await
+}
+
+/// Like [`discover_with`], calling `on_found` as each display answers.
+///
+/// The callback is the point: a television that replies in 40 ms surfaces then,
+/// rather than after the slowest set in the reply window has answered. That is
+/// what a "Find displays" screen wants — rows appear while the scan is still
+/// running. The full list still comes back as the return value, so a caller that
+/// only wants the result keeps using [`discover_with`].
+///
+/// # Errors
+///
+/// Same taxonomy as [`discover_with`].
+pub async fn discover_stream<F>(scanner: &SsdpScanner, mut on_found: F) -> Result<Vec<DiscoveredTv>>
+where
+    F: FnMut(DiscoveredTv),
+{
     let found = scanner
-        .discover_tvs()
+        .discover_tvs_with(|response, descriptor| {
+            let vendor = identify_vendor(response, Some(descriptor));
+            on_found(DiscoveredTv::new(vendor, response, Some(descriptor)));
+        })
         .await
         .map_err(|error| map::discovery(&error))?;
 

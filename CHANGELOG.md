@@ -8,6 +8,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`discover_stream(scanner, on_found)`**, re-exported from the crate root, and
+  `SsdpScanner::discover_tvs_with(on_found)`: discovery calls back per display the
+  moment its descriptor resolves instead of only when the reply window closes.
+  `discover_with` is now `discover_stream(scanner, |_| {})`, so there is one
+  implementation rather than two.
+
+### Changed
+
+- **`PowerControl::wake` for Roku falls back to a magic packet** when ECP does not
+  answer — a set that is fully off answers nothing — but only when the handle
+  carries an address. Without one it returns the ECP error instead of pretending.
+
+
+### Added
+
 - **Text entry, Roku half (companion gap G6)**: `RokuClient::type_text()` types a string
   one `keypress/Lit_<char>` request per character, and a new `TextInput` trait (with a
   default that refuses) plus `Capability::TextInput` expose it through the facade —
