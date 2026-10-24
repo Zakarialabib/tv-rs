@@ -36,9 +36,11 @@ pub mod payload;
 pub mod protocol;
 pub mod types;
 
-pub use client::{keypress_path, launch_path, parse_apps, parse_device_info, RokuClient};
+pub use client::{
+    keypress_path, launch_path, parse_active_app, parse_apps, parse_device_info, RokuClient,
+};
 pub use error::{Result, RokuError};
-pub use payload::{RokuApp, RokuDeviceInfo};
+pub use payload::{RokuActiveApp, RokuApp, RokuDeviceInfo};
 pub use protocol::EcpRestClient;
 pub use types::{
     RokuKey, RokuPowerMode, ECP_APPS_PATH, ECP_DEVICE_INFO_PATH, ECP_KEYPRESS_PATH_PREFIX,

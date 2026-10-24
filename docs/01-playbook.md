@@ -146,8 +146,15 @@ on the local subnet. The most cooperative of the network protocols:
 | -------------------- | ------ | --------------------------------------------------------------------- |
 | `/query/device-info` | GET    | XML: model, serial, firmware, power mode, MAC                         |
 | `/query/apps`        | GET    | installed apps with their numeric ids                                 |
+| `/query/active-app`  | GET    | XML: the app in front — `Roku` with no `id` on the home screen        |
 | `/keypress/{Key}`    | POST   | emulates a remote button (`Home`, `Up`, `Select`, `Back`, `PowerOff`) |
 | `/launch/{appId}`    | POST   | starts an app                                                         |
+
+`/query/active-app` answers `<active-app><app id="12" type="appl" version="4.1.218">Netflix</app></active-app>`:
+the `app` element is the bare text `Roku` with **no** `id` when the user is on the home
+screen (nothing is in front — not an application called Roku), and a `<screensaver>`
+sibling appears while a screensaver covers the app. Source: Roku's External Control
+Protocol documentation (`developer.roku.com`).
 
 Traps:
 

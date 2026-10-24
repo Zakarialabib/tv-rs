@@ -60,6 +60,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   permission belongs to the platform, so retrying burns battery and waking wakes
   nothing.
 
+- **Roku foreground reads (`tv-rs-roku` + the facade — companion gap G10b, Roku half)**:
+  `RokuClient::query_active_app()` fetches `GET /query/active-app` and
+  `parse_active_app()` turns it into `RokuActiveApp` — the active app's id and name,
+  plus any screensaver covering it. The facade's `foreground()` answers on Roku now and
+  advertises `Capability::Foreground`, which is what an "on screen" card reads. The
+  home screen reports `Roku` with no `id`, so that answers `None` rather than inventing
+  an application; the three documented shapes (app, home screen, screensaver) each have
+  a test. Tizen's half stays open: no foreground command for the consumer remote
+  channel is verified in this workspace, and the candidate endpoint needs provenance
+  before it becomes code.
+
 - **webOS key input (`tv-rs-webos` + the facade — companion gap G10a)**: a press is
   now a `type:button` frame on the pointer socket `getPointerInputSocket` hands
   back. `PointerWire` / `PointerFactory` keep that connection testable without a

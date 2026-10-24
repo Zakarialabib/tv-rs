@@ -6,10 +6,10 @@
 use std::time::Duration;
 
 use crate::error::{Result, RokuError};
-use crate::payload::{RokuApp, RokuDeviceInfo};
+use crate::payload::{RokuActiveApp, RokuApp, RokuDeviceInfo};
 use crate::types::{
-    RokuKey, ECP_APPS_PATH, ECP_DEVICE_INFO_PATH, ECP_KEYPRESS_PATH_PREFIX, ECP_LAUNCH_PATH_PREFIX,
-    ROKU_ECP_PORT,
+    RokuKey, ECP_ACTIVE_APP_PATH, ECP_APPS_PATH, ECP_DEVICE_INFO_PATH, ECP_KEYPRESS_PATH_PREFIX,
+    ECP_LAUNCH_PATH_PREFIX, ROKU_ECP_PORT,
 };
 
 /// Request timeout applied to every ECP command.
@@ -87,6 +87,39 @@ pub fn parse_apps(xml: &str) -> Result<Vec<RokuApp>> {
         })
         .collect();
     Ok(apps)
+}
+
+/// Parses an `<active-app>` XML document into [`RokuActiveApp`].
+///
+/// Malformed XML, or a document whose root is not `<active-app>`, yields
+/// [`RokuError::Xml`]. A missing `app` element is treated as "nothing in front"
+/// rather than an error: the shape is the device's, and refusing to answer would be
+/// worse than an empty answer.
+pub fn parse_active_app(xml: &str) -> Result<RokuActiveApp> {
+    let document =
+        roxmltree::Document::parse(xml).map_err(|err| RokuError::Xml(err.to_string()))?;
+    let root = document.root_element();
+    if root.tag_name().name() != "active-app" {
+        return Err(RokuError::Xml(format!(
+            "expected <active-app> root element, found <{}>",
+            root.tag_name().name()
+        )));
+    }
+
+    let app = root
+        .children()
+        .find(|child| child.is_element() && child.tag_name().name() == "app");
+
+    Ok(RokuActiveApp {
+        app_id: app
+            .and_then(|node| node.attribute("id"))
+            .map(str::to_string),
+        app_name: app
+            .and_then(|node| node.text())
+            .map(|text| text.trim().to_string())
+            .unwrap_or_default(),
+        screensaver: element_text(root, "screensaver"),
+    })
 }
 
 /// Builds the ECP keypress path for `key`, e.g. `/keypress/PowerOff`.
@@ -167,6 +200,26 @@ impl RokuClient {
             .text()
             .await?;
         parse_apps(&body)
+    }
+
+    /// Fetches and parses the application currently in front from
+    /// `GET /query/active-app`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RokuError::Http`] when the device does not answer and
+    /// [`RokuError::Xml`] when the reply is not an `<active-app>` document.
+    pub async fn query_active_app(&self) -> Result<RokuActiveApp> {
+        let url = self.endpoint(ECP_ACTIVE_APP_PATH);
+        let body = self
+            .http
+            .get(url)
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await?;
+        parse_active_app(&body)
     }
 
     /// Sends a single remote-key press via `POST /keypress/{key}` with an empty body.
@@ -435,5 +488,41 @@ mod tests {
             }
             other => panic!("expected NotPermitted, got {other:?}"),
         }
+    }
+    /// The documented shape when an application is in front.
+    #[test]
+    fn an_active_app_carries_its_id() {
+        let xml =
+            r#"<active-app><app id="12" type="appl" version="4.1.218">Netflix</app></active-app>"#;
+        let active = parse_active_app(xml).expect("valid");
+        assert_eq!(active.app_id.as_deref(), Some("12"));
+        assert_eq!(active.app_name, "Netflix");
+        assert_eq!(active.screensaver, None);
+    }
+
+    /// The home screen is the bare text `Roku` with no id — nothing is in front,
+    /// which is why the id is the optional half of the answer.
+    #[test]
+    fn the_home_screen_is_not_an_application() {
+        let active = parse_active_app("<active-app><app>Roku</app></active-app>").expect("valid");
+        assert_eq!(active.app_id, None);
+        assert_eq!(active.app_name, "Roku");
+    }
+
+    /// A screensaver arrives beside the app it covers, not instead of it.
+    #[test]
+    fn a_screensaver_is_reported_next_to_the_app() {
+        let xml =
+            "<active-app><app>Roku</app><screensaver>Default screensaver</screensaver></active-app>";
+        let active = parse_active_app(xml).expect("valid");
+        assert_eq!(active.app_id, None);
+        assert_eq!(active.screensaver.as_deref(), Some("Default screensaver"));
+    }
+
+    /// A different document is a protocol error, not an empty answer.
+    #[test]
+    fn a_non_active_app_document_is_rejected() {
+        assert!(parse_active_app("<apps></apps>").is_err());
+        assert!(parse_active_app("not xml at all").is_err());
     }
 }

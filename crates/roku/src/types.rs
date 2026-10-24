@@ -11,6 +11,14 @@ pub const ECP_DEVICE_INFO_PATH: &str = "/query/device-info";
 /// Path of the installed applications query endpoint (`GET`).
 pub const ECP_APPS_PATH: &str = "/query/apps";
 
+/// Path of the active-application query endpoint (`GET`).
+///
+/// Per Roku's External Control Protocol documentation the reply is
+/// `<active-app><app id="12" type="appl" version="4.1.218">Netflix</app></active-app>`;
+/// the `app` element carries no `id` when the user is on the home screen, and a
+/// `<screensaver>` sibling appears while a screensaver is covering the app.
+pub const ECP_ACTIVE_APP_PATH: &str = "/query/active-app";
+
 /// Path prefix for the keypress endpoint (`POST`), followed by the key name.
 pub const ECP_KEYPRESS_PATH_PREFIX: &str = "/keypress/";
 

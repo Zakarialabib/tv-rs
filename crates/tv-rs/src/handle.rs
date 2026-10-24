@@ -13,7 +13,7 @@
 //! |---|---|---|---|---|---|---|---|---|---|---|
 //! | Tizen | ✓ | MAC | ✓ | ✓ | — | — | — | — | — | — |
 //! | webOS | ✓ | MAC | ✓ | ✓ | ✓ | — | ✓ | — | — | — |
-//! | Roku | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — | — |
+//! | Roku | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — |
 //!
 //! `wake` reads `MAC` where the vendor drops its network stack when it sleeps:
 //! the only wake path there is a broadcast magic packet, which needs an address
@@ -66,6 +66,9 @@ impl TvClient {
                 // ECP answers power-on while the screen is dark, so a Roku needs
                 // neither a MAC nor a magic packet to be woken.
                 set.insert(Capability::Wake);
+                // `/query/active-app` says what is in front, which is the whole
+                // input of an "on screen" card.
+                set.insert(Capability::Foreground);
             }
         }
         // The other two drop their network stack when they sleep, so a magic
@@ -288,7 +291,16 @@ impl AppLaunch for TvClient {
                     .map_err(|error| map::webos(&error, Capability::Foreground))?;
                 Ok(app_id.map(AppRef::new))
             }
-            _ => Err(TvError::Unsupported(Capability::Foreground)),
+            // The home screen reports `Roku` with no id, and that is not an
+            // application: `None` is the honest answer for "nothing is in front".
+            Self::Roku { client, .. } => {
+                let active = client
+                    .query_active_app()
+                    .await
+                    .map_err(|error| map::roku(&error, Capability::Foreground))?;
+                Ok(active.app_id.map(AppRef::new))
+            }
+            Self::Tizen { .. } => Err(TvError::Unsupported(Capability::Foreground)),
         }
     }
 }
@@ -584,6 +596,7 @@ mod tests {
                     Capability::Wake,
                     Capability::Key,
                     Capability::AppLaunch,
+                    Capability::Foreground,
                 ],
             ),
         ] {
@@ -674,6 +687,20 @@ mod tests {
             mac: None,
         };
         let error = PowerControl::wake(&client)
+            .await
+            .expect_err("nothing listens");
+        assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
+    }
+
+    #[tokio::test]
+    async fn roku_foreground_asks_the_device() {
+        // Port 1 refuses instantly: what matters is that the call reaches ECP
+        // instead of answering `Unsupported`.
+        let client = TvClient::Roku {
+            client: RokuClient::with_base_url("http://127.0.0.1:1"),
+            mac: None,
+        };
+        let error = AppLaunch::foreground(&client)
             .await
             .expect_err("nothing listens");
         assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");

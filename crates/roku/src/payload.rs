@@ -79,6 +79,22 @@ impl RokuDeviceInfo {
     }
 }
 
+/// A `GET /query/active-app` response.
+///
+/// The `app` element is the bare text `Roku` with **no** `id` when the user is on the
+/// home screen: that is "nothing is in front", not an application called Roku, which
+/// is why the id is the optional part and the name is not.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RokuActiveApp {
+    /// The active application's id, when an application (not the home screen) is in
+    /// front. This is what a launcher would pass to `/launch/`.
+    pub app_id: Option<String>,
+    /// The active application's name as the device reports it.
+    pub app_name: String,
+    /// The screensaver covering the application, when one is active.
+    pub screensaver: Option<String>,
+}
+
 /// A single entry from a `GET /query/apps` response.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RokuApp {

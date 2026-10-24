@@ -109,8 +109,9 @@ type, exhaustive remedy maps, the webOS registration split), **A1** (the facade 
 the connection pools, with `close_all()` and a `testkit` proof that twenty presses
 open one channel), **A3** (the core `serde` feature and its wire contract), **A4**
 (wake on all three vendors, `with_mac`, `learn_mac` on Roku, and `Capability::Wake`
-advertised only where it can be delivered) and **A5** (a platform-refused call is
-`Blocked`/`RequestPermission`, not an unreachable television).
+advertised only where it can be delivered), **A5** (a platform-refused call is
+`Blocked`/`RequestPermission`, not an unreachable television) and **B2's Roku half**
+(`/query/active-app`).
 
 ### 3.2 A4 · G4 (the remainder) — MAC learning on Samsung and webOS
 
@@ -141,10 +142,25 @@ advertises `Capability::Key` for webOS; registration requests `CONTROL_INPUT_TEX
 `CONTROL_MOUSE_AND_KEYBOARD`, without which the TV refuses the path. Still unverified against
 a real panel — the fake TV cannot answer SSAP, so the wire form is pinned by tests only.
 
-### 3.4 B2 · G10b — foreground on Roku and Tizen
+### 3.4 B2 · G10b (the remainder) — foreground on Tizen
 
-Roku `/query/active-app`, Tizen's foreground app: the "on screen" card and the
-fleet's app check need them.
+Roku landed: `GET /query/active-app` (verified against Roku's External Control
+Protocol documentation, recorded in [`01-playbook.md`](01-playbook.md) §5) parses to
+`RokuActiveApp`, the facade's `foreground()` returns the active app's id, and
+`Capability::Foreground` is advertised. The home screen reports `Roku` with no `id`,
+so it answers `None` — "nothing is in front" — rather than inventing an application.
+
+**Tizen is open, and not because the code is hard:** this workspace has no verified
+foreground-app command for the consumer remote channel. The playbook records
+`ssap://com.webos.applicationManager/getForegroundAppInfo` for webOS and nothing
+equivalent for Samsung, and a capability without a verified vendor command does not
+exist here. The candidate (`GET http://<ip>:8001/api/v2/applications`, reading the
+entry with `running: true`) needs the same provenance treatment the Roku endpoint just
+got — two independent implementations, recorded in the playbook — before it becomes
+code.
+
+**Exit:** the endpoint traced and recorded, `TizenClient` returning the foreground app
+id, `foreground()` answering on Tizen, and a test pinning the parsed shape.
 
 ### 3.5 B3 · G5 — installed apps on Tizen and webOS
 
