@@ -158,8 +158,13 @@ answered and no display was among the replies.
 - **`rustls-platform-verifier` as a `tv-rs-transport` feature.** The workspace is
   rustls-only by policy (Simple-Signage requirement), and platform-native certificate
   verification is what an Android or iOS build needs instead of bundling a root set.
-- **`cfg`-gate `tv-rs-local`.** Its desktop EDID probe compiles into every build of
-  that crate today, including mobile ones where it cannot run.
+
+**Already satisfied — the plan's premise was stale.** `tv-rs-local` was said to build a
+desktop EDID probe into mobile builds; it does not. The probe is `cfg`-gated per
+platform (`lib.rs` keeps a stub for anything that is neither Windows nor Linux) and its
+Windows dependencies are target-scoped (`[target.'cfg(windows)'.dependencies]`), so
+cargo neither builds nor resolves them for a mobile target. Verified by
+`cargo check -p tv-rs-local --target aarch64-linux-android`, which exits 0.
 
 ### 2.5 D — the rest, in the companion's order
 
