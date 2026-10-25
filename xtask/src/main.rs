@@ -163,12 +163,18 @@ fn publish(args: &[String]) -> Result<(), String> {
                     .to_string(),
             );
         }
-        let token = options
-            .token
-            .clone()
-            .ok_or_else(|| "no crates.io token: pass --token or set CRATES_IO_TOKEN".to_string())?;
-        publish_args.push("--token".to_string());
-        publish_args.push(token);
+        // The token is OPTIONAL. `cargo publish` already reads cargo's own
+        // credential store — `cargo login` writes `~/.cargo/credentials.toml`, and
+        // `CARGO_REGISTRY_TOKEN` is the env form — so demanding one here duplicates
+        // a mechanism cargo owns, and it does so in the worst place: `--token
+        // <value>` puts the secret in this process's argv, where any process that
+        // can list it reads it too. Pass it only when the caller explicitly asked
+        // for it; otherwise let cargo find its own credentials and report its own
+        // error, which names the real problem ("no token found for registry").
+        if let Some(token) = options.token.clone() {
+            publish_args.push("--token".to_string());
+            publish_args.push(token);
+        }
 
         if !options.assume_yes
             && !confirm(&format!("Publish {} crates to crates.io?", ORDER.len()))?
