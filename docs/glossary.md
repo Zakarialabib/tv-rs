@@ -249,3 +249,23 @@ missing is skipped, never faked. Where: `crates/agent/src/remedy.rs`.
 **Conformance suite** — the shared test every `DeviceHandle` must pass (capability and
 accessor agreement, unsupported routing, identity stability), behind the
 `conformance` feature. Where: `crates/core/src/conformance.rs`.
+
+**App status** — what a Samsung Tizen set reports about one installed application:
+`GET /api/v2/applications/{app_id}` (no pairing, no token), answering `id`, `name`,
+`running` and `visible`. `running` is a **superset** of foreground — background system
+apps report `running: true` while not on screen — so `visible` is the marker a caller
+must read, and a panel that omits `visible` answers `None`, which is not `false`.
+Where: `crates/tizen/src/payload.rs` (`TizenAppStatus`, `parse_app_status`).
+
+**RenderingControl** — the UPnP service that carries volume and mute, separate from
+AVTransport (casting/playback) and with its own control URL, so a renderer can be
+castable without exposing volume. Exposed as free functions (`get_volume`, `set_volume`,
+`get_mute`, `set_mute`) and behind the `RenderingControl` trait
+(`SoapRenderingControl`); `Renderer.rendering_control_url` is `None` for a renderer that
+has none. Where: `crates/dlna/src/soap.rs`.
+
+**ServiceNotFound** — the DLNA error for a device that exposes no service of the type
+asked for. It carries the service URN, so "no volume control" and "cannot be cast to"
+stay distinguishable rather than collapsing into one failure. Replaced
+`AvTransportNotFound` (which could only name one service). Where:
+`crates/dlna/src/error.rs`.
