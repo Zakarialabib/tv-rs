@@ -337,6 +337,28 @@ impl AppLaunch for TvClient {
         }
     }
 
+    /// Tizen launches through DIAL when a payload has to travel with the app id.
+    ///
+    /// DIAL is the only surface here that carries a body, so a bare launch keeps
+    /// the websocket command every other vendor uses — this only takes over when
+    /// there is actually something to hand over. `open_url` stays untouched: a set
+    /// with no browser has no browser.
+    async fn launch_with_payload(
+        &self,
+        app: AppRef,
+        payload: Option<&str>,
+        cmd: tv_rs_core::CommandId,
+    ) -> Result<(), TvError> {
+        match (self, payload) {
+            (Self::Tizen { client, .. }, Some(payload)) => client
+                .dial_launch(&app.id, Some(payload))
+                .await
+                .map_err(|error| map::tizen(&error, Capability::AppLaunch)),
+            (_, Some(_)) => Err(TvError::Unsupported(Capability::AppLaunch)),
+            (_, None) => self.launch(app, cmd).await,
+        }
+    }
+
     /// Lists installed applications. webOS answers `listApps` and Roku answers
     /// `/query/apps`; Tizen exposes neither over its REST API, so it keeps the
     /// trait default rather than a fabricated catalogue.
@@ -679,6 +701,41 @@ mod tests {
             client: RokuClient::new("10.0.0.4"),
             mac: None,
         }
+    }
+
+    /// A payload belongs to DIAL, and only Tizen has DIAL. The others must refuse
+    /// rather than launch the app and silently lose the reason it was launched.
+    #[tokio::test]
+    async fn a_payload_is_refused_where_no_platform_can_carry_it() {
+        for client in [webos(), roku()] {
+            let error = AppLaunch::launch_with_payload(
+                &client,
+                AppRef::new("com.example.app"),
+                Some("https://example.test/deep"),
+                CommandId::new(),
+            )
+            .await
+            .expect_err("no payload surface");
+            assert!(
+                matches!(error, TvError::Unsupported(Capability::AppLaunch)),
+                "{error:?}"
+            );
+        }
+    }
+
+    /// Tizen must reach DIAL rather than answer `Unsupported`: an unreachable
+    /// address gives a transport error, which is the proof the request went out.
+    #[tokio::test]
+    async fn tizen_sends_a_payload_over_dial() {
+        let error = AppLaunch::launch_with_payload(
+            &tizen(),
+            AppRef::new("1110110"),
+            Some("https://example.test/deep"),
+            CommandId::new(),
+        )
+        .await
+        .expect_err("the test address is not there");
+        assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
     }
 
     #[test]

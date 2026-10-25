@@ -413,6 +413,24 @@ pub trait AppLaunch: Send + Sync {
     /// Reports the foreground application, when the platform can say.
     async fn foreground(&self) -> Result<Option<AppRef>, TvError>;
 
+    /// Launches an application, handing `payload` over when the platform can.
+    ///
+    /// DIAL's `POST /ws/apps/{app_id}` carries an optional body — the only way a
+    /// deep link reaches a Tizen player app. With `None` this is exactly
+    /// [`launch`](Self::launch). With `Some` and no payload surface it refuses:
+    /// dropping the payload silently would start the app and lose the reason.
+    async fn launch_with_payload(
+        &self,
+        app: AppRef,
+        payload: Option<&str>,
+        cmd: CommandId,
+    ) -> Result<(), TvError> {
+        match payload {
+            None => self.launch(app, cmd).await,
+            Some(_) => Err(TvError::Unsupported(Capability::AppLaunch)),
+        }
+    }
+
     /// Lists installed applications, when the platform can say.
     ///
     /// An empty `Vec` is a real answer ("this TV exposes none"); `Unsupported`

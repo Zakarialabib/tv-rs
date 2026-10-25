@@ -552,6 +552,37 @@ impl TizenClient {
         Ok(response.text().await?)
     }
 
+    /// Launches an application through DIAL, with an optional body.
+    ///
+    /// `POST http://host:8080/ws/apps/{app_id}`. This is DIAL's *launch*, not
+    /// "load this URL": the body is an opaque payload a player app may read as a
+    /// deep link, and most ignore it. Kept separate from `open_url` on purpose — a
+    /// set with no browser has no browser, and making `open_url` mean "launch an
+    /// app" on one vendor is the quiet divergence the capability table exists to
+    /// prevent.
+    ///
+    /// # Errors
+    ///
+    /// [`TizenError::Protocol`] when DIAL answers a non-success status, so a
+    /// refused launch is not reported as one that happened.
+    pub async fn dial_launch(&self, app_id: &str, payload: Option<&str>) -> Result<()> {
+        let url = build_dial_launch_url(&self.host, self.dial_port, app_id)?;
+        let mut request = self.http.post(url);
+        if let Some(payload) = payload {
+            request = request
+                .header(reqwest::header::CONTENT_TYPE, "text/plain; charset=utf-8")
+                .body(payload.to_owned());
+        }
+        let response = request.send().await?;
+        if !response.status().is_success() {
+            return Err(TizenError::Protocol(format!(
+                "DIAL launch answered HTTP {}",
+                response.status()
+            )));
+        }
+        Ok(())
+    }
+
     /// Runs the pairing flow without a token so the TV displays its allow prompt.
     ///
     /// Waits up to 30 seconds for a human to accept the prompt, then closes the
