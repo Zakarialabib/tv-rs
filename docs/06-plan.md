@@ -149,13 +149,23 @@ gone from the list — G3 (streaming discovery), G8 (release from quarantine) an
 behind the facade) all landed, and their rationale now lives in the CHANGELOG and the
 glossary.
 
+**G15 was already done when the audit read it, and the audit was wrong.** `tv_rs::probe()`
+exists and answers exactly the item's question — Roku first (authoritative, carries the
+MAC, model and serial), then Tizen through its DIAL description, then LG as a port
+inference, with the reasoning for each step written into its doc comment. The audit's
+"nothing probes a single address today" was false, and it was false in the same way G16's
+was: a grep that found no *new* function and concluded no *function*. Recorded because the
+next reader will otherwise repeat the mistake — and because it nearly cost a duplicate:
+the first attempt at this item added a unicast-SSDP probe to `tv-rs-discovery`, which is a
+different mechanism for a question already answered, and was reverted rather than shipped
+unused. A unicast SSDP probe *would* add something the facade's vendor-by-vendor probe
+cannot (it could name a device whose HTTP APIs are unreachable), but nothing needs that
+today, so it is a note rather than code.
+
 - **G10d** DLNA `RenderingControl` (volume/mute for renderers). **Open, with
   groundwork:** `dlna/src/soap.rs` already *parses* the `RenderingControl:1` service
   and its `controlURL` out of the device description, but no volume or mute action is
   implemented — the discovery half is done, the SOAP actions are not.
-- **G15** `probe(ip) -> Option<DiscoveredTv>` — "what is at this IP?" for guest Wi-Fi
-  and Android pickers that hand back an address. **Open, premise holds:** nothing
-  probes a single address today.
 - **G16** Tizen DIAL URL launching through `TvClient::open_url`. **The premise conflates
   two different operations, and that is the decision to make before writing anything.**
   - The audit's pointers were wrong in detail: `crates/tizen/src/apps.rs` only *resolves
