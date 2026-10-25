@@ -36,7 +36,8 @@ use tv_rs_transport::WsStream;
 
 use crate::client::{
     build_channel_launch_payload, build_legacy_launch_payload, build_raw_remote_command_payload,
-    build_remote_command_payload, open_channel, TizenClient, TizenSession,
+    build_remote_command_payload, build_text_command_payload, open_channel, TizenClient,
+    TizenSession,
 };
 use crate::error::Result;
 use crate::types::{TizenLaunchAction, TizenRemoteKey};
@@ -221,6 +222,20 @@ impl<F: TizenChannelFactory> TizenConnectionPool<F> {
     /// Sends any valid Samsung `KEY_*` code through the pooled channel.
     pub async fn send_key_code(&self, client: &TizenClient, code: &str) -> Result<()> {
         let payload = serde_json::to_string(&build_raw_remote_command_payload(code)?)?;
+        self.send_raw(client, &payload).await
+    }
+
+    /// Types `text` into the television's focused field.
+    ///
+    /// Base64 in `Cmd`, unlike webOS (plain UTF-8) and Roku (one key press per
+    /// character) — which is why this is three implementations rather than one shared
+    /// method. It travels on the remote channel, so it needs the pairing token like
+    /// every other command sent there.
+    ///
+    /// Like the other two, it needs a **focused text field**: with none focused the
+    /// set types nothing and no frame says so.
+    pub async fn send_text(&self, client: &TizenClient, text: &str) -> Result<()> {
+        let payload = serde_json::to_string(&build_text_command_payload(text)?)?;
         self.send_raw(client, &payload).await
     }
 

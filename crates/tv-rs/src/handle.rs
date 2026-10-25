@@ -53,6 +53,8 @@ impl TvClient {
             Self::Tizen { .. } => {
                 set.insert(Capability::Key);
                 set.insert(Capability::AppLaunch);
+                // `ms.remote.control` with `SendInputString` types a string.
+                set.insert(Capability::TextInput);
             }
             Self::Webos { .. } => {
                 set.insert(Capability::AppLaunch);
@@ -418,10 +420,12 @@ impl TextInput for TvClient {
                 .insert_text(client, text, false)
                 .await
                 .map_err(|error| map::webos(&error, Capability::TextInput)),
-            // Tizen's `SendInputString` is traced and recorded but not yet built; the
-            // refusal names the capability, so the control greys out rather than
-            // silently typing nothing.
-            Self::Tizen { .. } => Err(TvError::Unsupported(Capability::TextInput)),
+            // Tizen base64s the string into `Cmd`; Roku sends a key per character and
+            // webOS takes plain UTF-8. Three frames, one method.
+            Self::Tizen { client, pool, .. } => pool
+                .send_text(client, text)
+                .await
+                .map_err(|error| map::tizen(&error, Capability::TextInput)),
         }
     }
 }
@@ -747,6 +751,7 @@ mod tests {
                     Capability::PowerState,
                     Capability::Key,
                     Capability::AppLaunch,
+                    Capability::TextInput,
                 ],
             ),
             (
@@ -933,15 +938,14 @@ mod tests {
         assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
     }
 
-    /// Advertised where it is delivered: Roku types with `Lit_<char>` and webOS
-    /// through its IME service, both traced to sources. Tizen's `SendInputString` is
-    /// traced but not yet built, so it does not advertise — a capability without an
-    /// implementation behind it is exactly what this asserts against.
+    /// Advertised where it is delivered — and all three now deliver it, each through a
+    /// different frame: Roku presses a `Lit_<char>` key per character, webOS calls its
+    /// IME with plain UTF-8, Tizen base64s the string into a `SendInputString` command.
     #[test]
-    fn text_input_is_advertised_only_where_it_is_delivered() {
+    fn text_input_is_advertised_where_it_is_delivered() {
         assert!(roku().capabilities().contains(Capability::TextInput));
         assert!(webos().capabilities().contains(Capability::TextInput));
-        assert!(!tizen().capabilities().contains(Capability::TextInput));
+        assert!(tizen().capabilities().contains(Capability::TextInput));
     }
 
     /// The arm must be reached, not the trait default: port 1 refuses instantly, so
@@ -958,18 +962,14 @@ mod tests {
         assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
     }
 
-    /// Tizen refuses by naming `TextInput`, never `Key`: a device that can press
-    /// buttons may still have no way to take a string, and its own text-entry frame is
-    /// traced but not yet built.
+    /// Tizen's call must reach the channel rather than answer `Unsupported`: the
+    /// address is unreachable, so a transport error is the proof it was sent.
     #[tokio::test]
-    async fn the_untraced_vendor_refuses_to_type() {
+    async fn tizen_type_text_reaches_the_device() {
         let error = TextInput::type_text(&tizen(), "hello", CommandId::new())
             .await
-            .expect_err("not built yet");
-        assert!(
-            matches!(error, TvError::Unsupported(Capability::TextInput)),
-            "{error:?}"
-        );
+            .expect_err("10.0.0.1 is not there");
+        assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
     }
 
     /// webOS types through its IME service, so the call must reach the device rather

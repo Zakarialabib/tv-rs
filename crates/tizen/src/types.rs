@@ -38,6 +38,12 @@ pub const TIZEN_CMD_CLICK: &str = "Click";
 /// Value of the `TypeOfRemote` field used for remote key clicks.
 pub const TIZEN_REMOTE_TYPE: &str = "SendRemoteKey";
 
+/// `TypeOfRemote` for the frame that types a string, rather than pressing a key.
+pub const TIZEN_REMOTE_TYPE_TEXT: &str = "SendInputString";
+
+/// `DataOfCmd` in the text frame: it tells the set that `Cmd` is base64.
+pub const TIZEN_CMD_BASE64: &str = "base64";
+
 /// Launch mode for the remote channel's `ed.apps.launch` event.
 ///
 /// Tizen exposes two modes: [`NativeLaunch`](Self::NativeLaunch) starts a Tizen

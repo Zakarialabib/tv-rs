@@ -21,12 +21,14 @@ use crate::payload::{
     parse_device_info, DeviceInfo, TizenChannelConnectData, TizenChannelConnectParams,
     TizenChannelConnectPayload, TizenChannelConnectResponse, TizenChannelEmitParams,
     TizenChannelEmitPayload, TizenChannelLaunchData, TizenDialLaunchResponse,
-    TizenLegacyLaunchPayload, TizenRemoteCommand, TizenRemoteCommandParams,
+    TizenLegacyLaunchPayload, TizenRemoteCommand, TizenRemoteCommandParams, TizenTextCommand,
+    TizenTextCommandParams,
 };
 use crate::types::{
-    validate_remote_key_code, TizenLaunchAction, TizenRemoteKey, TIZEN_APP_ID, TIZEN_CMD_CLICK,
-    TIZEN_DEVICE_INFO_PATH, TIZEN_DIAL_DESC_PATH, TIZEN_DIAL_LAUNCH_PREFIX, TIZEN_DIAL_PORT,
-    TIZEN_REMOTE_TYPE, TIZEN_REMOTE_WS_PATH, TIZEN_WSS_PORT, TIZEN_WS_PORT,
+    validate_remote_key_code, TizenLaunchAction, TizenRemoteKey, TIZEN_APP_ID, TIZEN_CMD_BASE64,
+    TIZEN_CMD_CLICK, TIZEN_DEVICE_INFO_PATH, TIZEN_DIAL_DESC_PATH, TIZEN_DIAL_LAUNCH_PREFIX,
+    TIZEN_DIAL_PORT, TIZEN_REMOTE_TYPE, TIZEN_REMOTE_TYPE_TEXT, TIZEN_REMOTE_WS_PATH,
+    TIZEN_WSS_PORT, TIZEN_WS_PORT,
 };
 
 /// Default number of inbound frames inspected while awaiting a handshake reply or
@@ -134,6 +136,36 @@ pub fn build_raw_remote_command_payload(code: &str) -> Result<TizenRemoteCommand
             data_of_cmd: code.to_string(),
             option: "false".to_string(),
             type_of_remote: TIZEN_REMOTE_TYPE.to_string(),
+        },
+    })
+}
+
+/// Builds the `ms.remote.control` payload that types `text`.
+///
+/// The text is base64-encoded into `Cmd` and `DataOfCmd` says so. Roku takes the
+/// characters directly and webOS takes plain UTF-8; this vendor is the one that
+/// encodes, which is why the three are separate implementations rather than one
+/// shared `type_text`.
+///
+/// Empty text is refused rather than sent: a frame that types nothing is
+/// indistinguishable from one that failed, and the caller asked for neither.
+pub fn build_text_command_payload(text: &str) -> Result<TizenTextCommand> {
+    if text.is_empty() {
+        return Err(TizenError::Protocol(
+            "refusing to send an empty text frame: it types nothing, and a caller \
+             cannot tell that from a failure"
+                .to_owned(),
+        ));
+    }
+
+    use base64::Engine as _;
+
+    Ok(TizenTextCommand {
+        method: "ms.remote.control".to_string(),
+        params: TizenTextCommandParams {
+            cmd: base64::engine::general_purpose::STANDARD.encode(text.as_bytes()),
+            data_of_cmd: TIZEN_CMD_BASE64.to_string(),
+            type_of_remote: TIZEN_REMOTE_TYPE_TEXT.to_string(),
         },
     })
 }
@@ -973,5 +1005,45 @@ mod tests {
         let rendered = format!("{client:?}");
         assert!(!rendered.contains("s3cr3t"), "{rendered}");
         assert!(rendered.contains("<redacted>"), "{rendered}");
+    }
+    /// The text frame's shape is what the playbook records: base64 in `Cmd`, the
+    /// literal `base64` in `DataOfCmd`, `SendInputString` in `TypeOfRemote`, and — the
+    /// detail that makes this its own type — **no `Option` field**.
+    #[test]
+    fn the_text_frame_is_the_documented_shape() {
+        let payload = build_text_command_payload("hello").expect("non-empty");
+        let json = serde_json::to_value(&payload).expect("serializes");
+
+        assert_eq!(json["method"], "ms.remote.control");
+        assert_eq!(
+            json["params"]["Cmd"], "aGVsbG8=",
+            "base64 of the UTF-8 bytes"
+        );
+        assert_eq!(json["params"]["DataOfCmd"], "base64");
+        assert_eq!(json["params"]["TypeOfRemote"], "SendInputString");
+        assert!(
+            json["params"].get("Option").is_none(),
+            "the text frame carries no Option, unlike the key frame: {json}"
+        );
+    }
+
+    /// UTF-8 is encoded as bytes, so a non-ASCII string survives the round trip —
+    /// the set decides whether it can display it, not this client.
+    #[test]
+    fn non_ascii_text_is_encoded_as_its_utf8_bytes() {
+        let payload = build_text_command_payload("caf\u{e9}").expect("non-empty");
+        let json = serde_json::to_value(&payload).expect("serializes");
+        let encoded = json["params"]["Cmd"].as_str().expect("a string");
+        use base64::Engine as _;
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .expect("valid base64");
+        assert_eq!(String::from_utf8(decoded).expect("utf-8"), "caf\u{e9}");
+    }
+
+    /// An empty frame types nothing, and a caller cannot tell that from a failure.
+    #[test]
+    fn an_empty_string_is_refused_rather_than_sent() {
+        assert!(build_text_command_payload("").is_err());
     }
 }

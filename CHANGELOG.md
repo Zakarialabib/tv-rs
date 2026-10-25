@@ -132,6 +132,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Tizen types text, so text entry is complete on all three vendors (companion gap G6)**:
+  `TizenClient` gains the `SendInputString` frame — `ms.remote.control` with the text
+  **base64-encoded into `Cmd`**, the literal `"base64"` in `DataOfCmd`, and **no `Option`
+  field**, unlike the key frame. That last difference is why it is its own payload type
+  rather than a second call site of `TizenRemoteCommand`: sending the key shape with text
+  in it types nothing on some firmware and something unexpected on others.
+  `TizenConnectionPool::send_text()` carries it over the pooled channel (so it needs the
+  pairing token like any other remote command), and `TvClient::type_text()` answers on all
+  three vendors now — each with a different frame: Roku presses a `Lit_<char>` key per
+  character, webOS calls its IME with plain UTF-8, Tizen base64s the string. An empty
+  string is refused rather than sent, because a frame that types nothing is
+  indistinguishable from one that failed.
+
+### Added
+
 - **webOS types text (companion gap G6, the webOS half)**: `WebosClient::insert_text()` and
   `WebosSessionPool::insert_text()` reach the IME service at
   `ssap://com.webos.service.ime/insertText` with **plain UTF-8** — unlike Samsung's

@@ -125,6 +125,37 @@ pub struct TizenRemoteCommand {
     pub params: TizenRemoteCommandParams,
 }
 
+/// The `ms.remote.control` request that types a string.
+///
+/// Deliberately its own type rather than a second call site of
+/// [`TizenRemoteCommand`]: this frame carries **no `Option` field**, and its
+/// `DataOfCmd` is the literal `"base64"` while the text itself travels encoded in
+/// `Cmd`. Sending the key shape with text in it types nothing on some firmware and
+/// something unexpected on others, so the difference is a type the compiler enforces.
+///
+/// Source and traps: `docs/01-playbook.md` §3.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TizenTextCommand {
+    /// Always `ms.remote.control`.
+    pub method: String,
+    /// Command parameters.
+    pub params: TizenTextCommandParams,
+}
+
+/// Parameters of a [`TizenTextCommand`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TizenTextCommandParams {
+    /// The base64 of the text's UTF-8 bytes.
+    #[serde(rename = "Cmd")]
+    pub cmd: String,
+    /// Always the literal `base64` — it tells the set how to read `Cmd`.
+    #[serde(rename = "DataOfCmd")]
+    pub data_of_cmd: String,
+    /// Always `SendInputString`.
+    #[serde(rename = "TypeOfRemote")]
+    pub type_of_remote: String,
+}
+
 /// Parameters of a [`TizenRemoteCommand`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TizenRemoteCommandParams {

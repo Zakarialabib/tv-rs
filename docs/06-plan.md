@@ -133,40 +133,7 @@ code.
 **Exit:** the endpoint traced and recorded, `TizenClient` returning the foreground app
 id, `foreground()` answering on Tizen, and a test pinning the parsed shape.
 
-### 2.3 B5 · G6 (the remainder) — text entry on webOS and Tizen
-
-Roku landed: `keypress/Lit_<char>`, one request per character, traced to Roku's own ECP
-documentation and recorded in [`01-playbook.md`](01-playbook.md) §5. The documented
-surface is **printable ASCII** — "Printable ASCII character code values can be
-transmitted as-is with the `Lit_` prefix" — and the encoding for anything else is not
-documented in that source, so `type_text` refuses such a string rather than guessing at
-a percent-encoding. `Capability::TextInput` is its own capability (declared after
-`AppList`, which is what forced the `CapabilitySet` bitset to widen from `u16` to `u32`)
-and the refusal names it, never `Capability::Key`: a device that can press buttons may
-still have no way to take a string.
-
-**Both remaining halves are now unblocked and need implementing.** The plan named webOS
-IME `insertText` and Tizen `SendInputString`, and both traced to two independent sources,
-now recorded in [`01-playbook.md`](01-playbook.md) §3 and §4 with their exact frames:
-
-- **Tizen** — **still open, and the last half of this item**: `ms.remote.control` with
-  `{"Cmd": "<base64>", "DataOfCmd": "base64", "TypeOfRemote": "SendInputString"}`. Needs
-  the pairing token like any other remote command; some firmware wants a
-  `custom.remote.textReceived` broadcast first and `SendInputEnd` to close, both
-  conditional. The frame is recorded in the playbook §3, so this is implementation
-  rather than research.
-- **webOS** — **landed**: `WebosClient::insert_text()` and the pool's method, with
-  `send_enter_key()` to close the session. `type_text()` answers on webOS and the
-  capability is advertised.
-
-Both need a focused text field and fail without one, which is worth saying in the
-documentation of whichever method lands: the honest answer is "nothing was typed", and no
-error frame distinguishes it.
-
-**Exit:** the webOS IME surface and the Tizen `SendInputString` payload traced into the
-playbook with their sources, then `type_text()` answering on both.
-
-### 2.4 D — the rest, in the companion's order
+### 2.3 D — the rest, in the companion's order
 
 Each entry was checked against the code before being left standing, because these
 premises go stale: what the audit found is recorded next to the item. Landed items are
@@ -206,7 +173,7 @@ glossary.
   `subscribe` in the tree is the agent's MQTT transport, which is not a facade push
   API.
 
-### 2.5 X · Android TV as a target — the spike that decides (not a crate yet)
+### 2.4 X · Android TV as a target — the spike that decides (not a crate yet)
 
 The matrix deferred Android TV for ADB's trust model (developer mode, per-TV
 pairing). The peer landscape ([`03-matrix.md`](03-matrix.md#peer-landscape--the-same-work-in-other-languages))

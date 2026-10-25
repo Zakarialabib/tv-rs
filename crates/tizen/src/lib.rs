@@ -47,8 +47,9 @@ pub use auth::TizenAuthProvider;
 pub use client::{
     build_channel_connect_payload, build_channel_launch_payload, build_dial_launch_url,
     build_legacy_launch_payload, build_raw_remote_command_payload, build_remote_command_payload,
-    build_ws_url, encode_remote_name, extract_token, extract_tv_name, is_unauthorized,
-    parse_channel_connect_response, HandshakeInfo, TizenClient, TizenPairing, TizenSession,
+    build_text_command_payload, build_ws_url, encode_remote_name, extract_token, extract_tv_name,
+    is_unauthorized, parse_channel_connect_response, HandshakeInfo, TizenClient, TizenPairing,
+    TizenSession,
 };
 pub use discovery::{
     discover as discover_samsung, parse_description, DescriptionIdentity, SamsungTv,
@@ -60,7 +61,7 @@ pub use payload::{
     TizenChannelConnectPayload, TizenChannelConnectResponse, TizenChannelConnectResponseData,
     TizenChannelEmitParams, TizenChannelEmitPayload, TizenChannelLaunchData,
     TizenDialLaunchResponse, TizenLegacyLaunchPayload, TizenRemoteCommand,
-    TizenRemoteCommandParams,
+    TizenRemoteCommandParams, TizenTextCommand, TizenTextCommandParams,
 };
 pub use pool::{
     BoxedChannelFactory, DynConnectionPool, LiveChannelFactory, TizenChannel, TizenChannelFactory,
