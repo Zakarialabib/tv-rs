@@ -180,15 +180,45 @@ check for `"samsung"`. Parsing it would mean inventing both the endpoint and the
 which this workspace does not do. So `foreground()` on Tizen stays refusing, and the refusal
 now has a precise reason: the endpoint is done and tested, the ids are not.
 
-**A trace for the id source is in flight** (the same two-source bar as the endpoint above):
-does DIAL's `/apps` endpoint exist on Samsung sets and what does it return, does the
-device-description XML list apps or only services, what do real clients do to enumerate,
-and — if enumeration exists only over the WebSocket control channel — which method. Until
-that comes back with two sources, nothing here is implemented.
+**The trace came back conclusive, and it splits the item in two.** Enumeration exists, but
+only over the WebSocket remote channel, and only on older sets:
 
-**A trap this item should not repeat.** `apps.rs`'s comment asserting that the DIAL manifest
-"lists what is installed" is itself an unverified claim, and it is the kind that reads as
-settled fact. Whoever picks this up should treat it as a lead, not as documentation.
+- **On Tizen ≤4 (roughly pre-2020) the TV answers the list.** Send
+  `{"method":"ms.channel.emit","params":{"event":"ed.installedApp.get","to":"host"}}` on the
+  remote-control channel and the set replies with an **unsolicited event frame** whose
+  `data.data[]` is the installed-app list — `{appId, app_type, icon, is_lock, name}`. Four
+  independent sources: `xchwarze/samsung-tv-ws-api` (two files), `ollo69/ha-samsungtv-smart`,
+  an openHAB TRACE log carrying a verbatim TV body, and `Ape/samsungctl` issue #75. The
+  `appId` values are **exactly** what the per-app status endpoint consumes, so the two halves
+  of this item join.
+- **On Tizen 5+ (2020 and later) Samsung removed it.** The command is *silently ignored* —
+  no error frame, no reply, the client hangs until it times out. Verified by four sources
+  including a maintainer's issue and a library's own documentation ("Many newer TVs no longer
+  support this request, so there is no list"). There is no HTTP and no DIAL enumeration path
+  on those sets, so **a caller must supply ids**.
+
+**Three traps, all verified, each worth a test:**
+
+1. **It is not a request/response pair.** The reply is an event frame arriving on the same
+   socket; code that awaits an inline answer loses the list. This is also why it cannot ride
+   the pool's existing `dispatch`, which is built for request/response.
+2. **Silence is the failure mode on new sets**, so the honest answer is a typed error naming
+   the removal — never an empty list, which would read as "this TV has no apps installed".
+3. **`app_type` decides how the app is launched** (`2` = DEEP_LINK, `4` = NATIVE_LAUNCH), and
+   the wrong action type fails with a WebSocket close `31522`. The list is therefore not just
+   ids: whoever stores it must keep the type with it.
+
+**The `apps.rs` comment is refuted.** It asserted that "the DIAL manifest lists what is
+installed". It does not: the DIAL device description carries `serviceList` and nothing else —
+confirmed against two captured bodies (a 2015 UN40HU7000 and a 2020 UA50RU7400RSMZ) — and no
+client issues DIAL's `/apps` endpoint on a Samsung set at all. The comment has been corrected
+in the source rather than only here, because it was the kind of unverified claim that reads as
+settled fact.
+
+**What this means for the item:** `foreground()` on Tizen stays refusing until the list is
+implemented, and when it is, it can only answer on the sets that enumerate. That is a
+capability difference between firmware generations, not a gap in this workspace — and it
+belongs in the matrix's vendor table as such.
 
 ### 2.3 D — the rest, in the companion's order
 

@@ -2,8 +2,18 @@
 //!
 //! Tizen app launch takes a numeric-or-prefixed id, not a name. These are the
 //! public ids Samsung ships for the apps every signage deployment asks for; any
-//! other app is addressed by its own id (the DIAL manifest lists what is
-//! installed — see [`crate::TizenClient::dial_device_description`]).
+//! other app is addressed by its own id.
+//!
+//! **Where the other ids come from, and where they do not.** Earlier versions of
+//! this comment said "the DIAL manifest lists what is installed — see
+//! [`crate::TizenClient::dial_device_description`]". That was wrong, and it was
+//! wrong in the way that costs work: the DIAL device description carries a
+//! `serviceList` and nothing else, and no known client issues DIAL's `/apps`
+//! endpoint against a Samsung set. Installed apps are enumerable only over the
+//! remote-control channel, by emitting `ed.installedApp.get`, and only on Tizen
+//! ≤4 — on Tizen 5+ (2020 and later) Samsung removed the command and the set
+//! ignores it silently. So a caller on a modern panel supplies the id, and
+//! [`resolve_app_id`] passes a raw id through for exactly that case.
 
 use crate::error::{Result, TizenError};
 

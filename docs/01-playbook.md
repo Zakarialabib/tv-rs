@@ -128,6 +128,37 @@ token; four public debug logs carry the field).
 **Typing text** goes over the remote channel, so it needs the pairing token like any other
 `ms.remote.control` command. The text is **base64** and travels in `Cmd`:
 
+**Listing installed apps works only on older sets, and only as an event.** Emit
+`{"method":"ms.channel.emit","params":{"event":"ed.installedApp.get","to":"host"}}` on the
+remote-control channel and a **Tizen ≤4** set (roughly pre-2020) replies with an
+*unsolicited* event frame:
+
+```json
+{"data":{"data":[{"appId":"11101200001","app_type":2,"icon":"/opt/share/webappservice/apps_icon/FirstScreen/11101200001/250x250.png","is_lock":0,"name":"Netflix"}, …]},"event":"ed.installedApp.get","from":"host"}
+```
+
+Sources: `xchwarze/samsung-tv-ws-api` (`remote.py`, `event.py`), `ollo69/ha-samsungtv-smart`
+(`samsungws.py`), an openHAB binding TRACE log carrying the verbatim body above, and
+`Ape/samsungctl` issue #75. The `appId` values are the same ids
+`GET /api/v2/applications/{appId}` takes.
+
+Four things this fact carries, each of which has bitten a real client:
+
+- **Not a request/response pair.** The list arrives as an event on the open socket; awaiting
+  an inline answer loses it.
+- **`app_type` decides the launch action** — `2` is `DEEP_LINK`, `4` is `NATIVE_LAUNCH` (a `1`
+  is also seen). Sending the wrong action type fails with a WebSocket close `31522`, so the
+  type must be stored alongside the id.
+- **Tizen 5+ (2020+) removed the command.** The set ignores it *silently* — no error, no
+  frame — so a client that waits hangs until timeout. Sources: `xchwarze` issue #23,
+  `homebridge-samsung-tizen`'s APPLICATIONS.md ("Many newer TVs no longer support this
+  request, so there is no list"), a FHEM thread on a 2020 set, and `samsungctl` #75 on a 2021
+  model.
+- **The DIAL device description does not list apps.** It carries `serviceList` and nothing
+  else — confirmed against captured bodies from a 2015 UN40HU7000 and a 2020 UA50RU7400RSMZ.
+  DIAL's own `/apps` endpoint on port 8080 is **unverified** on Samsung hardware: no source,
+  capture or client issues it. DIAL on these sets is launch-only.
+
 ```json
 { "method": "ms.remote.control",
   "params": { "Cmd": "<base64 of the UTF-8 bytes>", "DataOfCmd": "base64", "TypeOfRemote": "SendInputString" } }
