@@ -118,7 +118,11 @@ fn resolve_url(base: &str, control: &str) -> String {
 }
 
 /// Send a SOAP action to a renderer's AVTransport control URL.
-async fn send_soap(control_url: &str, action: &str, body: &str) -> Result<(), DlnaError> {
+/// Posts one SOAP action and returns the response body.
+///
+/// Split from [`send_soap`] because the queries need the body and the commands
+/// throw it away — and a renderer puts its answer in that body, not in the status.
+async fn post_soap(control_url: &str, action: &str, body: &str) -> Result<String, DlnaError> {
     let envelope = format!(
         r#"<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>{body}</s:Body></s:Envelope>"#
     );
@@ -149,7 +153,11 @@ async fn send_soap(control_url: &str, action: &str, body: &str) -> Result<(), Dl
         }
         return Err(DlnaError::SoapError(format!("HTTP {status}")));
     }
-    Ok(())
+    Ok(text)
+}
+
+async fn send_soap(control_url: &str, action: &str, body: &str) -> Result<(), DlnaError> {
+    post_soap(control_url, action, body).await.map(|_| ())
 }
 
 /// `SetAVTransportURI` + `Play` — push `media_url` to the renderer and start it.
@@ -210,6 +218,118 @@ pub async fn seek(control_url: &str, position: Duration) -> Result<(), DlnaError
     send_soap(control_url, "Seek", &seek_body).await
 }
 
+/// What a renderer reports about its transport right now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TransportInfo {
+    /// `PLAYING`, `PAUSED_PLAYBACK`, `STOPPED`, `TRANSITIONING`, `NO_MEDIA_PRESENT`.
+    pub state: String,
+    /// `OK` on a healthy renderer; anything else is worth surfacing.
+    pub status: Option<String>,
+    /// Playback rate, `1` at normal speed.
+    pub speed: Option<String>,
+}
+
+/// Where a renderer is inside its current track.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PositionInfo {
+    /// Position from the start of the track.
+    pub rel_time: Duration,
+    /// Track length, when the renderer reports a real one.
+    ///
+    /// `None` covers both "not implemented" and the all-zeroes some renderers send
+    /// for a live stream — neither is a length of zero.
+    pub track_duration: Option<Duration>,
+    /// The URI being played, when the renderer reports it.
+    pub track_uri: Option<String>,
+}
+
+/// `GetTransportInfo`: the state a cast is actually in, rather than an estimate.
+pub async fn get_transport_info(control_url: &str) -> Result<TransportInfo, DlnaError> {
+    let body = format!(
+        "<u:GetTransportInfo xmlns:u=\"{AV_TRANSPORT_ACTION}\"><InstanceID>0</InstanceID></u:GetTransportInfo>",
+    );
+    let response = post_soap(control_url, "GetTransportInfo", &body).await?;
+    parse_transport_info(&response)
+}
+
+/// `GetPositionInfo`: how far into the track a renderer is.
+pub async fn get_position_info(control_url: &str) -> Result<PositionInfo, DlnaError> {
+    let body = format!(
+        "<u:GetPositionInfo xmlns:u=\"{AV_TRANSPORT_ACTION}\"><InstanceID>0</InstanceID></u:GetPositionInfo>",
+    );
+    let response = post_soap(control_url, "GetPositionInfo", &body).await?;
+    parse_position_info(&response)
+}
+
+/// Parses a `GetTransportInfo` response.
+///
+/// Split from the request so the shape is testable without a renderer: the state
+/// is the one field that must be there, and a missing one is an error rather than
+/// an empty string that reads like `STOPPED`.
+fn parse_transport_info(xml: &str) -> Result<TransportInfo, DlnaError> {
+    let state = field(xml, "CurrentTransportState").ok_or_else(|| {
+        DlnaError::SoapError("GetTransportInfo carried no CurrentTransportState".to_string())
+    })?;
+    Ok(TransportInfo {
+        state,
+        status: field(xml, "CurrentTransportStatus"),
+        speed: field(xml, "CurrentSpeed"),
+    })
+}
+
+/// Parses a `GetPositionInfo` response.
+fn parse_position_info(xml: &str) -> Result<PositionInfo, DlnaError> {
+    let rel_time = field(xml, "RelTime")
+        .as_deref()
+        .and_then(parse_hms)
+        .unwrap_or_default();
+    Ok(PositionInfo {
+        rel_time,
+        track_duration: field(xml, "TrackDuration")
+            .as_deref()
+            .and_then(parse_hms)
+            .filter(|duration| !duration.is_zero()),
+        track_uri: field(xml, "TrackURI").filter(|uri| !uri.is_empty()),
+    })
+}
+
+/// Parses a DLNA `H+:MM:SS` timestamp.
+///
+/// Renderers answer `NOT_IMPLEMENTED` and `00:00:00` for "unknown", so `None` means
+/// "no answer" and a caller must not read it as zero.
+fn parse_hms(value: &str) -> Option<Duration> {
+    let mut parts = value.trim().split(':');
+    let hours: u64 = parts.next()?.parse().ok()?;
+    let minutes: u64 = parts.next()?.parse().ok()?;
+    let seconds: u64 = parts.next()?.parse().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some(Duration::from_secs(hours * 3600 + minutes * 60 + seconds))
+}
+
+/// The text of the first `<tag>…</tag>` in `xml`.
+///
+/// This crate has no XML dependency on purpose: what it reads is a flat list of
+/// known tags, and a parser would be more machinery than the job needs.
+fn field(xml: &str, tag: &str) -> Option<String> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let start = xml.find(&open)? + open.len();
+    let end = xml[start..].find(&close)? + start;
+    Some(unescape_xml(xml[start..end].trim()))
+}
+
+/// Reverses the five predefined XML entities. `&amp;` goes last, so a literal
+/// `&amp;lt;` is not turned into `<`.
+fn unescape_xml(text: &str) -> String {
+    text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+}
+
 /// Typed transport-control surface for one renderer.
 ///
 /// The crate-primary way to drive playback after discovery.
@@ -225,6 +345,10 @@ pub trait AvTransport: Send + Sync {
     async fn stop(&self) -> Result<(), DlnaError>;
     /// Seek to a position from the start of the track.
     async fn seek(&self, position: Duration) -> Result<(), DlnaError>;
+    /// Read the transport state — a cold read, not an estimate.
+    async fn transport_info(&self) -> Result<TransportInfo, DlnaError>;
+    /// Read the position within the current track.
+    async fn position_info(&self) -> Result<PositionInfo, DlnaError>;
 }
 
 /// [`AvTransport`] implementation that talks SOAP to one control URL.
@@ -269,11 +393,80 @@ impl AvTransport for SoapAvTransport {
     async fn seek(&self, position: Duration) -> Result<(), DlnaError> {
         seek(&self.control_url, position).await
     }
+
+    async fn transport_info(&self) -> Result<TransportInfo, DlnaError> {
+        get_transport_info(&self.control_url).await
+    }
+
+    async fn position_info(&self) -> Result<PositionInfo, DlnaError> {
+        get_position_info(&self.control_url).await
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const TRANSPORT_INFO: &str = r#"<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>
+<u:GetTransportInfoResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+<CurrentTransportState>PLAYING</CurrentTransportState>
+<CurrentTransportStatus>OK</CurrentTransportStatus>
+<CurrentSpeed>1</CurrentSpeed>
+</u:GetTransportInfoResponse></s:Body></s:Envelope>"#;
+
+    const POSITION_INFO: &str = r#"<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>
+<u:GetPositionInfoResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+<Track>1</Track>
+<TrackDuration>00:03:25</TrackDuration>
+<TrackURI>http://192.168.1.5:9000/a%20b.mp4</TrackURI>
+<RelTime>00:00:42</RelTime>
+</u:GetPositionInfoResponse></s:Body></s:Envelope>"#;
+
+    #[test]
+    fn transport_info_parses_the_state_a_cast_is_actually_in() {
+        let info = parse_transport_info(TRANSPORT_INFO).expect("fixture parses");
+        assert_eq!(info.state, "PLAYING");
+        assert_eq!(info.status.as_deref(), Some("OK"));
+        assert_eq!(info.speed.as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn transport_info_without_a_state_is_an_error_not_an_empty_string() {
+        // An empty state would read like `STOPPED` to a caller.
+        assert!(parse_transport_info("<u:GetTransportInfoResponse/>").is_err());
+    }
+
+    #[test]
+    fn position_info_parses_the_clock_and_the_track() {
+        let info = parse_position_info(POSITION_INFO).expect("fixture parses");
+        assert_eq!(info.rel_time, Duration::from_secs(42));
+        assert_eq!(info.track_duration, Some(Duration::from_secs(205)));
+        assert_eq!(
+            info.track_uri.as_deref(),
+            Some("http://192.168.1.5:9000/a%20b.mp4")
+        );
+    }
+
+    #[test]
+    fn an_unknown_duration_is_none_rather_than_zero() {
+        // Renderers answer `NOT_IMPLEMENTED` for a live stream, and some send
+        // all-zeroes. Neither is a length of zero seconds.
+        let xml = "<u:GetPositionInfoResponse><TrackDuration>NOT_IMPLEMENTED</TrackDuration>\
+                   <RelTime>00:00:07</RelTime></u:GetPositionInfoResponse>";
+        let info = parse_position_info(xml).expect("fixture parses");
+        assert_eq!(info.track_duration, None);
+        assert_eq!(info.rel_time, Duration::from_secs(7));
+    }
+
+    #[test]
+    fn hms_handles_hours_and_refuses_nonsense() {
+        assert_eq!(parse_hms("01:02:03"), Some(Duration::from_secs(3723)));
+        assert_eq!(parse_hms("00:00:00"), Some(Duration::ZERO));
+        assert_eq!(parse_hms("NOT_IMPLEMENTED"), None);
+        assert_eq!(parse_hms("00:01"), None);
+    }
 
     const DESC: &str = r#"<root xmlns="urn:schemas-upnp-org:device-1-0"><device>
     <serviceList>
