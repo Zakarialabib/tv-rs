@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — G15, G16, G17
+
+- **`discover_stream(scanner, on_found)`**: per-display callback discovery; the app and
+  `tv-rs-webos` use it. `discover_with` folds into it.
+- **G15 — probe by address** (`tv_rs::probe(address)`): Roku `device-info`, then Tizen
+  DIAL, then the webOS port as an inference. `DiscoveredTv` gained `mac`, closing the
+  last piece of G4.
+- **G16 — DIAL launch as its own operation** (`TizenClient::dial_launch` +
+  `AppLaunch::launch_with_payload`): an app id and an optional payload, its own operation.
+- **G17 — AVTransport state and progress**: `get_transport_info` / `get_position_info`,
+  parsing split so it is testable without a renderer.
+
+
 ### Added
 
 - **`discover_stream(scanner, on_found)`**, re-exported from the crate root, and
