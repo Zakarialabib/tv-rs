@@ -11,15 +11,19 @@
 //!
 //! | Vendor | power | wake | key | text | app | app list | foreground | input | volume | panel lock | orientation | panel health |
 //! |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-//! | Tizen | ✓ | MAC | ✓ | — | ✓ | — | — | — | — | — | — | — |
-//! | webOS | ✓ | MAC | ✓ | — | ✓ | ✓ | ✓ | — | ✓ | — | — | — |
+//! | Tizen | ✓ | MAC | ✓ | ✓ | ✓ | — | — | — | — | — | — | — |
+//! | webOS | ✓ | MAC | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ | — | — | — |
 //! | Roku | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | — | — | — | — |
 //!
 //! `wake` reads `MAC` where the vendor drops its network stack when it sleeps:
 //! the only wake path there is a broadcast magic packet, which needs an address
 //! neither SSDP nor the pairing token carries — so the capability appears once
 //! [`TvClient::with_mac`] has supplied one. Roku answers power-on over ECP while
-//! the screen is dark, so it needs neither. `volume` is absent on Tizen and
+//! the screen is dark, so it needs neither. `text` is ✓ on all three, each over a
+//! different surface: Roku presses `Lit_<char>` per character, webOS calls its IME
+//! with plain UTF-8, Tizen base64s the string into `SendInputString`. Three frames,
+//! one operation — which is why the capability is advertised uniformly and only the
+//! payload differs. `volume` is absent on Tizen and
 //! Roku because both expose relative keys, not an absolute level, so `set_volume`
 //! cannot be honoured. The LFD columns are absent everywhere **per protocol**: the
 //! consumer remote channels (Tizen 8001/8002, SSAP, ECP) have no panel-lock,
