@@ -153,11 +153,23 @@ call). So the call is real — the *list* was not.
 3. **`POST /api/v2/applications/{id}` is a launch**, not a status: it returns a bare `true`
    with `content-length: 5`. Do not read the response of the launch as an app's state.
 
-**To finish it:** the facade already lists installed apps (`AppLaunch::installed_apps()`), and
-the ids that list returns are the same ids this query takes — so the shape is "iterate the
-known ids, query each, pick the `visible:true` one". That is a *point query per app*, not a
-list read, which is why the verification above is about a single app and not a collection.
-`foreground()` on Tizen stays honest-refusing until that is built.
+**The first attempt at this correction was wrong, and the correction is the point.** It said
+"the facade already lists installed apps, so iterate those ids". It does not: Tizen's
+`installed_apps()` returns `Unsupported(Capability::AppList)` — **Tizen cannot enumerate apps**
+over any verified surface. So there are no ids to iterate, and `foreground()` cannot be built
+from this endpoint alone.
+
+**What shipped instead** (`feat(tizen)`): `TizenClient::app_status(app_id)` — the verified
+query, with `TizenAppStatus` carrying `running` and `visible` as **distinct** fields. Six
+tests pin the traps, including the one that would have been easy to get wrong: a background
+app reports `running: true`, and an absent `visible` parses as `None` rather than `false`.
+
+**What is left, and why it is not guessed:** the id source. The REST list is unverified, and
+the DIAL manifest — which `apps.rs` names as "list[ing] what is installed" — has **no parser
+anywhere in the workspace**: `dial_device_description()` returns raw XML, and the facade
+reads only the manufacturer out of it. Parsing it would mean inventing where the ids live,
+which this workspace does not do. So `foreground()` on Tizen stays refusing, and the refusal
+now has a precise reason: the endpoint is done and tested, the ids are not.
 
 ### 2.3 D — the rest, in the companion's order
 

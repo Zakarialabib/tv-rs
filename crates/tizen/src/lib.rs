@@ -57,10 +57,10 @@ pub use discovery::{
 };
 pub use error::{Result, TizenError};
 pub use payload::{
-    parse_device_info, DeviceInfo, TizenChannelConnectData, TizenChannelConnectParams,
-    TizenChannelConnectPayload, TizenChannelConnectResponse, TizenChannelConnectResponseData,
-    TizenChannelEmitParams, TizenChannelEmitPayload, TizenChannelLaunchData,
-    TizenDialLaunchResponse, TizenLegacyLaunchPayload, TizenRemoteCommand,
+    parse_app_status, parse_device_info, DeviceInfo, TizenAppStatus, TizenChannelConnectData,
+    TizenChannelConnectParams, TizenChannelConnectPayload, TizenChannelConnectResponse,
+    TizenChannelConnectResponseData, TizenChannelEmitParams, TizenChannelEmitPayload,
+    TizenChannelLaunchData, TizenDialLaunchResponse, TizenLegacyLaunchPayload, TizenRemoteCommand,
     TizenRemoteCommandParams, TizenTextCommand, TizenTextCommandParams,
 };
 pub use pool::{

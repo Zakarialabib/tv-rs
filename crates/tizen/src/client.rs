@@ -18,17 +18,17 @@ use url::Url;
 
 use crate::error::{Result, TizenError};
 use crate::payload::{
-    parse_device_info, DeviceInfo, TizenChannelConnectData, TizenChannelConnectParams,
-    TizenChannelConnectPayload, TizenChannelConnectResponse, TizenChannelEmitParams,
-    TizenChannelEmitPayload, TizenChannelLaunchData, TizenDialLaunchResponse,
-    TizenLegacyLaunchPayload, TizenRemoteCommand, TizenRemoteCommandParams, TizenTextCommand,
-    TizenTextCommandParams,
+    parse_app_status, parse_device_info, DeviceInfo, TizenAppStatus, TizenChannelConnectData,
+    TizenChannelConnectParams, TizenChannelConnectPayload, TizenChannelConnectResponse,
+    TizenChannelEmitParams, TizenChannelEmitPayload, TizenChannelLaunchData,
+    TizenDialLaunchResponse, TizenLegacyLaunchPayload, TizenRemoteCommand,
+    TizenRemoteCommandParams, TizenTextCommand, TizenTextCommandParams,
 };
 use crate::types::{
-    validate_remote_key_code, TizenLaunchAction, TizenRemoteKey, TIZEN_APP_ID, TIZEN_CMD_BASE64,
-    TIZEN_CMD_CLICK, TIZEN_DEVICE_INFO_PATH, TIZEN_DIAL_DESC_PATH, TIZEN_DIAL_LAUNCH_PREFIX,
-    TIZEN_DIAL_PORT, TIZEN_REMOTE_TYPE, TIZEN_REMOTE_TYPE_TEXT, TIZEN_REMOTE_WS_PATH,
-    TIZEN_WSS_PORT, TIZEN_WS_PORT,
+    validate_remote_key_code, TizenLaunchAction, TizenRemoteKey, TIZEN_APP_ID,
+    TIZEN_APP_STATUS_PATH, TIZEN_CMD_BASE64, TIZEN_CMD_CLICK, TIZEN_DEVICE_INFO_PATH,
+    TIZEN_DIAL_DESC_PATH, TIZEN_DIAL_LAUNCH_PREFIX, TIZEN_DIAL_PORT, TIZEN_REMOTE_TYPE,
+    TIZEN_REMOTE_TYPE_TEXT, TIZEN_REMOTE_WS_PATH, TIZEN_WSS_PORT, TIZEN_WS_PORT,
 };
 
 /// Default number of inbound frames inspected while awaiting a handshake reply or
@@ -569,6 +569,31 @@ impl TizenClient {
         let response = self.http.get(url).send().await?.error_for_status()?;
         let body = response.text().await?;
         parse_device_info(&body)
+    }
+
+    /// Reads one installed application's status.
+    ///
+    /// `GET /api/v2/applications/{app_id}` — **no pairing and no token**, like
+    /// [`Self::device_info`]. The id is the same one a launch takes, so the presets
+    /// in [`crate::apps`] and the ids in the DIAL manifest both work here.
+    ///
+    /// The foreground marker is `visible`, not `running`. `running` is a superset that
+    /// includes background system apps, so a caller keying on it alone reports a
+    /// background app as the one on screen. `visible` can also be absent on some
+    /// firmware, and absence means "this panel does not tell me" — not `false`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TizenError::Protocol`] when the body is not an app status, and the
+    /// usual transport errors when the set is unreachable or asleep.
+    pub async fn app_status(&self, app_id: &str) -> Result<TizenAppStatus> {
+        let url = format!(
+            "http://{}:{}{}/{}",
+            self.host, TIZEN_WS_PORT, TIZEN_APP_STATUS_PATH, app_id
+        );
+        let response = self.http.get(url).send().await?.error_for_status()?;
+        let body = response.text().await?;
+        parse_app_status(&body)
     }
 
     /// Fetches the raw DIAL device description XML from [`TIZEN_DIAL_DESC_PATH`].

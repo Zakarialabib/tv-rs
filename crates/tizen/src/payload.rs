@@ -2,6 +2,7 @@
 //!
 //! Naming follows `<Protocol><Payload>` from `docs/00-rust-package-standard.md` §6.
 
+use crate::error::TizenError;
 use serde::{Deserialize, Serialize};
 
 /// The `ms.channel.connect` request sent to open the remote channel.
@@ -296,5 +297,141 @@ mod device_info_tests {
     #[test]
     fn an_empty_device_info_has_no_address() {
         assert_eq!(DeviceInfo::default().mac(), None);
+    }
+}
+
+/// One installed application's status, from
+/// [`TIZEN_APP_STATUS_PATH`](crate::TIZEN_APP_STATUS_PATH).
+///
+/// Verified across four independent sources (the FHEM thread's verbatim captures,
+/// `ha-samsungtv-smart`, `cleanyourtv` #441, and `dzikus/tizen-camera-pip`):
+/// ```json
+/// {"id":"11101200001","name":"Netflix","running":false,"version":"7.0.000","visible":true}
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TizenAppStatus {
+    /// The app id — the same id a launch takes.
+    #[serde(rename = "id")]
+    pub id: String,
+
+    /// The display name.
+    #[serde(rename = "name")]
+    pub name: String,
+
+    /// Whether the app process is running.
+    ///
+    /// A **superset** of foreground, not the marker: background system apps report
+    /// `running: true` while not being on screen, so keying on this alone reports a
+    /// background app as the one in front.
+    #[serde(rename = "running")]
+    pub running: bool,
+
+    /// Whether the app is the one on screen — the foreground marker.
+    ///
+    /// Optional because some firmware and models omit the field entirely (a
+    /// Home-Assistant thread hit `KeyError: 'visible'`). A missing field means "this
+    /// panel does not tell me", which is **not** the same as `false`: reporting it as
+    /// background would be a wrong answer dressed as a right one.
+    #[serde(rename = "visible", default)]
+    pub visible: Option<bool>,
+}
+
+/// Parses the body of `GET /api/v2/applications/{app_id}`.
+///
+/// # Errors
+///
+/// Returns [`TizenError::Json`] when the body is not JSON, and
+/// [`TizenError::Protocol`] when the document parses but carries no id — a body that
+/// is not an app status is a protocol error rather than an empty answer, and an app
+/// that exists without an id is not a thing this endpoint returns.
+pub fn parse_app_status(
+    body: &str,
+) -> std::result::Result<TizenAppStatus, crate::error::TizenError> {
+    let status: TizenAppStatus = serde_json::from_str(body)?;
+    if status.id.is_empty() {
+        return Err(TizenError::Protocol("app status carries no id".to_string()));
+    }
+    Ok(status)
+}
+
+#[cfg(test)]
+mod app_status_tests {
+    use super::*;
+
+    /// The foreground shape, verbatim from the FHEM thread: `running` and `visible`
+    /// agree here, which is exactly why `running` is the dangerous field — it looks
+    /// correct when both agree.
+    #[test]
+    fn the_documented_body_parses_with_both_bits() {
+        let body = r#"{"id":"11101200001","name":"Netflix","running":false,"version":"7.0.000","visible":true}"#;
+        let status = parse_app_status(body).expect("a documented body parses");
+        assert_eq!(status.id, "11101200001");
+        assert_eq!(status.name, "Netflix");
+        assert!(
+            !status.running,
+            "the capture says the process is not running"
+        );
+        assert_eq!(
+            status.visible,
+            Some(true),
+            "`visible` is the foreground marker"
+        );
+    }
+
+    /// The trap the whole query exists to avoid: a **background** app reports
+    /// `running: true`. Keying on `running` alone would report it as the app on
+    /// screen, so the parser must keep the two bits distinct and the caller must read
+    /// `visible`.
+    #[test]
+    fn a_background_app_reports_running_without_being_visible() {
+        let body = r#"{"id":"3201802015776","name":"Sky Q","running":true,"version":"1.42.6","visible":false}"#;
+        let status = parse_app_status(body).expect("a background app is a valid body");
+        assert!(status.running, "the process IS running");
+        assert_eq!(
+            status.visible,
+            Some(false),
+            "but it is not on screen -- the two bits must never collapse into one"
+        );
+    }
+
+    /// Some firmware omits `visible` entirely (a Home-Assistant thread hit
+    /// `KeyError: 'visible'`). A missing field means "this panel does not tell me",
+    /// which is NOT `false`: a caller that treats it as background would be reporting
+    /// a wrong answer as a right one.
+    #[test]
+    fn an_absent_visible_is_none_not_false() {
+        let body = r#"{"id":"11101200001","name":"Netflix","running":true,"version":"7.0.000"}"#;
+        let status = parse_app_status(body).expect("a body without `visible` still parses");
+        assert_eq!(
+            status.visible, None,
+            "absence is an answer of its own and must survive the round trip"
+        );
+    }
+
+    /// A *missing* `id` is serde's shape error — the field is required, so the
+    /// document never reaches the semantic check. That is the right owner for it:
+    /// serde is the authority on shape, and this function is the authority on meaning.
+    #[test]
+    fn a_missing_id_is_the_json_error() {
+        let body = r#"{"name":"Netflix","running":false,"visible":true}"#;
+        let error = parse_app_status(body).expect_err("no id is not an app status");
+        assert!(matches!(error, TizenError::Json(_)), "got {error:?}");
+    }
+
+    /// An *empty* `id` is a different failure: the field is present and well-typed, so
+    /// serde accepts it, but an app with an empty id is not a thing this endpoint
+    /// returns. That is the semantic check's job, and it is what keeps a body that
+    /// happens to parse from being reported as an app.
+    #[test]
+    fn an_empty_id_is_a_protocol_error() {
+        let body = r#"{"id":"","name":"Netflix","running":false,"visible":true}"#;
+        let error = parse_app_status(body).expect_err("an empty id is not an app status");
+        assert!(matches!(error, TizenError::Protocol(_)), "got {error:?}");
+    }
+
+    #[test]
+    fn a_non_json_body_is_a_json_error() {
+        let error = parse_app_status("<html>not json</html>").expect_err("HTML is not a status");
+        assert!(matches!(error, TizenError::Json(_)), "got {error:?}");
     }
 }

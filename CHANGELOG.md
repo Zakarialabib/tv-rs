@@ -21,6 +21,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Tizen reads one application's status** — `TizenClient::app_status(app_id)` over
+  `GET /api/v2/applications/{app_id}` (no pairing, no token), verified against four
+  independent sources. `TizenAppStatus` keeps `running` and `visible` **distinct**, because
+  `running` is a superset that includes background system apps: a caller keying on it alone
+  reports a background app as the one on screen. `visible` is optional and parses to `None`
+  when the panel omits the field, which is not the same as `false`.
+
 - **`discover_stream(scanner, on_found)`**, re-exported from the crate root, and
   `SsdpScanner::discover_tvs_with(on_found)`: discovery calls back per display the
   moment its descriptor resolves instead of only when the reply window closes.
