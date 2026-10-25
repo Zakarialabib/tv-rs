@@ -50,6 +50,7 @@ fn discovered(vendor: TvVendor, ip: &str) -> DiscoveredTv {
         model_name: None,
         serial_number: None,
         usn: None,
+        mac: None,
     }
 }
 

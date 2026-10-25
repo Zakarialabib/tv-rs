@@ -136,6 +136,60 @@ where
         .collect())
 }
 
+/// Identifies what is at `address`, or `None` when nothing known answers.
+///
+/// The complement of [`discover`]: SSDP is multicast and stays on the link, so a
+/// guest network, a VLAN, or an Android picker that hands back a bare address
+/// needs a direct question. Each vendor's cheapest entry point is asked in turn:
+///
+/// - **Roku** first, because `/query/device-info` is authoritative and carries the
+///   MAC, the model and the serial;
+/// - **Tizen** next, because the DIAL description names the manufacturer;
+/// - **LG** and **MDC** last, and only as an inference: an open port means
+///   *something of that kind is listening*, not *this is definitely an LG*.
+///
+/// That last part is why the answer is a [`DiscoveredTv`] with no serial, model or
+/// location — a caller should offer the "treat as" override the way it would for
+/// any inference.
+pub async fn probe(address: &str) -> Option<DiscoveredTv> {
+    let address = address.trim();
+    if address.is_empty() {
+        return None;
+    }
+
+    if let Ok(info) = RokuClient::new(address).query_device_info().await {
+        let mut tv = DiscoveredTv::probed(TvVendor::Roku, address);
+        tv.manufacturer = info.vendor_name;
+        tv.model_name = info.model_name;
+        tv.serial_number = info.serial_number;
+        tv.mac = info.wifi_mac.or(info.ethernet_mac);
+        return Some(tv);
+    }
+
+    if let Ok(xml) = TizenClient::new(address).dial_device_description().await {
+        if xml.to_ascii_lowercase().contains("samsung") {
+            let mut tv = DiscoveredTv::probed(TvVendor::Samsung, address);
+            tv.manufacturer = Some("Samsung Electronics".to_string());
+            return Some(tv);
+        }
+    }
+
+    // A port guess, and only that: webOS listens on 3000. An open port on a
+    // sleeping set still answers, which is what makes this useful before a wake.
+    //
+    // MDC (1515) is deliberately not probed here: `TvVendor` has no MDC variant —
+    // G10e models a panel as a separate erased handle, not a vendor — so naming it
+    // would mean inventing a variant this crate does not have.
+    if matches!(
+        tv_rs_power::poll_power_state(&format!("{address}:3000")).await,
+        Ok(tv_rs_power::PowerState::On)
+    ) {
+        return Some(DiscoveredTv::probed(TvVendor::Lg, address));
+    }
+
+    None
+}
+
 /// A control handle for a discovered television.
 ///
 /// The variant is chosen from [`DiscoveredTv::vendor`]. The convenience methods
@@ -617,6 +671,7 @@ mod tests {
             model_name: Some("QN90A".to_string()),
             serial_number: None,
             usn: None,
+            mac: None,
         };
         let client = TvClient::from_discovered(&tv).expect("samsung is supported");
         match &client {
@@ -700,6 +755,7 @@ mod tests {
             model_name: None,
             serial_number: None,
             usn: None,
+            mac: None,
         };
 
         let error = TvClient::from_discovered(&tv).unwrap_err();
@@ -722,6 +778,7 @@ mod tests {
                 model_name: None,
                 serial_number: None,
                 usn: None,
+                mac: None,
             };
 
             let client = tv.to_client().unwrap();

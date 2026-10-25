@@ -93,6 +93,7 @@ mod tests {
             model_name: model.map(str::to_string),
             serial_number: None,
             usn: None,
+            mac: None,
         }
     }
 

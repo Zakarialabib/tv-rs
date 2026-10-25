@@ -78,6 +78,12 @@ pub struct DiscoveredTv {
     pub serial_number: Option<String>,
     /// The `USN` header of the SSDP reply.
     pub usn: Option<String>,
+    /// The hardware address, when something actually reported one.
+    ///
+    /// An SSDP reply never carries it, so this is `None` after a scan. A direct
+    /// probe can fill it (Roku's `device-info` does), which is what lets a caller
+    /// pre-fill wake without asking the user to type a MAC.
+    pub mac: Option<String>,
 }
 
 impl DiscoveredTv {
@@ -97,6 +103,29 @@ impl DiscoveredTv {
             model_name: descriptor.and_then(|d| d.model_name.clone()),
             serial_number: descriptor.and_then(|d| d.serial_number.clone()),
             usn: response.usn.clone(),
+            // An SSDP reply carries no hardware address; only a probe can supply one.
+            mac: None,
+        }
+    }
+
+    /// A result for an address that answered a **direct probe** rather than SSDP.
+    ///
+    /// There is no `M-SEARCH` reply and no descriptor, so only the vendor and the
+    /// address are known. Every descriptor field stays `None` until something
+    /// fetches it — which is why a probe is the cheap question, not a substitute
+    /// for discovery.
+    #[must_use]
+    pub fn probed(vendor: TvVendor, ip: impl Into<String>) -> Self {
+        Self {
+            vendor,
+            ip: ip.into(),
+            location: None,
+            friendly_name: None,
+            manufacturer: None,
+            model_name: None,
+            serial_number: None,
+            usn: None,
+            mac: None,
         }
     }
 
@@ -126,6 +155,7 @@ mod tests {
         DiscoveredTv {
             vendor,
             ip: "192.168.1.10".into(),
+            mac: None,
             location: None,
             friendly_name: None,
             manufacturer: None,
