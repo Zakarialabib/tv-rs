@@ -2,7 +2,7 @@
 
 What has actually been run against a physical device. One row per device, added
 when someone runs the `hil` suite (`cargo test -p tv-rs --features hil`) or a manual
-probe.
+probe. `cargo xtask hw-test --write-doc` appends a row ([plan item 7](06-plan.md)).
 
 **Current state: nothing has been verified on hardware.** An SSDP `M-SEARCH` from
 the development host on 2026-10-19 returned zero non-loopback responders, so no TV

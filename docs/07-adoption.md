@@ -7,10 +7,11 @@ roadmap** (`docs/specs/ROADMAP-DESKTOP.md` §12–§13 there — deliberately no
 because it is another repository). This page holds only the durable contract: who
 owns what, the no-duplication rules, the integration contracts, and the gates.
 
-Registry note: crates.io serves `tv-rs` and twelve sibling crates at `0.2.0`
-today; `tv-rs-mdc` is merged in this workspace and publishes with the `0.3.0`
-release (the registry table in [`03-matrix.md`](03-matrix.md) is the version
-truth).
+Registry note: crates.io serves **thirteen crates at `0.2.0`** today; `tv-rs-mdc` and
+`tv-rs-app` are merged in this workspace and ride the `0.3.0` release (the registry
+table in
+[`03-matrix.md` §Published](03-matrix.md#published-cratesio-verified-2026-10-22-against-the-registry-api)
+is the version truth).
 
 ## 1. Domain ownership
 
@@ -100,7 +101,7 @@ These are review gates, not suggestions.
 
 The dependency direction is one sentence: the app depends on `tv-rs`; no
 `tv-rs` crate may depend on an app, on Tauri, on `sqlx` or on React. The layer
-diagram it fits into is [`architecture.md`](architecture.md); what each crate
+diagram it fits into is [`01-architecture.md`](01-architecture.md); what each crate
 implements today is [`03-matrix.md`](03-matrix.md).
 
 ## 4. Integration contracts

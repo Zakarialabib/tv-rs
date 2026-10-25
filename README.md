@@ -77,7 +77,7 @@ Cast or AirPlay backend yet, no event subscriptions (the agent polls), and no
 input switching on Tizen, webOS or Roku yet. See [`NON_GOALS.md`](NON_GOALS.md).
 
 Nothing here has been verified on hardware from the development host that produced
-it — [`docs/hil-results.md`](docs/hil-results.md) is the table, and it is empty.
+it — [`docs/08-hil-results.md`](docs/08-hil-results.md) is the table, and it is empty.
 
 ## Install
 
@@ -227,7 +227,7 @@ cargo test -p tv-rs --features hil --test hardware_in_the_loop
 ```
 
 `hw-test` discovers, probes power and capabilities, and appends to
-[`docs/hil-results.md`](docs/hil-results.md). It reports "no televisions answered"
+[`docs/08-hil-results.md`](docs/08-hil-results.md). It reports "no televisions answered"
 and exits 0 rather than inventing a pass.
 
 `tv-rs-agent` also carries the Phase 4 exit criterion as a test: 50 devices, 24
@@ -279,18 +279,18 @@ picks up where it stopped instead of failing on crate #1.
 
 ## Docs
 
-New here? [`docs/glossary.md`](docs/glossary.md) is the map — every term links to
+New here? [`docs/00-index.md`](docs/00-index.md) is the map — every term links to
 the page that explains it.
 
 | Start with                                             | If you want to                                                                |
 | ------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| [`docs/01-playbook.md`](docs/01-playbook.md)           | the protocol facts: ports, handshakes, what each vendor exposes               |
-| [`docs/architecture.md`](docs/architecture.md)         | the three layers, the dependency rule, where a new file belongs               |
+| [`docs/02-playbook.md`](docs/02-playbook.md)           | the protocol facts: ports, handshakes, what each vendor exposes               |
+| [`docs/01-architecture.md`](docs/01-architecture.md)   | the layers, the dependency rule, where a new file belongs                     |
 | [`INTEGRATION.md`](INTEGRATION.md)                     | **put it in an application**: discovery, pinning, quirks, a fleet, media, CEC |
 | [`docs/03-matrix.md`](docs/03-matrix.md)               | what is done, what is deferred, verified test counts                          |
 | [`docs/06-plan.md`](docs/06-plan.md)                   | **the live plan**: only open work, with exit criteria                         |
 | [`QUIRKS.md`](QUIRKS.md)                               | how to submit a model/firmware defect                                         |
-| [`docs/02-external-refs.md`](docs/02-external-refs.md) | protocol references and prior art                                             |
+| [`docs/04-external-refs.md`](docs/04-external-refs.md) | protocol references and prior art                                             |
 
 ## Contributing
 

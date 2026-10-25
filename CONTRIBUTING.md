@@ -44,7 +44,7 @@ TV_RS_HIL_ROKU_HOST=192.168.1.40 cargo test --features hil --test hardware_in_th
 ## Layout rules
 
 Each protocol crate follows the same module shape — see
-[`docs/architecture.md`](docs/architecture.md):
+[`docs/01-architecture.md`](docs/01-architecture.md):
 
 ```
 <protocol>/src/{lib,auth,protocol,payload,types,client,error}.rs
@@ -105,7 +105,7 @@ late one.
 
 The crates publish in dependency order via `cargo xtask publish` — the order is
 `xtask/src/main.rs::ORDER`, recorded with its rationale in
-[`docs/adr/001-crate-publication.md`](docs/adr/001-crate-publication.md).
+[`docs/01-architecture.md` §Publishing](docs/01-architecture.md#publishing).
 crates.io yanks rather than deletes, so a partial publish burns the version —
 dry-run first:
 

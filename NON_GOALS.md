@@ -33,7 +33,7 @@ default build, and never presented in the README as the fix for an unreachable T
 ## This is not a promise that hardware works
 
 Every protocol crate is written from vendor documentation and public protocol
-captures. Device verification is recorded in [`docs/hil-results.md`](docs/hil-results.md)
+captures. Device verification is recorded in [`docs/08-hil-results.md`](docs/08-hil-results.md)
 with a model, a year and a date — and its absence is stated rather than assumed
 away.
 

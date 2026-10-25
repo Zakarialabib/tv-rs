@@ -1,6 +1,8 @@
 # References and prior art
 
 Where the protocol facts came from, and which existing crates shaped the design.
+This page is the single home for external sources and for the "we deliberately did
+not borrow this" decisions.
 
 ## Protocol references
 
@@ -13,11 +15,13 @@ Where the protocol facts came from, and which existing crates shaped the design.
 | DIAL | Netflix/Google DIAL spec — `POST /ws/apps/{id}` on port 8080 |
 | LG webOS SSAP | webOS second-screen documentation and the `ssap://` URI namespace (`system.launcher/launch`, `audio/setVolume`, …) |
 | Roku ECP | Roku External Control Protocol docs: `/query/device-info`, `/query/apps`, `/keypress`, `/launch` on 8060 |
+| Samsung MDC | Samsung display control protocol — `0xAA` frame, display-ID addressing, byte checksum, TCP 1515 or RS-232 |
+| HDMI-CEC | CEC over the `cec-client` CLI (`on`, `standby`, `as`) |
 | HTTP range requests | RFC 7233 — `Range`, `Content-Range`, `206`, `416` |
 | HLS | RFC 8216 — `#EXTM3U`, `#EXT-X-TARGETDURATION`, `#EXT-X-ENDLIST` |
 
 Ports and payloads are also summarised per protocol in
-[`01-playbook.md`](01-playbook.md), which is the version this code was written
+[`02-playbook.md`](02-playbook.md), which is the version this code was written
 against.
 
 ## Prior art in Rust
@@ -39,3 +43,8 @@ against.
 - **No credential storage in the library's own format.** Tizen tokens and webOS
   client keys are written by the caller-chosen path the crate is handed; the
   crate never picks a location or a permission model for a secret.
+- **No `socket2`.** SSDP multicast uses `tokio`'s built-in multicast support
+  rather than adding a second socket abstraction for no capability gain — the
+  dependency policy in
+  [`05-rust-package-standard.md`](05-rust-package-standard.md#8-dependency-policy)
+  requires an addition to add capability, not convenience.

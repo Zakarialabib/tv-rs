@@ -268,7 +268,7 @@ cargo run -p tv-rs-cli -- ensure --config desired.json --audit audit.jsonl
 device. If a column looks wrong, the confidence says whether to trust it: `inferred`
 means "the port answered", not "the screen is on".
 
-`docs/hil-results.md` is the record of what has been tried against real hardware.
+`docs/08-hil-results.md` is the record of what has been tried against real hardware.
 Today it is empty. Treat every protocol claim in this repository as documented-and-
 tested-against-mocks until that table has rows.
 

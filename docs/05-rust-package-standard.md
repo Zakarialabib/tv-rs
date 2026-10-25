@@ -4,13 +4,14 @@ A prescriptive standard for building and maintaining Rust library packages and
 workspaces. Project-agnostic: it was distilled from two shipping packages of
 opposite shape, and both are cited as evidence for each rule.
 
-- **`tv-rs`** — a 6-package workspace (facade + 5 protocol crates).
+- **`tv-rs`** — a fifteen-crate workspace (facade, protocol, support,
+  reconciliation and tooling crates).
 - **`ezviz-openapi-rs`** — a single crate with one optional feature.
 
 Identical copies of this file live in both repositories. Treat it as the
 authority: it holds the rules. Project-specific naming detail and current status
-belong in each repository's own `00-naming-conventions.md` and `03-matrix.md`
-where those files exist — a project that is a single crate may not need either.
+belong in each repository's own standards/naming page and `03-matrix.md` where
+those files exist — a project that is a single crate may not need either.
 
 **The governing principle:** every abstraction must be *earned* — by an actual
 consumer, or by a constraint the compiler enforces. Structures that exist for
@@ -52,7 +53,8 @@ a single crate with feature flags achieves the same isolation, prefer that.
   | `crates/<name>/` | rust-analyzer, bevy, swc |
 
   Pick one and be consistent. Neither is more correct; the root-sibling form is
-  what the most widely cited projects happen to use.
+  what the most widely cited projects happen to use. `tv-rs` uses the
+  `crates/<name>/` form for every package, including the facade.
 - **Never nest members under `src/`.** `src/` belongs to the root package, so a
   package at `src/<name>/` becomes a package buried inside another package's
   source tree. It also makes the root package's tarball pull in the nested crates'
@@ -161,7 +163,7 @@ not `test_vendor_2`).
 
 ## 6. Naming
 
-Universal rules. Project-specific detail goes in `00-naming-conventions.md`.
+Universal rules. Project-specific detail goes in the project's own naming page.
 
 | Kind | Convention | Example |
 |---|---|---|
@@ -180,7 +182,7 @@ Universal rules. Project-specific detail goes in `00-naming-conventions.md`.
   `tv-rs::discovery` and `tv-rs::power` have no `auth.rs` because SSDP and
   Wake-on-LAN are unauthenticated; the file would have been an empty abstraction.
 - Established protocol acronyms are the only permitted abbreviation (`SSDP`,
-  `ECP`, `SSAP`, `DIAL`, `WOL`).
+  `ECP`, `SSAP`, `DIAL`, `WOL`, `MDC`, `CEC`).
 - In prose, use the **package** name when discussing publishing or dependencies
   and the **directory** name when discussing the source tree. Both appearing in one
   document is intentional, not an inconsistency.
@@ -196,20 +198,27 @@ either `docs/README.md` or `docs/00-index.md`; both are accepted and neither is
 preferred, but use **one, not both** in a given repository — two indexes drift
 apart.
 
+Numbered pages express **role**, not sequence, and the numbers may extend as the
+set grows.
+
 | Slot | Role |
 |---|---|
 | `docs/README.md` or `docs/00-index.md` | Index; always the entry point |
-| `docs/00-<topic>.md` | Conventions / standards / meta |
-| `docs/01-<topic>.md` | Playbook, specs, API reference |
-| `docs/02-<topic>.md` | External references, SDKs, tooling |
+| `docs/01-<topic>.md` | Architecture / system shape |
+| `docs/02-<topic>.md` | Playbook, specs, API reference |
 | `docs/03-<topic>.md` | State matrix / status |
+| `docs/04-<topic>.md` onward | External references, standards, plan, adoption, verification results |
 
-The numbered slot is **per topic**, so several `01-` files are legitimate (a
-project may have both an API reference and an integration spec). Numbering
-expresses role, not sequence.
+`tv-rs` runs the full sequence: `00-index` · `01-architecture` · `02-playbook` ·
+`03-matrix` · `04-external-refs` · `05-rust-package-standard` · `06-plan` ·
+`07-adoption` · `08-hil-results`.
 
-Durable, slow-changing documents stay **unnumbered** so they are not mistaken for
-the operational set: `ADR-NNN-<topic>.md`, `glossary.md`.
+Durable, slow-changing material should not be mistaken for the operational set,
+but it needs no separate filename convention. It may be a standalone unnumbered
+document (`ADR-NNN-<topic>.md`, `glossary.md`) or folded into a numbered page.
+Either way **each fact has exactly one home**: `tv-rs` keeps no ADR set —
+decisions are recorded inline in `01-architecture.md` — and the glossary is
+folded into `00-index.md` as a term map.
 
 ### Content rules
 
@@ -217,14 +226,15 @@ the operational set: `ADR-NNN-<topic>.md`, `glossary.md`.
   makes claims about code, so it drifts first. `tv-rs`'s matrix previously claimed
   that `cargo check` passed and that crates had roots they did not have. Re-run
   the commands and re-count the tests before writing status.
-- **ADRs carry a resolution table.** A decision record without a
-  Status / Context / Decision / Resolution / Consequences structure becomes a
-  stale proposal: `tv-rs`'s ADR-001 sat at "Proposed" while claiming a `LICENSE`
-  file was missing that had long since been added.
+- **Decisions carry a resolution structure.** A record without a
+  Status / Context / Decision / Resolution / Consequences shape becomes a stale
+  proposal: it states an intent and never says what was settled. This holds
+  whether the decision sits in an ADR or in an architecture page's
+  rejected-alternatives section.
 - **Record rejected options with their reason.** A recommendation that was
   considered and dropped is a decision too; without a written reason it gets
   re-litigated. (`tv-rs` rejected `socket2` in favour of `tokio`'s built-in
-  multicast support — that reasoning lives in `02-external-refs.md`.)
+  multicast support — that reasoning lives in `04-external-refs.md`.)
 - **Do not rewrite verbatim source material.** If a document is a transcript of an
   external specification, leave the facts as given. Restating them from memory is
   how accurate docs become subtly wrong.
@@ -296,7 +306,9 @@ Therefore, for a workspace:
 3. **A single root-level `cargo publish` does not publish a workspace** — it
    publishes only the root package, whose path dependencies have just become
    unsatisfiable registry requirements. This exact defect was present in `tv-rs`'s
-   release workflow and would have failed on first use.
+   release workflow and would have failed on first use. `tv-rs` keeps its order in
+   `xtask/src/main.rs::ORDER` and its concrete sequence in
+   [`01-architecture.md`](01-architecture.md#publishing).
 
 Pre-release checklist:
 
@@ -329,6 +341,7 @@ Each of these was observed in a real repository, not invented.
 | State matrix claiming unverified builds pass | Readers trust it; it is the first document to rot | Re-run the commands before writing status |
 | "Skeleton" docs after the code is complete | Docs describe a state that no longer exists | Rewrite with the code, same change |
 | Re-deriving a solved TLS/WebSocket stack | Higher risk than adopting proven prior art | Adopt, then document the choice |
+| Duplicate copies of one table across documents | Copies drift; readers cannot tell which is authoritative | One home per fact, the rest point at it |
 
 ---
 
@@ -364,5 +377,6 @@ Each manifest declares the licence with the SPDX identifier (`license.workspace 
 true` → `MIT`). crates.io records the SPDX expression; it does not require the text
 inside every tarball, and eleven copies of the same file are eleven chances to drift.
 
-If a crate ever needs its own terms, that crate gets its own `license-file` — and the
-reason goes in the ADR, not in a copy-paste.
+If a crate ever needs its own terms, that crate gets its own `license-file` — and
+the reason goes in the decision record (`01-architecture.md` here), not in a
+copy-paste.

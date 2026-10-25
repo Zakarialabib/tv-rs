@@ -2,14 +2,14 @@
 
 What each TV protocol actually does, at the level of detail you need to write or
 debug a client: ports, handshakes, payload shapes, and the traps that cost an
-afternoon. The sections are numbered (`§1`–`§9`) because
-[`architecture.md`](architecture.md)'s playbook→crate map cites them.
+afternoon. The sections are numbered (`§1`–`§10`) because
+[`01-architecture.md`](01-architecture.md)'s playbook→crate map cites them.
 
 This page is the reference the crates were built from. It is deliberately
 protocol-only: no vendor app is described here, and nothing depends on one.
 
 Source evidence: `crates/{discovery,power,tizen,webos,roku,mdc,cec,dlna,media}`,
-[`02-external-refs.md`](02-external-refs.md) for where each protocol is
+[`04-external-refs.md`](04-external-refs.md) for where each protocol is
 documented.
 
 ## §1 Discovery
@@ -103,9 +103,9 @@ then fails. The fix is a pooled channel with one reopen-and-retry, which is what
 on sets without a stored token.
 
 **What is not implemented:** token derivation for enterprise panels and AES-GCM
-payload framing on newer firmware — those return `Unsupported`. The self-signed
+payload framing on newer firmware — those return `Unsupported` (see §10). The self-signed
 certificate is handled by `TlsPolicy::Pinned` / `TrustOnFirstUse`; see
-[`architecture.md`](architecture.md#where-the-transport-crate-sits) and the TLS
+[`01-architecture.md`](01-architecture.md#where-the-transport-crate-sits) and the TLS
 section of [`../INTEGRATION.md`](../INTEGRATION.md).
 
 **The MAC is readable before pairing.** `GET http://<ip>:8001/api/v2/` (plain HTTP, no
@@ -113,14 +113,20 @@ auth header, no token) answers a JSON document whose `device.wifiMac` is the set
 hardware address:
 
 ```json
-{ "device": { "networkType": "wireless", "wifiMac": "B8:BC:5B:B1:F2:D2", "modelName": "QN55LS03RAFXZA" } }
+{
+  "device": {
+    "networkType": "wireless",
+    "wifiMac": "B8:BC:5B:B1:F2:D2",
+    "modelName": "QN55LS03RAFXZA"
+  }
+}
 ```
 
 Traps: `wifiMac` is **optional** on some firmware/models — parse it as optional and refuse
 when absent rather than falling back to something else. It is the Wi-Fi address even when
 the set is wired (`networkType: "wired"`), so a Wake-on-LAN caller should cross-check
 `networkType` before assuming it is the interface that will answer. And `device.ssid` is
-sometimes *itself* a MAC-shaped value — it is not a second source. Samsung does not
+sometimes _itself_ a MAC-shaped value — it is not a second source. Samsung does not
 document this endpoint anywhere; the provenance is community reverse-engineering,
 corroborated by five independent captures (samsung-tv-ws-api's `rest.py` issues it with no
 token; four public debug logs carry the field).
@@ -131,7 +137,7 @@ token; four public debug logs carry the field).
 **Listing installed apps works only on older sets, and only as an event.** Emit
 `{"method":"ms.channel.emit","params":{"event":"ed.installedApp.get","to":"host"}}` on the
 remote-control channel and a **Tizen ≤4** set (roughly pre-2020) replies with an
-*unsolicited* event frame:
+_unsolicited_ event frame:
 
 ```json
 {"data":{"data":[{"appId":"11101200001","app_type":2,"icon":"/opt/share/webappservice/apps_icon/FirstScreen/11101200001/250x250.png","is_lock":0,"name":"Netflix"}, …]},"event":"ed.installedApp.get","from":"host"}
@@ -149,7 +155,7 @@ Four things this fact carries, each of which has bitten a real client:
 - **`app_type` decides the launch action** — `2` is `DEEP_LINK`, `4` is `NATIVE_LAUNCH` (a `1`
   is also seen). Sending the wrong action type fails with a WebSocket close `31522`, so the
   type must be stored alongside the id.
-- **Tizen 5+ (2020+) removed the command.** The set ignores it *silently* — no error, no
+- **Tizen 5+ (2020+) removed the command.** The set ignores it _silently_ — no error, no
   frame — so a client that waits hangs until timeout. Sources: `xchwarze` issue #23,
   `homebridge-samsung-tizen`'s APPLICATIONS.md ("Many newer TVs no longer support this
   request, so there is no list"), a FHEM thread on a 2020 set, and `samsungctl` #75 on a 2021
@@ -160,8 +166,14 @@ Four things this fact carries, each of which has bitten a real client:
   capture or client issues it. DIAL on these sets is launch-only.
 
 ```json
-{ "method": "ms.remote.control",
-  "params": { "Cmd": "<base64 of the UTF-8 bytes>", "DataOfCmd": "base64", "TypeOfRemote": "SendInputString" } }
+{
+  "method": "ms.remote.control",
+  "params": {
+    "Cmd": "<base64 of the UTF-8 bytes>",
+    "DataOfCmd": "base64",
+    "TypeOfRemote": "SendInputString"
+  }
+}
 ```
 
 There is no `Option` field here, unlike `SendRemoteKey`. Some firmware wants a
@@ -171,6 +183,14 @@ the session — treat both as conditional, not mandatory. A password sent this w
 and no error frame says so. Sources: samsung-tv-ws-api `remote.py` (the base64 encoding and
 the exact frame), samsungctl issue #75 (the same frame stated independently), and
 ha-samsungtv-smart's `samsungws.py`.
+
+**App status.** `GET http://<ip>:8001/api/v2/applications/{appId}` (no pairing, no token)
+answers `{"id":..,"name":..,"running":bool,"version":..,"visible":bool}`, where
+`foreground == visible == true`. Three traps, each pinned by a test in the crate:
+`running` is a **superset** of foreground (background system apps report `running: true`,
+`visible: false`), an absent `visible` answers `None` (not `false`), and
+`POST /api/v2/applications/{id}` is a _launch_ returning a bare `true`, not a status. See
+`TizenClient::app_status` and the term map in [`00-index.md`](00-index.md).
 
 ## §4 LG webOS
 
@@ -217,7 +237,7 @@ paired session, and a focused text field — with none focused it fails rather t
 somewhere. `replace` is a boolean. Sources: webOS OSE's IME reference (method, params,
 return shape, ACG `ime.operation`) and lgtv2's command table (the consumer SSAP URI), with
 a public Home-Assistant workaround showing it working on webOS 25. The weakest of the
-verified entries here: LG's *consumer* docs do not cover `com.webos.service.ime` at all,
+verified entries here: LG's _consumer_ docs do not cover `com.webos.service.ime` at all,
 only the open-source tree does.
 
 **The MAC is not verified, and the honest answer is to keep refusing.** Neither
@@ -233,6 +253,12 @@ working from refused. That is not verified, so it is not code. Two traps either 
 `READ_NETWORK_STATE` in a pairing manifest is not evidence that `getinfo` is permitted, and
 **LGUDID is not a MAC** — it is a hash seeded from one, and must never be stored in
 `DeviceDescriptor::mac`.
+
+**Key presses have no SSAP message.** They go through the pointer socket:
+`getPointerInputSocket` returns a WebSocket, and a press is a `type:button` frame on it.
+The facade keeps one such socket per TV and reuses it across presses
+(`crates/webos/src/pool.rs`); registration must ask for `CONTROL_INPUT_TEXT` and
+`CONTROL_MOUSE_AND_KEYBOARD` or the TV refuses the path.
 
 Traps:
 
@@ -334,7 +360,8 @@ source travel over the cable. The crate drives it through a `cec-client`
 subprocess, which keeps `unsafe` and a C toolchain out of the workspace; a
 missing binary or a missing adapter is a typed `Unavailable`, not a silent
 no-op. It is optional (`client` feature) and never linked into the agent's
-default build.
+default build. A native `/dev/cec` path is planned only after a latency
+measurement ([`06-plan.md`](06-plan.md) item 5).
 
 ## §8 DLNA renderer control
 
@@ -346,6 +373,10 @@ in `tv-rs-dlna` (not in `tv-rs-media`, which only serves bytes):
 - **AVTransport**: SOAP actions `SetAVTransportURI`, `Play`, `Pause`, `Stop`,
   `Seek`. The URI pushes whatever the caller hands in; metadata travels as
   DIDL-Lite.
+- **RenderingControl**: `GetVolume`/`SetVolume`/`GetMute`/`SetMute` on its own
+  service URL, so a renderer can be castable without exposing volume. A renderer
+  with no such service reports `rendering_control_url: None` and the call is a
+  `ServiceNotFound` carrying the URN, not a silent success.
 - **GENA eventing**: `SUBSCRIBE` / renew / `UNSUBSCRIBE` against the service's
   event URL; `NOTIFY` bodies carry state. Eventing needs a reachable callback
   host on the LAN.
@@ -381,54 +412,62 @@ seg0.ts
 `TARGETDURATION` must be the rounded-up maximum segment length; a value smaller
 than the longest segment makes some players refuse the playlist.
 
-## Not implemented here
+## §10 Not implemented here
 
-**Google Cast** — mDNS discovery, then TLS on port 8009, protobuf payloads;
-the `.proto` definitions are not published, so the payloads cannot be written
-from documentation alone.
+Everything in this section returns a typed `Unsupported` carrying a phase and a
+reason (`tv_rs_transport::Unsupported`). Library code never panics and never
+silently does the wrong thing — a caller can match the error and decide.
 
-**AirPlay** — Bonjour, HTTP for media, a binary RAOP channel for audio, with
-PIN/FairPlay protection.
+**Sender protocols with a different trust model** — a partial implementation is worse
+than none, so none of these is started:
 
-**Android TV** — ADB over TCP (`5555`) gives total control (`input keyevent`,
-`am start`) but requires developer mode and a pairing step per TV. It is a
-different trust model from the protocols above. A second door, researched
-2026-10-23 in the matrix's peer landscape: the **Android TV Remote protocol v2**
-(the Google TV app's own — mTLS + Polo pairing + protobuf on fixed 6467/6466,
-pre-installed service, no developer mode). The device's name and MAC parse out
-of the **server** certificate the TV presents on the pairing port — no pairing
-needed to read it. Protocol facts are crystallized in the webos/androidtv
-research briefs; the spike that decides between them is plan item 3.11 in
-[`06-plan.md`](06-plan.md).
+- **Google Cast** — mDNS discovery, then TLS on port 8009, protobuf payloads;
+  the `.proto` definitions are not published, so the payloads cannot be written
+  from documentation alone.
+- **AirPlay** — Bonjour, HTTP for media, a binary RAOP channel for audio, with
+  PIN/FairPlay protection.
+- **Android TV** — ADB over TCP (`5555`) gives total control (`input keyevent`,
+  `am start`) but requires developer mode and a pairing step per TV, a different
+  trust model from the protocols above. A second door exists: the **Android TV
+  Remote protocol v2** (the Google TV app's own — mTLS + Polo pairing + protobuf on
+  fixed 6467/6466, pre-installed service, no developer mode). The device's name and
+  MAC parse out of the **server** certificate the TV presents on the pairing port —
+  no pairing needed to read it. The spike that decides between them is
+  [`06-plan.md`](06-plan.md) item 2.4; the deferred list below is
+  [`03-matrix.md` §Deferred](03-matrix.md#deferred).
 
-All three are sender protocols or separate trust models; a partial
-implementation is worse than none. The deferral list lives in
-[`03-matrix.md`](03-matrix.md#deferred).
+**Deferred authentication and payload work.** Each row names what is missing and what
+evidence would let it be implemented:
 
-### Handoff from SignageMaster (2026-10-22) — for the agent that owns this workspace
+| Gap                       | Vendor                    | What is missing                                                                                                                                                                                                                                                                                                                                                                                                          | Why it blocks                                                                                                                             |
+| ------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| TLS certificate pinning   | Samsung (8002), LG (3001) | **Shipping**: `TlsPolicy::TrustOnFirstUse` records the certificate a TV presents on first connect; `TlsPolicy::Pinned(fingerprint)` accepts exactly that certificate afterwards. Both need the `rustls` backend — a `native-tls` build fails those policies with `TlsError::PinningUnavailable`. The remaining gap is verification against real television certificates on hardware ([`06-plan.md`](06-plan.md) item 7). | Needs a real TV session: does the vendor client's landmark match TrustOnFirstUse, and does a pinned handshake survive a firmware renewal? |
+| Token derivation          | Samsung enterprise panels | Consumer sets return a token in `ms.channel.connect`; some commercial panels expect a token derived from the device identity plus a fixed secret.                                                                                                                                                                                                                                                                        | Needs the derivation to be observed, not guessed. A wrong hash produces an auth failure that looks like a pairing denial.                 |
+| Encrypted payload framing | Samsung, 2024+ firmware   | Some sets wrap WebSocket payloads in AES-GCM with a key agreed during pairing.                                                                                                                                                                                                                                                                                                                                           | Needs the key-agreement sequence and the nonce layout.                                                                                    |
+| Undocumented payloads     | Roku ECP, LG SSAP         | Documented commands cover the common verbs; input switching and hidden apps are not in the public surface.                                                                                                                                                                                                                                                                                                               | Needs captured traffic from the vendor app to correlate UI actions with payloads.                                                         |
+| Protobuf schemas          | Google Cast               | `.proto` definitions are not published, so a pure-Rust sender cannot be written.                                                                                                                                                                                                                                                                                                                                         | Needs the field mappings recovered from a sender implementation.                                                                          |
 
-Requested by the SignageMaster refactor spec
-(`Simple-Signage/docs/specs/ARCHITECTURE-REFACTOR-SPEC.md`, cards E6 and E3b). None of
-it exists here yet; each item states what moves in, and the boundary it must keep.
+`TlsPolicy::AcceptInvalid` survives as an explicit, named escape hatch for
+experimentation — pinning itself has landed (`TrustOnFirstUse` record on first connect,
+`Pinned` from then on), so the hatch is no longer the only way to talk to a self-signed
+television. Keeping it is bounded: one policy variant, one config branch, and the
+diagnostics rule that a pinned or TOFU session is preferred whenever one exists.
 
-**TV app producer (E6)** — builds a Tizen `.wgt` / webOS app directory / plain web
-bundle around a supplied payload. It is open work with its own exit criteria:
-[plan item 2](06-plan.md). The protocol facts it needs — manifest fields and the
-D-pad key codes — are in §3 (Tizen) and §4 (webOS) above.
+**If this work is ever picked up:**
 
-**Display probe merge (E3b)** — SignageMaster's `device-hardware/src/display/*`
-(~800 lines, EDID/connector enumeration) overlaps `tv-rs-local`. Compare the two;
-port anything `tv-rs-local` lacks, then SignageMaster depends on `tv-rs-local`
-and deletes its copy. Audio, USB and sensor probes are **not** moving here.
-Gaps found 2026-10-23 (SignageMaster path is now `crates/device/src/hardware/display/`):
-`tv-rs-local` has no public EDID byte parser (SignageMaster's `parse_edid_bytes` in
-`edid.rs` returns product code, serial and width/height in cm; `tv-rs-local`'s
-`parse_edid` is private and Linux-only) and no Windows registry EDID read. Both are
-now landed — see [plan item 2b](06-plan.md) and the CHANGELOG — leaving the consumer
-switch as the open half.
+1. **Capture first, implement second.** Traffic from the vendor's own client for
+   the exact behaviour is the only reliable source; documentation and forum posts
+   disagree and are usually stale by firmware revision.
+2. **Keep the shape.** Whatever lands must keep returning the same typed errors
+   on failure, and must not change any public signature — the crates are
+   published, so a broken promise here is a semver event.
+3. **Prove it against a device, not a mock.** A unit test can only assert the
+   payload you already believe; the failure mode being fixed is a wrong belief.
+4. **Record the firmware range.** These behaviours change between model years.
+   A pinning bypass that works on a 2019 set frequently fails on a 2024 one, and
+   the code needs to say which it was verified against.
 
-**Streaming boundary** — SignageMaster is extracting a separate `streaming-core`
-workspace (MJPEG, HLS, WebRTC, RTSP relay). `tv-rs-media` stays the minimal byte server
-described in §9; it does not depend on `streaming-core`, and `streaming-core` does not
-depend on tv-rs. The overlap between the two HLS playlist writers is accepted and
-revisited once both are published.
+Rejected: **disabling verification in the connector** (ships a security hole and hides the
+failure mode; replaced by the explicit `AcceptInvalid` policy), **vendoring vendor app
+code** (the crates speak protocols, they do not contain another product's implementation),
+and **shipping the native SDK** (proprietary; the FFI-free path is the whole point).
