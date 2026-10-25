@@ -317,23 +317,27 @@ It is a test double, so it is `publish = false` until something outside this
 workspace wants it, and it never claims a capability a real panel lacks — the whole
 point is that its answers are the honest ones.
 
-**Build it in slices, cheapest protocol first, and each slice is independently
-useful.** The order is by what the simulator needs to fake, not by vendor importance:
+**The order is by what HTTP mocking cannot reach, and the first draft of this list had
+it backwards.** `wiremock` is already a workspace dependency and already mocks the
+HTTP vendors — `crates/roku`, `crates/tizen` and `crates/agent` all use it (the Roku
+tests assert `.and(path("/keypress/PowerOff"))`). A Roku ECP simulator would therefore
+**duplicate existing coverage**, and it was originally written first here on the reasoning
+"cheapest protocol" — which is exactly the wrong criterion. The sim earns its place only
+where `wiremock` cannot follow:
 
-1. **Roku (ECP) — start here.** Plain HTTP on 8060, no TLS, no pairing, no token: the
-   whole surface is `GET /query/device-info`, `/query/apps`, `/query/active-app` and
-   `/keypress/{key}`. It proves the facade's pooling and key paths in CI with no
-   certificate story at all, and it is the only vendor where "faithful" is a few hundred
-   lines rather than a handshake.
-2. **MDC** — TCP 1515, length-prefixed frames. No TLS either, and it is the crate with a
-   real frame parser to test against, so the sim doubles as a parser fixture.
-3. **webOS (SSAP)** — WebSocket, and the first one that needs a registration/pairing
-   prompt, which is what the A2 exit actually needs.
-4. **Tizen** — the remote channel is TLS *and* a token prompt, so it is last: it needs a
-   self-signed certificate and the pairing flow, and it is the only slice where the sim's
-   own complexity rivals the code it tests.
-5. **DLNA** — SSDP advertisement plus a SOAP endpoint; belongs with G18's work rather than
+1. **MDC — start here.** TCP 1515 with length-prefixed binary frames: no HTTP, so nothing
+   in the tree mocks it today. It is also the crate with a real frame parser, so the sim
+   doubles as a parser fixture and the first slice needs no certificate story.
+2. **webOS (SSAP)** — a WebSocket, which `wiremock` does not do, and the first slice that
+   needs a registration/pairing prompt — which is what the A2 exit actually wants proven.
+3. **Tizen** — the remote channel is TLS *and* a token prompt, so it needs a self-signed
+   certificate and the pairing flow. Last of the three because its own complexity starts to
+   rival the code it tests.
+4. **DLNA** — SSDP multicast plus a SOAP endpoint. Belongs with G18's work rather than
    ahead of it, since the subscription surface is what would use it.
+5. **Roku (ECP)** — **not a slice.** Plain HTTP on 8060, already covered by `wiremock`.
+   Adding it would be a second mechanism for a solved problem, which is the mistake this
+   plan already records twice (G15's unicast probe, and the DIAL manifest claim).
 
 Each slice must answer with the **real** shapes from
 [`01-playbook.md`](01-playbook.md) — the point is that the sim's answers are the honest
