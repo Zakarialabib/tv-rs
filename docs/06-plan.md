@@ -116,30 +116,48 @@ returning the address on both vendors, and a test pinning the parsed field.
 ### 2.2 B2 · G10b (the remainder) — foreground on Tizen
 
 Roku landed (`/query/active-app`) and the facade's `foreground()` answers there. Tizen is
-open, and a trace attempt has now been made and **failed without reaching a verdict** —
-recorded here so the next attempt starts from what it found rather than from zero.
+open, and the trace is now **conclusive** — the plan's own premise is dead, and a verified
+path exists in its place.
 
-**What the failed attempt established** (leads, not verdicts — nothing below has two
-independent sources yet, so none of it is code):
+**The plan's premise fails the two-source bar.** The item assumed `GET /api/v2/applications`
+(the bare list) would answer with a foreground marker. **No source, capture, or client issues
+that call.** Not in `ha-samsungtv-smart` (which uses a WebSocket method), not in
+`samsung-tv-ws-api` (whose `rest.py` has a per-app status method and *no* list method at
+all), and not in the four panel captures in `cleanyourtv` issue #441 — every one of them
+uses the `/{id}` form. Implementing the bare list would build an endpoint nobody has observed,
+so it stays unimplemented.
 
-- The endpoint exists. A public capture shows `POST
-  http://<ip>:8001/api/v2/applications/111299001912` answering `HTTP 200`, and a
-  Home-Assistant thread documents the same `http://{host}:8001/api/v2/applications/{value}`
-  form as "running an app on the TV".
-- **The trap is that `/api/v2/applications` and `/api/v2/applications/{id}` are different
-  operations.** The first is the *list*; the second *launches* by id. A reader who greps
-  for the endpoint and takes the first hit will implement a launcher while believing they
-  are implementing a foreground read — which is exactly the confusion G16 hit with DIAL,
-  and the reason this needs a captured *list* response rather than a captured *launch*.
-- An app-list-shaped fragment surfaced (an entry with `app_type`, `icon`, and the numeric
-  id `111299001912`), consistent with a list carrying per-app fields. Whether the
-  foreground marker is `running`, `visible`, or something else is **not established** —
-  both names appear in search results, neither in a verbatim list response.
+**What is verified, and is the way to close the gap:**
 
-**To finish it:** capture one real `GET /api/v2/applications` response body (not the
-`/{id}` form), confirm the field that identifies the foreground entry, and find a second
-independent implementation that reads it. Until then Tizen keeps refusing, which is the
-right answer for an untraced command.
+```
+GET http://<ip>:8001/api/v2/applications/{appId}      # no pairing, no token
+  -> 200 {"id":..,"name":..,"running":bool,"version":..,"visible":bool}
+  foreground == entry.visible == true
+```
+
+Four independent sources agree on that body: the FHEM thread's verbatim captures (topic 57595
+p.51), `ha-samsungtv-smart`'s production code (`_set_running_app()` reads
+`result.get("visible")` as the foreground marker), `cleanyourtv` #441 (four panels, all
+`200`, with `404` for an absent app), and `dzikus/tizen-camera-pip` (id parity with the launch
+call). So the call is real — the *list* was not.
+
+**Three traps, all verified, all worth a test each:**
+
+1. **`running` is not foreground.** It is a superset: background system apps report
+   `running:true, visible:false`. A caller keying on `running` alone reports a background
+   app as the one on screen. The FHEM author's own note says exactly this ("Netflix startet
+   automatisch und läuft im Hintergrund" — so he asks whether the app is *sichtbar*).
+2. **`visible` can be absent** on some firmware/models (a Home-Assistant thread hit
+   `KeyError: 'visible'`). A missing field is **not** `false` — it means "this panel does
+   not tell me", and that must not be reported as a background app.
+3. **`POST /api/v2/applications/{id}` is a launch**, not a status: it returns a bare `true`
+   with `content-length: 5`. Do not read the response of the launch as an app's state.
+
+**To finish it:** the facade already lists installed apps (`AppLaunch::installed_apps()`), and
+the ids that list returns are the same ids this query takes — so the shape is "iterate the
+known ids, query each, pick the `visible:true` one". That is a *point query per app*, not a
+list read, which is why the verification above is about a single app and not a collection.
+`foreground()` on Tizen stays honest-refusing until that is built.
 
 ### 2.3 D — the rest, in the companion's order
 
