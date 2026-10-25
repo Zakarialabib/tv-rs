@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*", "xtask"]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.89"
 license = "MIT"
@@ -11,23 +11,23 @@ repository = "https://github.com/Zakarialabib/tv-rs"
 
 [workspace.dependencies]
 # --- protocol crates (path + version: `path` is stripped at publish time) ---
-tv-rs-core = { path = "crates/core", version = "0.3.0" }
-tv-rs-discovery = { path = "crates/discovery", version = "0.3.0" }
-tv-rs-power = { path = "crates/power", version = "0.3.0" }
-tv-rs-roku = { path = "crates/roku", version = "0.3.0" }
-tv-rs-mdc = { path = "crates/mdc", version = "0.3.0" }
-tv-rs-tizen = { path = "crates/tizen", version = "0.3.0" }
-tv-rs-webos = { path = "crates/webos", version = "0.3.0" }
+tv-rs-core = { path = "crates/core", version = "0.4.0" }
+tv-rs-discovery = { path = "crates/discovery", version = "0.4.0" }
+tv-rs-power = { path = "crates/power", version = "0.4.0" }
+tv-rs-roku = { path = "crates/roku", version = "0.4.0" }
+tv-rs-mdc = { path = "crates/mdc", version = "0.4.0" }
+tv-rs-tizen = { path = "crates/tizen", version = "0.4.0" }
+tv-rs-webos = { path = "crates/webos", version = "0.4.0" }
 # Local display probe: no network, no TV control. Published separately.
-tv-rs-local = { path = "crates/local", version = "0.3.0" }
+tv-rs-local = { path = "crates/local", version = "0.4.0" }
 # Shared transport vocabulary; must be published before tizen/webos.
 #
 # `default-features = false` keeps a TLS stack out of the crates that only need
 # the `Unsupported` error vocabulary; `tizen`/`webos` opt back into the
 # connector and frame reader with `features = ["ws"]`.
-tv-rs-transport = { path = "crates/transport", version = "0.3.0" }
+tv-rs-transport = { path = "crates/transport", version = "0.4.0" }
 # Media server (206 + HLS). Published last: nothing in the workspace depends on it.
-tv-rs-media = { path = "crates/media", version = "0.3.0" }
+tv-rs-media = { path = "crates/media", version = "0.4.0" }
 
 # --- runtime / async ---
 tokio = { version = "1", features = ["net", "time", "io-util", "fs", "macros", "rt-multi-thread", "sync"] }

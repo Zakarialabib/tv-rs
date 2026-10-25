@@ -2197,7 +2197,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -2215,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-agent"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -2231,14 +2231,14 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-app"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "tv-rs-cec"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "thiserror",
@@ -2247,7 +2247,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "clap",
  "thiserror",
@@ -2259,7 +2259,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -2272,7 +2272,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-discovery"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -2285,7 +2285,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-dlna"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "log",
@@ -2298,7 +2298,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-local"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "tokio",
@@ -2308,7 +2308,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-mdc"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "thiserror",
@@ -2319,7 +2319,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-media"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "axum",
  "bytes",
@@ -2330,7 +2330,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-power"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -2341,7 +2341,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-roku"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -2356,7 +2356,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-tizen"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2375,7 +2375,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-transport"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "futures-util",
  "native-tls",
@@ -2390,7 +2390,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-webos"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -2933,7 +2933,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xtask"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "tokio",
  "tv-rs",

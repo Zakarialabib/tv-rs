@@ -200,6 +200,13 @@ impl TizenRemoteKey {
     }
 }
 
+/// `GET /api/v2/applications/{app_id}` — one installed application's status.
+///
+/// A *point* query, not a list: the bare `/api/v2/applications` form is unverified
+/// (see the plan's B2 verdict), so the id comes from the caller — either a preset
+/// from [`crate::apps`] or an id read out of the DIAL manifest.
+pub const TIZEN_APP_STATUS_PATH: &str = "/api/v2/applications";
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -234,10 +241,3 @@ mod tests {
         assert_eq!(TizenLaunchAction::DeepLink.as_str(), "DEEP_LINK");
     }
 }
-
-/// `GET /api/v2/applications/{app_id}` — one installed application's status.
-///
-/// A *point* query, not a list: the bare `/api/v2/applications` form is unverified
-/// (see the plan's B2 verdict), so the id comes from the caller — either a preset
-/// from [`crate::apps`] or an id read out of the DIAL manifest.
-pub const TIZEN_APP_STATUS_PATH: &str = "/api/v2/applications";

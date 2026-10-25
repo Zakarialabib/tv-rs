@@ -145,6 +145,7 @@ fn publish(args: &[String]) -> Result<(), String> {
 
     if let Some(version) = options.version.as_deref() {
         bump_version(version)?;
+        resync_lockfile()?;
     }
 
     preflight(&options)?;
@@ -259,6 +260,7 @@ fn preflight(options: &Options) -> Result<(), String> {
     if !Path::new("Cargo.toml").exists() {
         return Err("Cargo.toml is missing".to_string());
     }
+    assert_members_follow_the_workspace_version()?;
 
     gate(&["fmt", "--all", "--check"], "cargo fmt --all --check")?;
     gate(
@@ -277,6 +279,60 @@ fn preflight(options: &Options) -> Result<(), String> {
         gate(&["test", "--workspace"], "cargo test --workspace")?;
     }
     Ok(())
+}
+
+/// Fails when a workspace member hardcodes its own version.
+///
+/// A member that says `version = "0.3.0"` instead of `version.workspace = true`
+/// does not follow a bump. The workspace package moves to the new version, the
+/// member stays behind, and the pinned `{ path = ..., version = "^NEW" }` entry
+/// beside it then cannot resolve against a member that disagrees — surfacing as
+/// `failed to select a version ... candidate versions found which didn't match`,
+/// which reads like a registry problem rather than a one-line manifest mistake.
+/// One crate did exactly this and blocked a release; the check is cheap and the
+/// failure is much easier to read than the symptom.
+fn assert_members_follow_the_workspace_version() -> Result<(), String> {
+    let mut offenders = Vec::new();
+    let entries = std::fs::read_dir("crates").map_err(|error| error.to_string())?;
+    for entry in entries {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let manifest = entry.path().join("Cargo.toml");
+        if !manifest.exists() {
+            continue;
+        }
+        let text = std::fs::read_to_string(&manifest).map_err(|error| error.to_string())?;
+        let hardcoded = text.lines().any(|line| {
+            let trimmed = line.trim();
+            trimmed.starts_with("version = \"") && !trimmed.contains("workspace")
+        });
+        if hardcoded {
+            offenders.push(entry.file_name().to_string_lossy().into_owned());
+        }
+    }
+    if offenders.is_empty() {
+        Ok(())
+    } else {
+        offenders.sort();
+        Err(format!(
+            "these crates hardcode their version instead of `version.workspace = true`, so a \
+             version bump would leave them behind: {}",
+            offenders.join(", ")
+        ))
+    }
+}
+
+/// Re-resolves the workspace after a version bump.
+///
+/// `bump_version` rewrites `Cargo.toml` and leaves `Cargo.lock` pinning the OLD
+/// version of every member. The new `version = "X.Y.Z"` requirement beside each
+/// `path` then cannot be satisfied by a lock entry that disagrees, and the very
+/// next cargo command dies with
+/// `failed to select a version for the requirement ... candidate versions found
+/// which didn't match` — which reads like a missing publish rather than a stale
+/// lock. `--workspace` is the narrow form: it re-resolves the members and leaves
+/// every third-party version alone, which is exactly what a bump needs.
+fn resync_lockfile() -> Result<(), String> {
+    gate(&["update", "--workspace"], "cargo update --workspace")
 }
 
 fn gate(args: &[&str], label: &str) -> Result<(), String> {
