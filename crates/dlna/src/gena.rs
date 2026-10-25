@@ -220,7 +220,7 @@ pub fn timeout_header() -> String {
 
 /// Extract the AVTransport `eventSubURL` from a device description document.
 ///
-/// Mirrors [`crate::soap::extract_av_transport_control_url`] but reads
+/// Mirrors [`crate::soap::extract_service_control_url`] but reads
 /// `eventSubURL` instead of `controlURL`. Both live in the same `<service>`
 /// block, so a renderer advertising one without the other is malformed — hence
 /// the distinct error.

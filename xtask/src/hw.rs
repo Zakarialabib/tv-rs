@@ -2,7 +2,7 @@
 //!
 //! This is the honest counterpart to the hosted test suite, which never touches a
 //! device. It discovers, probes power and capabilities, prints a table, and — when
-//! asked — appends a row to `docs/hil-results.md`. When nothing answers it says so and
+//! asked — appends a row to `docs/08-hil-results.md`. When nothing answers it says so and
 //! exits successfully: "no hardware here" is a fact to record, not a build failure.
 
 use std::time::Duration;
@@ -67,7 +67,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             loopback_count
         );
         if write_doc {
-            println!("docs/hil-results.md left unchanged (there is nothing to record).");
+            println!("docs/08-hil-results.md left unchanged (there is nothing to record).");
         }
         return Ok(());
     }
@@ -129,7 +129,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
 
     if write_doc {
         append_rows(&rows)?;
-        println!("\nAppended {} row(s) to docs/hil-results.md", rows.len());
+        println!("\nAppended {} row(s) to docs/08-hil-results.md", rows.len());
     }
 
     Ok(())
@@ -163,7 +163,7 @@ fn print_table(rows: &[Probe]) {
 fn append_rows(rows: &[Probe]) -> Result<(), String> {
     use std::io::Write;
 
-    let path = std::path::Path::new("docs/hil-results.md");
+    let path = std::path::Path::new("docs/08-hil-results.md");
     let mut file = std::fs::OpenOptions::new()
         .append(true)
         .open(path)

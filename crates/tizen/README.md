@@ -18,7 +18,7 @@ The parts below are implemented and covered by tests **against mocks**:
 What makes it experimental is not the shape of the code but the ground under it: **no
 captured transcript from physical hardware is committed here**. Test counts prove the
 parsers handle the frames we believe Samsung sends; they cannot prove Samsung sends
-them. `docs/hil-results.md` in the repository is the table that closes that gap, and it
+them. `docs/08-hil-results.md` in the repository is the table that closes that gap, and it
 is empty.
 
 Until it has rows:

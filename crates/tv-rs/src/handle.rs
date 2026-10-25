@@ -136,7 +136,7 @@ impl TvClient {
     /// webOS refuses, and that is a vendor answer rather than a gap: its
     /// `getSystemInfo` key set is closed and carries no MAC, LG staff have said twice
     /// that no MAC API is provided, and the one endpoint that does carry one is
-    /// open-source-only and gated at API level 29. Recorded in `docs/01-playbook.md`
+    /// open-source-only and gated at API level 29. Recorded in `docs/02-playbook.md`
     /// §4.
     ///
     /// # Errors

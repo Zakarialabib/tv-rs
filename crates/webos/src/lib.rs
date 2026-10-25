@@ -30,9 +30,9 @@
 //! # }
 //! ```
 //!
-//! The TLS certificate-pinning bypass needed for reliable port `3001` use against
-//! self-signed TV certificates is deferred to Phase 3 (`docs/01-playbook.md` §10
-//! Gap A); see [`TlsPolicy`].
+//! The TLS certificate-pinning work needed for reliable port `3001` use against
+//! self-signed TV certificates is deferred to Phase 3 (`docs/02-playbook.md` §10,
+//! "TLS certificate pinning"); see [`TlsPolicy`].
 
 // The public error enums embed `tokio_tungstenite`'s error, which is large by
 // construction. Boxing it would break the #[from] conversions callers rely on,

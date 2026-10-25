@@ -2,7 +2,7 @@
 //!
 //! This crate implements the Phase-1 Tizen remote channel (the legacy unencrypted
 //! WebSocket on port 8001 and the modern TLS WebSocket on port 8002) plus the DIAL
-//! launcher on port 8080. See `docs/01-playbook.md` §3 for the protocol facts and
+//! launcher on port 8080. See `docs/02-playbook.md` §3 for the protocol facts and
 //! §10 for the reverse-engineering gaps that are intentionally deferred.
 //!
 //! Blocked capabilities (TLS certificate-pinning bypass, enterprise token math and
@@ -79,7 +79,8 @@ pub use remote::{normalize_host, LaunchRoute, LaunchStrategy, PairingOutcome, Ti
 pub use token_store::{load_token, save_token, PairedTv, SamsungTokenStore};
 pub use tv_rs_transport::TlsPolicy;
 pub use types::{
-    validate_remote_key_code, TizenLaunchAction, TizenRemoteKey, TIZEN_APP_ID, TIZEN_CMD_CLICK,
-    TIZEN_DEVICE_INFO_PATH, TIZEN_DIAL_DESC_PATH, TIZEN_DIAL_LAUNCH_PREFIX, TIZEN_DIAL_PORT,
-    TIZEN_REMOTE_TYPE, TIZEN_REMOTE_WS_PATH, TIZEN_WSS_PORT, TIZEN_WS_PORT,
+    validate_remote_key_code, TizenLaunchAction, TizenRemoteKey, TIZEN_APP_ID,
+    TIZEN_APP_STATUS_PATH, TIZEN_CMD_CLICK, TIZEN_DEVICE_INFO_PATH, TIZEN_DIAL_DESC_PATH,
+    TIZEN_DIAL_LAUNCH_PREFIX, TIZEN_DIAL_PORT, TIZEN_REMOTE_TYPE, TIZEN_REMOTE_WS_PATH,
+    TIZEN_WSS_PORT, TIZEN_WS_PORT,
 };

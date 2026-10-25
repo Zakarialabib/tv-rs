@@ -478,8 +478,8 @@ impl TizenClient {
 
     /// Sets the TLS certificate-validation policy.
     ///
-    /// Use [`TlsPolicy::AcceptInvalid`] only as the Phase-1 interim for the
-    /// playbook §10 Gap A pinning bypass; it is unsafe for production.
+    /// Use [`TlsPolicy::AcceptInvalid`] only as an interim escape hatch for the
+    /// `docs/02-playbook.md` §10 TLS-certificate-pinning gap; it is unsafe for production.
     pub fn with_tls_policy(mut self, tls: TlsPolicy) -> Self {
         self.tls = tls;
         self

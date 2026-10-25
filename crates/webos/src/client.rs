@@ -543,7 +543,7 @@ impl WebosSession {
     ///
     /// The IME service takes **plain UTF-8** — unlike Samsung's equivalent, which
     /// base64s the string — and answers `{"returnValue": true}`. Recorded with its
-    /// sources in `docs/01-playbook.md` §4.
+    /// sources in `docs/02-playbook.md` §4.
     ///
     /// **A focused text field is required.** With none focused the television fails
     /// rather than typing somewhere, and nothing in the reply distinguishes that from

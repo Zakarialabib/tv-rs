@@ -68,7 +68,7 @@
 //! # Where the protocol facts live
 //!
 //! The manifest fields and the key names are documented in
-//! [`docs/01-playbook.md`](https://github.com/Zakarialabib/tv-rs/blob/main/docs/01-playbook.md)
+//! [`docs/02-playbook.md`](https://github.com/Zakarialabib/tv-rs/blob/main/docs/02-playbook.md)
 //! §3 (Tizen) and §4 (webOS), and each one is explained where it is set — in
 //! `manifest.rs` and `keys.rs`.
 

@@ -1,6 +1,6 @@
 //! Serde payload structs exchanged with the Tizen TV.
 //!
-//! Naming follows `<Protocol><Payload>` from `docs/00-rust-package-standard.md` §6.
+//! Naming follows `<Protocol><Payload>` from `docs/05-rust-package-standard.md` §6.
 
 use crate::error::TizenError;
 use serde::{Deserialize, Serialize};
@@ -134,7 +134,7 @@ pub struct TizenRemoteCommand {
 /// `Cmd`. Sending the key shape with text in it types nothing on some firmware and
 /// something unexpected on others, so the difference is a type the compiler enforces.
 ///
-/// Source and traps: `docs/01-playbook.md` §3.
+/// Source and traps: `docs/02-playbook.md` §3.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TizenTextCommand {
     /// Always `ms.remote.control`.

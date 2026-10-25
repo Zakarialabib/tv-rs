@@ -15,8 +15,8 @@ use thiserror::Error;
 /// ```
 /// use tv_rs_transport::Unsupported;
 ///
-/// let gap = Unsupported::new(3, "playbook §10 Gap B");
-/// assert_eq!(gap.to_string(), "unsupported (phase 3): playbook §10 Gap B");
+/// let gap = Unsupported::new(3, "token derivation (playbook §10)");
+/// assert_eq!(gap.to_string(), "unsupported (phase 3): token derivation (playbook §10)");
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 #[error("unsupported (phase {phase}): {reason}")]

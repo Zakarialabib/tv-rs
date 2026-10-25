@@ -8,7 +8,7 @@
 //!
 //! - [`TlsPolicy`] and [`connector`] — the single home of the
 //!   `danger_accept_invalid_*` calls that stand in for the certificate-pinning
-//!   bypass of `docs/01-playbook.md` §10 Gap A.
+//!   bypass of `docs/02-playbook.md` §10 (TLS certificate pinning).
 //! - [`read_until`] — the budgeted frame reader that keeps a silent TV from
 //!   hanging the caller, replacing four slightly different inline loops.
 //! - [`Unsupported`] — the error every crate returns for a deferred
@@ -27,7 +27,7 @@
 //! let plain = connector(TlsPolicy::Strict, false).expect("plain connector");
 //! assert!(matches!(plain, tokio_tungstenite::Connector::Plain));
 //!
-//! let gap = Unsupported::new(3, "playbook §10 Gap A");
+//! let gap = Unsupported::new(3, "TLS certificate pinning (playbook §10)");
 //! assert_eq!(gap.phase, 3);
 //! ```
 

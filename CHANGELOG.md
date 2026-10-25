@@ -276,7 +276,7 @@ Nothing yet.
   against `MdcDevice`, verified feature gating of LFD surfaces (`LampOrPanelHours`
   gated behind `supporting`, `ScreenCapture` never advertised), confirmed clean
   resolution in `xtask publish --dry-run`, and recorded the `UNVERIFIED` status
-  row in `docs/hil-results.md`.
+  row in `docs/08-hil-results.md`.
 
 - **Public EDID parser and active-display EDID enumeration in `tv-rs-local`
   (SignageMaster handoff E3b)**: `tv_rs_local::parse_edid(&[u8]) -> Result<Edid,
@@ -455,7 +455,7 @@ stack, and an absent device is a typed`MdcError::Io` rather than a hang.
 
 - **The specification documents** (`docs/spec/00-device-model.md`,
   `docs/spec/01-reconciliation.md`). They described a model that shipped; the design
-  now lives in rustdoc, `docs/architecture.md` and this file, and `docs/06-plan.md` is
+  now lives in rustdoc, `docs/01-architecture.md` and this file, and `docs/06-plan.md` is
   the only plan. The adoption contract moved to `docs/07-adoption.md`.
 
 ## [0.2.0] - 2026-10-20

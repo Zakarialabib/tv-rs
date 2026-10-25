@@ -6,7 +6,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum TizenError {
     /// A capability that is intentionally deferred until the reverse-engineering
-    /// blockers in `docs/01-playbook.md` §10 are resolved.
+    /// blockers in `docs/02-playbook.md` §10 are resolved.
     ///
     /// This replaces the old `unimplemented!()` stubs: the public API must never
     /// panic, so blocked feature gaps surface as a recoverable error instead.

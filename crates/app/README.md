@@ -97,7 +97,7 @@ artifact you can review.
 ## Where the protocol facts come from
 
 The manifest fields and key names are documented in the workspace's
-[`docs/01-playbook.md`](../../docs/01-playbook.md) §3 (Tizen) and §4 (webOS), and each
+[`docs/02-playbook.md`](../../docs/02-playbook.md) §3 (Tizen) and §4 (webOS), and each
 one is explained where it is set in `manifest.rs` and `keys.rs`.
 
 ## Version note
