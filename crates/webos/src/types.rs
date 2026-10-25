@@ -58,6 +58,14 @@ pub enum SsapUri {
     SystemLauncherListApps,
     /// Report the application currently in the foreground.
     SystemLauncherForegroundApp,
+    /// Type text into the television's focused field, through the IME service.
+    ///
+    /// The text is plain UTF-8 — Samsung base64s its equivalent, webOS does not — and
+    /// the service answers `{"returnValue": true}`. Recorded with its sources in
+    /// `docs/01-playbook.md` §4.
+    ImeInsertText,
+    /// Close the IME input session, as the remote's Enter key does.
+    ImeSendEnterKey,
     /// Set the output volume (0-100).
     AudioSetVolume,
     /// Read the current output volume.
@@ -106,6 +114,8 @@ impl SsapUri {
             Self::AudioSetMute => "ssap://audio/setMute",
             Self::AudioGetMute => "ssap://audio/getMute",
             Self::TvSwitchInput => "ssap://tv/switchInput",
+            Self::ImeInsertText => "ssap://com.webos.service.ime/insertText",
+            Self::ImeSendEnterKey => "ssap://com.webos.service.ime/sendEnterKey",
             Self::SystemTurnOff => "ssap://system/turnOff",
             Self::TvTurnOffScreen => "ssap://com.webos.service.tv.power/turnOffScreen",
             Self::MediaPause => "ssap://media.controls/pause",

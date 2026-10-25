@@ -539,6 +539,37 @@ impl WebosSession {
             })
     }
 
+    /// Types `text` into the field the television currently has focused.
+    ///
+    /// The IME service takes **plain UTF-8** — unlike Samsung's equivalent, which
+    /// base64s the string — and answers `{"returnValue": true}`. Recorded with its
+    /// sources in `docs/01-playbook.md` §4.
+    ///
+    /// **A focused text field is required.** With none focused the television fails
+    /// rather than typing somewhere, and nothing in the reply distinguishes that from
+    /// a field that took the text — so a caller that needs certainty reads the field
+    /// back, or does not type at all.
+    ///
+    /// # Errors
+    ///
+    /// Returns the SSAP error when the session refuses, which includes the permission
+    /// case: the IME service is guarded (`ime.operation`), so a refusal is a real
+    /// outcome rather than a transport failure.
+    pub async fn insert_text(&mut self, text: &str, replace: bool) -> Result<()> {
+        self.request(
+            SsapUri::ImeInsertText,
+            Some(serde_json::json!({ "text": text, "replace": replace })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Closes the IME input session, as the remote's Enter key does.
+    pub async fn send_enter_key(&mut self) -> Result<()> {
+        self.request(SsapUri::ImeSendEnterKey, None).await?;
+        Ok(())
+    }
+
     /// Enables or disables mute.
     pub async fn set_mute(&mut self, mute: bool) -> Result<()> {
         self.request(

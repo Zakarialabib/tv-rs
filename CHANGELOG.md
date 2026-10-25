@@ -119,6 +119,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **webOS types text (companion gap G6, the webOS half)**: `WebosClient::insert_text()` and
+  `WebosSessionPool::insert_text()` reach the IME service at
+  `ssap://com.webos.service.ime/insertText` with **plain UTF-8** — unlike Samsung's
+  equivalent, which base64s the string — plus `send_enter_key()` to close the session.
+  `TvClient::type_text()` answers on webOS now, alongside Roku, and webOS advertises
+  `Capability::TextInput`. Two honest limits are in the docs rather than hidden: the
+  service needs a **focused text field** (with none focused the set fails without saying
+  which, so "nothing was typed" is indistinguishable from success), and it is guarded by
+  `ime.operation`, so a permission refusal is a real outcome rather than a transport
+  failure. Tizen's `SendInputString` is traced and recorded but not yet built, so Tizen
+  keeps refusing and does not advertise.
+
+### Added
+
 - **Samsung panels report their hardware address (companion gap G4, the Samsung half)**:
   `TizenClient::device_info()` reads `GET http://<ip>:8001/api/v2/`, which needs **no
   pairing and no token** — so a facade can learn the address a Wake-on-LAN packet needs

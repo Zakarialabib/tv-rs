@@ -63,6 +63,8 @@ impl TvClient {
                 // `ssap://com.webos.applicationManager/listApps` answers with the
                 // installed catalogue, so this is a fact rather than a promise.
                 set.insert(Capability::AppList);
+                // `ssap://com.webos.service.ime/insertText` types into the focused field.
+                set.insert(Capability::TextInput);
             }
             Self::Roku { .. } => {
                 set.insert(Capability::Key);
@@ -389,9 +391,15 @@ impl TextInput for TvClient {
                 .type_text(text)
                 .await
                 .map_err(|error| map::roku(&error, Capability::TextInput)),
-            Self::Tizen { .. } | Self::Webos { .. } => {
-                Err(TvError::Unsupported(Capability::TextInput))
-            }
+            // webOS types through its IME service, and the text is plain UTF-8.
+            Self::Webos { client, pool, .. } => pool
+                .insert_text(client, text, false)
+                .await
+                .map_err(|error| map::webos(&error, Capability::TextInput)),
+            // Tizen's `SendInputString` is traced and recorded but not yet built; the
+            // refusal names the capability, so the control greys out rather than
+            // silently typing nothing.
+            Self::Tizen { .. } => Err(TvError::Unsupported(Capability::TextInput)),
         }
     }
 }
@@ -694,6 +702,7 @@ mod tests {
                     Capability::InputSelect,
                     Capability::Volume,
                     Capability::AppList,
+                    Capability::TextInput,
                 ],
             ),
             (
@@ -867,12 +876,14 @@ mod tests {
         assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
     }
 
-    /// Advertised where it is delivered: Roku's `Lit_<char>` is documented, and
-    /// webOS/Tizen have no traced text-entry surface at all.
+    /// Advertised where it is delivered: Roku types with `Lit_<char>` and webOS
+    /// through its IME service, both traced to sources. Tizen's `SendInputString` is
+    /// traced but not yet built, so it does not advertise — a capability without an
+    /// implementation behind it is exactly what this asserts against.
     #[test]
-    fn text_input_is_advertised_only_where_it_is_documented() {
+    fn text_input_is_advertised_only_where_it_is_delivered() {
         assert!(roku().capabilities().contains(Capability::TextInput));
-        assert!(!webos().capabilities().contains(Capability::TextInput));
+        assert!(webos().capabilities().contains(Capability::TextInput));
         assert!(!tizen().capabilities().contains(Capability::TextInput));
     }
 
@@ -890,19 +901,29 @@ mod tests {
         assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
     }
 
-    /// webOS and Tizen refuse by naming `TextInput`, never `Key`: a device that can
-    /// press buttons may still have no way to take a string.
+    /// Tizen refuses by naming `TextInput`, never `Key`: a device that can press
+    /// buttons may still have no way to take a string, and its own text-entry frame is
+    /// traced but not yet built.
     #[tokio::test]
-    async fn the_unverified_vendors_refuse_to_type() {
-        for client in [tizen(), webos()] {
-            let error = TextInput::type_text(&client, "hello", CommandId::new())
-                .await
-                .expect_err("no traced surface");
-            assert!(
-                matches!(error, TvError::Unsupported(Capability::TextInput)),
-                "{error:?}"
-            );
-        }
+    async fn the_untraced_vendor_refuses_to_type() {
+        let error = TextInput::type_text(&tizen(), "hello", CommandId::new())
+            .await
+            .expect_err("not built yet");
+        assert!(
+            matches!(error, TvError::Unsupported(Capability::TextInput)),
+            "{error:?}"
+        );
+    }
+
+    /// webOS types through its IME service, so the call must reach the device rather
+    /// than answer `Unsupported` — an unreachable address gives a transport error,
+    /// which is the proof it was sent.
+    #[tokio::test]
+    async fn webos_type_text_reaches_the_device() {
+        let error = TextInput::type_text(&webos(), "hello", CommandId::new())
+            .await
+            .expect_err("10.0.0.3 is not there");
+        assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
     }
 
     #[tokio::test]

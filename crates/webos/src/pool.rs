@@ -419,6 +419,24 @@ impl<F: WebosSessionFactory> WebosSessionPool<F> {
             .collect())
     }
 
+    /// Types `text` into the television's focused field, through the IME service.
+    ///
+    /// Plain UTF-8, unlike Samsung's base64 equivalent. The service is guarded
+    /// (`ime.operation`), so a permission refusal is a real outcome rather than a
+    /// transport failure, and it needs a focused text field — with none focused the
+    /// set fails without saying which.
+    pub async fn insert_text(&self, client: &WebosClient, text: &str, replace: bool) -> Result<()> {
+        self.dispatch(
+            client,
+            &Op::Request(
+                SsapUri::ImeInsertText,
+                Some(serde_json::json!({ "text": text, "replace": replace })),
+            ),
+        )
+        .await?;
+        Ok(())
+    }
+
     /// Switches the active input through the pooled session.
     ///
     /// `input_id` is the webOS id (`HDMI_1`, `tv`, …); mapping a vendor-neutral

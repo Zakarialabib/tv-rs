@@ -149,12 +149,15 @@ still have no way to take a string.
 IME `insertText` and Tizen `SendInputString`, and both traced to two independent sources,
 now recorded in [`01-playbook.md`](01-playbook.md) §3 and §4 with their exact frames:
 
-- **Tizen** — `ms.remote.control` with `{"Cmd": "<base64>", "DataOfCmd": "base64",
-  "TypeOfRemote": "SendInputString"}`. Needs the pairing token like any other remote
-  command; some firmware wants a `custom.remote.textReceived` broadcast first and
-  `SendInputEnd` to close, both conditional.
-- **webOS** — `ssap://com.webos.service.ime/insertText` with `{"text": …, "replace":
-  bool}`, plain UTF-8 rather than base64.
+- **Tizen** — **still open, and the last half of this item**: `ms.remote.control` with
+  `{"Cmd": "<base64>", "DataOfCmd": "base64", "TypeOfRemote": "SendInputString"}`. Needs
+  the pairing token like any other remote command; some firmware wants a
+  `custom.remote.textReceived` broadcast first and `SendInputEnd` to close, both
+  conditional. The frame is recorded in the playbook §3, so this is implementation
+  rather than research.
+- **webOS** — **landed**: `WebosClient::insert_text()` and the pool's method, with
+  `send_enter_key()` to close the session. `type_text()` answers on webOS and the
+  capability is advertised.
 
 Both need a focused text field and fail without one, which is worth saying in the
 documentation of whichever method lands: the honest answer is "nothing was typed", and no
