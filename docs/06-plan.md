@@ -251,7 +251,23 @@ and three of the four were already done:
   and a design question sits in front of it: DLNA renderers are not part of `TvClient`
   (which holds Tizen/webOS/Roku plus the erased MDC handle), so a push surface must decide
   whether a renderer becomes a fourth arm or a separate subscription handle. **That
-  decision is the work, not the plumbing.**
+  decision is the work, not the plumbing — and it is now decided: a separate handle.**
+
+  **Decision: a renderer does not become a `TvClient` arm.** The precedent is G10e, which
+  hit the identical question for MDC and answered it the same way: `TvVendor` has no MDC
+  variant and the facade exposes `mdc_handle()` returning an erased handle, because a
+  panel that is not a television should not be smuggled into the television enum. A DLNA
+  MediaRenderer is not a television either — it is a device you cast *to*, with no power,
+  no input and no key surface — so the push API is a subscription handle over
+  `gena_client::subscribe_renderer`, not a fourth arm. Two further reasons this is the
+  cheaper answer: `TvClient`'s arms each carry a vendor client *and* a connection pool,
+  neither of which a renderer has, and `DeviceHandle` already exists for the
+  many-devices case the companion cares about.
+
+  **What that leaves to build:** a `SubscriptionHandle` (or equivalent) that owns a
+  `SubscriptionRegistry` tick loop, surfaces `TransportEvent`s to a caller as they arrive
+  rather than on poll, and renews before expiry — the registry already tracks the
+  renew-failure budget, so the missing part is the delivery side, not the bookkeeping.
 
 **The pattern is now four for four, and it is the most useful thing this page has
 produced.** G15, G16 and G17 were all reported open and all three were already
@@ -300,6 +316,30 @@ CI: connection reuse (A1), pairing vs token expiry (A2), wake (A4), key input (B
 It is a test double, so it is `publish = false` until something outside this
 workspace wants it, and it never claims a capability a real panel lacks — the whole
 point is that its answers are the honest ones.
+
+**Build it in slices, cheapest protocol first, and each slice is independently
+useful.** The order is by what the simulator needs to fake, not by vendor importance:
+
+1. **Roku (ECP) — start here.** Plain HTTP on 8060, no TLS, no pairing, no token: the
+   whole surface is `GET /query/device-info`, `/query/apps`, `/query/active-app` and
+   `/keypress/{key}`. It proves the facade's pooling and key paths in CI with no
+   certificate story at all, and it is the only vendor where "faithful" is a few hundred
+   lines rather than a handshake.
+2. **MDC** — TCP 1515, length-prefixed frames. No TLS either, and it is the crate with a
+   real frame parser to test against, so the sim doubles as a parser fixture.
+3. **webOS (SSAP)** — WebSocket, and the first one that needs a registration/pairing
+   prompt, which is what the A2 exit actually needs.
+4. **Tizen** — the remote channel is TLS *and* a token prompt, so it is last: it needs a
+   self-signed certificate and the pairing flow, and it is the only slice where the sim's
+   own complexity rivals the code it tests.
+5. **DLNA** — SSDP advertisement plus a SOAP endpoint; belongs with G18's work rather than
+   ahead of it, since the subscription surface is what would use it.
+
+Each slice must answer with the **real** shapes from
+[`01-playbook.md`](01-playbook.md) — the point is that the sim's answers are the honest
+ones, so a shape the playbook does not have is a shape the sim must not invent. That makes
+the playbook the spec for this crate, and any gap found while building a slice is a
+playbook finding first.
 
 **Exit:** `cargo test` covers the A1 and A2 exits with no hardware; the sim's
 transcripts are checked against the protocol facts in
