@@ -18,15 +18,15 @@ use url::Url;
 
 use crate::error::{Result, TizenError};
 use crate::payload::{
-    TizenChannelConnectData, TizenChannelConnectParams, TizenChannelConnectPayload,
-    TizenChannelConnectResponse, TizenChannelEmitParams, TizenChannelEmitPayload,
-    TizenChannelLaunchData, TizenDialLaunchResponse, TizenLegacyLaunchPayload, TizenRemoteCommand,
-    TizenRemoteCommandParams,
+    parse_device_info, DeviceInfo, TizenChannelConnectData, TizenChannelConnectParams,
+    TizenChannelConnectPayload, TizenChannelConnectResponse, TizenChannelEmitParams,
+    TizenChannelEmitPayload, TizenChannelLaunchData, TizenDialLaunchResponse,
+    TizenLegacyLaunchPayload, TizenRemoteCommand, TizenRemoteCommandParams,
 };
 use crate::types::{
     validate_remote_key_code, TizenLaunchAction, TizenRemoteKey, TIZEN_APP_ID, TIZEN_CMD_CLICK,
-    TIZEN_DIAL_DESC_PATH, TIZEN_DIAL_LAUNCH_PREFIX, TIZEN_DIAL_PORT, TIZEN_REMOTE_TYPE,
-    TIZEN_REMOTE_WS_PATH, TIZEN_WSS_PORT, TIZEN_WS_PORT,
+    TIZEN_DEVICE_INFO_PATH, TIZEN_DIAL_DESC_PATH, TIZEN_DIAL_LAUNCH_PREFIX, TIZEN_DIAL_PORT,
+    TIZEN_REMOTE_TYPE, TIZEN_REMOTE_WS_PATH, TIZEN_WSS_PORT, TIZEN_WS_PORT,
 };
 
 /// Default number of inbound frames inspected while awaiting a handshake reply or
@@ -516,6 +516,27 @@ impl TizenClient {
             .error_for_status()?;
         let raw = response.text().await?;
         Ok(TizenDialLaunchResponse { raw })
+    }
+
+    /// Reads the set's device information, before any pairing.
+    ///
+    /// `GET http://<ip>:8001/api/v2/` needs no token and no auth header — it is
+    /// readable before the remote channel is ever opened, which is what makes it the
+    /// one place a Samsung set will tell you its hardware address. The playbook
+    /// records the field, its traps and the five captures behind it (§3).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TizenError::Http`] when the set does not answer and
+    /// [`TizenError::Protocol`] when it answers without a `device` object.
+    pub async fn device_info(&self) -> Result<DeviceInfo> {
+        let url = format!(
+            "http://{}:{}{TIZEN_DEVICE_INFO_PATH}",
+            self.host, TIZEN_WS_PORT
+        );
+        let response = self.http.get(url).send().await?.error_for_status()?;
+        let body = response.text().await?;
+        parse_device_info(&body)
     }
 
     /// Fetches the raw DIAL device description XML from [`TIZEN_DIAL_DESC_PATH`].

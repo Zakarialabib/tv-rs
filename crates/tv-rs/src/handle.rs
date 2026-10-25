@@ -118,10 +118,18 @@ impl TvClient {
 
     /// Ask the TV for its own hardware address, and remember it.
     ///
-    /// Roku answers from `/query/device-info`, preferring the Wi-Fi address over
-    /// the wired one. Tizen and webOS have no verified equivalent in this
-    /// workspace, so they refuse the operation rather than guess at an endpoint:
-    /// the caller supplies their address instead.
+    /// Roku answers from `/query/device-info`, preferring the Wi-Fi address over the
+    /// wired one; Tizen answers from `GET /api/v2/`, which needs no pairing at all.
+    ///
+    /// On Samsung the reported address is the Wi-Fi one **even when the set is wired**,
+    /// so a wired set may not answer a magic packet sent to it — `device_info()` exposes
+    /// `network_type` for a caller that needs to tell them apart.
+    ///
+    /// webOS refuses, and that is a vendor answer rather than a gap: its
+    /// `getSystemInfo` key set is closed and carries no MAC, LG staff have said twice
+    /// that no MAC API is provided, and the one endpoint that does carry one is
+    /// open-source-only and gated at API level 29. Recorded in `docs/01-playbook.md`
+    /// §4.
     ///
     /// # Errors
     ///
@@ -137,10 +145,17 @@ impl TvClient {
                 *mac = info.mac();
                 Ok(mac.clone())
             }
-            Self::Tizen { .. } => Err(TvError::UnsupportedOperation {
-                vendor: "samsung",
-                operation: "learn_mac",
-            }),
+            // `GET /api/v2/` needs no pairing, so this works before the remote
+            // channel is ever opened — which is the point: a set that is asleep
+            // cannot be paired with, and its address is exactly what waking it needs.
+            Self::Tizen { client, mac, .. } => {
+                let info = client
+                    .device_info()
+                    .await
+                    .map_err(|error| map::tizen(&error, Capability::Wake))?;
+                *mac = info.mac();
+                Ok(mac.clone())
+            }
             Self::Webos { .. } => Err(TvError::UnsupportedOperation {
                 vendor: "lg",
                 operation: "learn_mac",
@@ -891,22 +906,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn learn_mac_refuses_where_no_verified_query_exists() {
+    async fn learn_mac_refuses_only_where_the_vendor_offers_nothing() {
+        // Samsung reaches `GET /api/v2/`. The address here is unreachable, so a
+        // transport error is the proof that the request was sent — what matters is
+        // that it is *not* a refusal.
         let mut tizen = tizen();
-        let error = tizen.learn_mac().await.expect_err("no verified query");
+        let error = tizen.learn_mac().await.expect_err("10.0.0.1 is not there");
         assert!(
-            matches!(
-                error,
-                TvError::UnsupportedOperation {
-                    vendor: "samsung",
-                    ..
-                }
-            ),
-            "{error:?}"
+            !matches!(error, TvError::UnsupportedOperation { .. }),
+            "Samsung has a verified endpoint: {error:?}"
         );
 
+        // webOS refuses, and that is a vendor answer rather than a gap: its
+        // `getSystemInfo` key set is closed and carries no MAC, LG staff have said
+        // twice that no MAC API is provided, and the one endpoint that does carry one
+        // is open-source-only and gated at API level 29.
         let mut webos = webos();
-        let error = webos.learn_mac().await.expect_err("no verified query");
+        let error = webos.learn_mac().await.expect_err("no such API");
         assert!(
             matches!(error, TvError::UnsupportedOperation { vendor: "lg", .. }),
             "{error:?}"
@@ -1019,6 +1035,7 @@ mod tests {
             model_name: None,
             serial_number: None,
             usn: None,
+            mac: None,
         };
 
         let client = TvClient::from_discovered_with(&discovered, TlsPolicy::Pinned(fingerprint))

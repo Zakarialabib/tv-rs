@@ -92,12 +92,12 @@ their network stack when they sleep. `TvClient::with_mac` supplies that address,
 the convenience half — learning the address instead of asking for it.
 
 `TvClient::learn_mac()` answers on Roku (`/query/device-info`, Wi-Fi address preferred
-over wired). **Samsung is now unblocked and only needs implementing:** the endpoint this
-item named does exist — `GET http://<ip>:8001/api/v2/` answers `device.wifiMac`, needs no
-pairing, and is corroborated by five independent captures. It is recorded in
-[`01-playbook.md`](01-playbook.md) §3 with its traps (`wifiMac` is optional on some
-firmware, it is the Wi-Fi address even on a wired set so `networkType` should be
-cross-checked, and `device.ssid` is sometimes MAC-shaped — not a second source).
+over wired) and now on **Samsung** — `TizenClient::device_info()` reads
+`GET http://<ip>:8001/api/v2/`, which needs no pairing, so the address is learnable before
+the remote channel is ever opened. `DeviceInfo` carries `network_type` alongside the
+address because the reported MAC is the Wi-Fi one even on a wired set; a test pins that a
+MAC-shaped `ssid` is not read as an address, and another that a document without a
+`device` object is a protocol error rather than "no MAC".
 
 **webOS keeps refusing, and the reason is now precise rather than "untraced."** The two
 endpoints the item named return no MAC at all: `getSystemInfo`'s key set is closed

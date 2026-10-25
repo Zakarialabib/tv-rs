@@ -56,10 +56,11 @@ pub use discovery::{
 };
 pub use error::{Result, TizenError};
 pub use payload::{
-    TizenChannelConnectData, TizenChannelConnectParams, TizenChannelConnectPayload,
-    TizenChannelConnectResponse, TizenChannelConnectResponseData, TizenChannelEmitParams,
-    TizenChannelEmitPayload, TizenChannelLaunchData, TizenDialLaunchResponse,
-    TizenLegacyLaunchPayload, TizenRemoteCommand, TizenRemoteCommandParams,
+    parse_device_info, DeviceInfo, TizenChannelConnectData, TizenChannelConnectParams,
+    TizenChannelConnectPayload, TizenChannelConnectResponse, TizenChannelConnectResponseData,
+    TizenChannelEmitParams, TizenChannelEmitPayload, TizenChannelLaunchData,
+    TizenDialLaunchResponse, TizenLegacyLaunchPayload, TizenRemoteCommand,
+    TizenRemoteCommandParams,
 };
 pub use pool::{
     BoxedChannelFactory, DynConnectionPool, LiveChannelFactory, TizenChannel, TizenChannelFactory,
@@ -78,6 +79,6 @@ pub use token_store::{load_token, save_token, PairedTv, SamsungTokenStore};
 pub use tv_rs_transport::TlsPolicy;
 pub use types::{
     validate_remote_key_code, TizenLaunchAction, TizenRemoteKey, TIZEN_APP_ID, TIZEN_CMD_CLICK,
-    TIZEN_DIAL_DESC_PATH, TIZEN_DIAL_LAUNCH_PREFIX, TIZEN_DIAL_PORT, TIZEN_REMOTE_TYPE,
-    TIZEN_REMOTE_WS_PATH, TIZEN_WSS_PORT, TIZEN_WS_PORT,
+    TIZEN_DEVICE_INFO_PATH, TIZEN_DIAL_DESC_PATH, TIZEN_DIAL_LAUNCH_PREFIX, TIZEN_DIAL_PORT,
+    TIZEN_REMOTE_TYPE, TIZEN_REMOTE_WS_PATH, TIZEN_WSS_PORT, TIZEN_WS_PORT,
 };

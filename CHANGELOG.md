@@ -119,6 +119,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Samsung panels report their hardware address (companion gap G4, the Samsung half)**:
+  `TizenClient::device_info()` reads `GET http://<ip>:8001/api/v2/`, which needs **no
+  pairing and no token** — so a facade can learn the address a Wake-on-LAN packet needs
+  *before* the remote channel is ever opened, which is the point: a set that is asleep
+  cannot be paired with, and waking it is exactly what needs the address.
+  `TvClient::learn_mac()` answers on Tizen now, alongside Roku, and webOS is the only
+  vendor left refusing. `DeviceInfo` exposes `wifi_mac`, `network_type` and `model_name`,
+  because the address is the Wi-Fi one **even when the set is wired** — a wired set may
+  not answer a packet sent to it, and `network_type` is how a caller tells the two apart.
+  Every field is optional: `wifiMac` is absent on some firmware and the honest answer
+  there is "no address", never a guess. Two traps are pinned by tests: a document without
+  a `device` object is a `Protocol` error rather than an empty answer (a firmware change
+  should not hide behind "no MAC"), and a MAC-shaped `ssid` is not an address.
+
+### Added
+
 - **`Reconciler::release()` — a quarantined device can be put back in rotation (companion
   gap G8)**: the Fleet › "Release from quarantine" action had no lever. Quarantine is a
   stop, not a verdict, so whoever fixed the television needs a way to say "try this one

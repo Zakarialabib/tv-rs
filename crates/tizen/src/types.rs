@@ -19,6 +19,13 @@ pub const TIZEN_REMOTE_WS_PATH: &str = "/api/v2/channels/samsung.remote.control"
 /// Path of the DIAL device description document.
 pub const TIZEN_DIAL_DESC_PATH: &str = "/ssdp/device-desc.xml";
 
+/// Path of the unauthenticated device-information document.
+///
+/// It shares port 8001 with the remote channel's WebSocket, at a different path — and
+/// unlike the channel, this read needs no pairing and no token. Where the MAC it
+/// carries comes from, and its traps: `docs/01-playbook.md` §3.
+pub const TIZEN_DEVICE_INFO_PATH: &str = "/api/v2/";
+
 /// Prefix for DIAL app-launch requests (`POST {prefix}{app_id}`).
 pub const TIZEN_DIAL_LAUNCH_PREFIX: &str = "/ws/apps/";
 
