@@ -6,20 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Added — G15, G16, G17
+Nothing yet.
+
+## [0.4.0] - 2026-10-25
+
+### Added
 
 - **`discover_stream(scanner, on_found)`**: per-display callback discovery; the app and
   `tv-rs-webos` use it. `discover_with` folds into it.
+
 - **G15 — probe by address** (`tv_rs::probe(address)`): Roku `device-info`, then Tizen
   DIAL, then the webOS port as an inference. `DiscoveredTv` gained `mac`, closing the
   last piece of G4.
+
 - **G16 — DIAL launch as its own operation** (`TizenClient::dial_launch` +
   `AppLaunch::launch_with_payload`): an app id and an optional payload, its own operation.
+
 - **G17 — AVTransport state and progress**: `get_transport_info` / `get_position_info`,
   parsing split so it is testable without a renderer.
-
-
-### Added
 
 - **DLNA renderers report and take volume** — `GetVolume` / `SetVolume` / `GetMute` /
   `SetMute` over the UPnP `RenderingControl` service, as free functions and behind a new
@@ -42,15 +46,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   moment its descriptor resolves instead of only when the reply window closes.
   `discover_with` is now `discover_stream(scanner, |_| {})`, so there is one
   implementation rather than two.
-
-### Changed
-
-- **`PowerControl::wake` for Roku falls back to a magic packet** when ECP does not
-  answer — a set that is fully off answers nothing — but only when the handle
-  carries an address. Without one it returns the ECP error instead of pretending.
-
-
-### Added
 
 - **Text entry, Roku half (companion gap G6)**: `RokuClient::type_text()` types a string
   one `keypress/Lit_<char>` request per character, and a new `TextInput` trait (with a
@@ -76,16 +71,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   never used); Roku answers `/query/apps` through the facade now, rather than
   only from the caller. Entries with no id are skipped and a missing title stays
   `None`.
+
 - **webOS input switching** (`ssap://tv/switchInput`): `WebosSessionPool::switch_input`
   plus an `InputSelect` implementation for `TvClient::Webos`, so the companion's
   Inputs sheet appears on an LG set. `active_input()` answers `None` — webOS has no
   reliable "which input is live" read. Ids are `HDMI_<n>` (1-based) and `tv` for the
   tuner; `Usb` and `Hdmi(0)` are refused rather than guessed at. Unverified on a
   real panel, so the ids are pinned by tests.
+
 - **`VolumeControl::mute()`**: a read next to `set_mute`, with `Ok(None)` meaning
   "cannot tell". webOS answers `ssap://audio/getMute` (the URI already existed and
   was never used), `MockBackend` reports its own state, and MDC returns `None`
   rather than guessing.
+
 - **An Android block no longer reads as "TV off" (companion gap A5)**: from Android
   17 (target SDK 37) a LAN socket needs the runtime `ACCESS_LOCAL_NETWORK`
   permission, and until the user grants it the platform refuses the call — `EPERM`
@@ -102,6 +100,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   empty discovery list. The healer maps the new remedy to `Quarantine`: the
   permission belongs to the platform, so retrying burns battery and waking wakes
   nothing.
+
 - **Installed applications through the facade — companion gap G5**: `AppLaunch::installed_apps()`
   now has real arms, so the fleet grid's "what is on this television" column has a source.
   webOS enumerates through `ssap://com.webos.applicationManager/listApps` (the pool already
@@ -110,6 +109,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Tizen answers `Unsupported(AppList)` rather than `Unsupported(AppLaunch)`, because the remote
   channel starts an application it cannot enumerate and the two facts are independent. Advertised
   only where delivered, and the webOS reply shape is recorded in the playbook with its sources.
+
 - **Roku foreground reads (`tv-rs-roku` + the facade — companion gap G10b, Roku half)**:
   `RokuClient::query_active_app()` fetches `GET /query/active-app` and
   `parse_active_app()` turns it into `RokuActiveApp` — the active app's id and name,
@@ -120,6 +120,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a test. Tizen's half stays open: no foreground command for the consumer remote
   channel is verified in this workspace, and the candidate endpoint needs provenance
   before it becomes code.
+
 - **webOS key input (`tv-rs-webos` + the facade — companion gap G10a)**: a press is
   now a `type:button` frame on the pointer socket `getPointerInputSocket` hands
   back. `PointerWire` / `PointerFactory` keep that connection testable without a
@@ -131,6 +132,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   facade maps `Key` to the channel's own button vocabulary (`webos_key`) and now
   advertises `Capability::Key` for webOS. **Unverified on a real panel**: the fake
   TV cannot answer SSAP, so the wire form is pinned by unit tests.
+
 - **Wake, and the address it needs (companion gap A4)**: `TvClient` can wake a panel
   at last. Roku goes over ECP — `PowerControl::wake()` calls the `PowerOn` keypress the
   client already had, because a Roku answers while the screen is dark. Tizen and webOS
@@ -143,10 +145,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Samsung and webOS rather than guessing at an endpoint; `DeviceDescriptor::mac`
   reports whatever the handle knows, so a fleet can persist it. A malformed address is
   reported as `ProtocolError::Malformed` instead of being broadcast.
+
 - **`RokuDeviceInfo::mac()`** — the Wi-Fi address when the box is wireless, the
   Ethernet one when it is wired.
-
-### Added
 
 - **Tizen types text, so text entry is complete on all three vendors (companion gap G6)**:
   `TizenClient` gains the `SendInputString` frame — `ms.remote.control` with the text
@@ -161,8 +162,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   string is refused rather than sent, because a frame that types nothing is
   indistinguishable from one that failed.
 
-### Added
-
 - **webOS types text (companion gap G6, the webOS half)**: `WebosClient::insert_text()` and
   `WebosSessionPool::insert_text()` reach the IME service at
   `ssap://com.webos.service.ime/insertText` with **plain UTF-8** — unlike Samsung's
@@ -174,8 +173,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ime.operation`, so a permission refusal is a real outcome rather than a transport
   failure. Tizen's `SendInputString` is traced and recorded but not yet built, so Tizen
   keeps refusing and does not advertise.
-
-### Added
 
 - **Samsung panels report their hardware address (companion gap G4, the Samsung half)**:
   `TizenClient::device_info()` reads `GET http://<ip>:8001/api/v2/`, which needs **no
@@ -191,8 +188,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a `device` object is a `Protocol` error rather than an empty answer (a firmware change
   should not hide behind "no MAC"), and a MAC-shaped `ssid` is not an address.
 
-### Added
-
 - **`Reconciler::release()` — a quarantined device can be put back in rotation (companion
   gap G8)**: the Fleet › "Release from quarantine" action had no lever. Quarantine is a
   stop, not a verdict, so whoever fixed the television needs a way to say "try this one
@@ -203,8 +198,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `HealerLadder::release()` is the count half. The attempt is audited either way
   (`release_from_quarantine`, `ok` or `skipped`), because a technician grepping the log for
   a device should see that someone tried, not only when it worked.
-
-### Added
 
 - **MDC reaches the facade (companion gap G10e)**: `tv_rs::mdc_handle(address)` returns a
   commercial panel as the same erased `DeviceHandle` the rest of the fleet is driven
@@ -221,8 +214,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and would otherwise never be empty — the undialable address would reach the socket layer
   as a confusing resolution failure instead.
 
-### Added
-
 - **`platform-verifier`: the operating system's root store for `tv-rs-transport`**
   (companion gap G7). `rustls-native-certs` reads a *system* store, which Android (a
   keystore) and iOS (its own roots) do not expose — so a mobile build with
@@ -237,6 +228,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   carry into the verifier; the no-arg `ConfigVerifierExt` would have discarded them.
 
 ### Changed
+
+- **`PowerControl::wake` for Roku falls back to a magic packet** when ECP does not
+  answer — a set that is fully off answers nothing — but only when the handle
+  carries an address. Without one it returns the ECP error instead of pretending.
 
 - **A silent SSDP probe is now an error, not an empty list** (`tv-rs-discovery` +
   the facade — companion gap G7). Discovery counted no datagrams: when `send_to`
@@ -263,14 +258,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   none. `serde.rs`'s manual `Key`/`Input` impls passed `String` where
   `serialize_str` wants `&str` and were missing `SerializeMap`; `from_str` had an
   unworkable `'static` bound.
+
 - **`ObservedField` no longer promises a `verified_at_ms`.** An `Instant` is
   monotonic and has no epoch, so an absolute timestamp is not derivable from it.
   The field is gone; the wire carries `age_ms`, `confidence` and `value` — which is
   what the companion's G2 was asking for.
+
 - Every capability's serde output is now asserted equal to its `as_str()` label,
   so the derive and the label cannot drift. Two redundant `#[must_use]`s on
   functions returning `Result` are gone.
-
 ## [0.3.0] - 2026-10-24
 
 ### Added
