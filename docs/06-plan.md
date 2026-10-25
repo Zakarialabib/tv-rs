@@ -31,12 +31,13 @@ workspace, and it is deliberately narrow:
   crate emits the webOS app directory and returns a typed error naming that tool
   rather than pretending to have built an installable package.
 
-**Where this stands.** The crate exists and is tested — descriptor validation, both
-manifests, the bundle, the ZIP writer, the generated bridge and the typed `.ipk`
-refusal: 42 tests, and the `.wgt` it produces was opened by two independent readers
-(Python's `zipfile`, which also verified every CRC, and Windows' `Expand-Archive`).
-What is left is the publish, which rides item 1, and the consumer deleting its own
-wrapper once the registry has the crate.
+**Where this stands — and it is done on this side.** The crate exists, is tested
+(descriptor validation, both manifests, the bundle, the ZIP writer, the generated bridge
+and the typed `.ipk` refusal: 42 tests), the `.wgt` it produces was opened by two
+independent readers (Python's `zipfile`, which also verified every CRC, and Windows'
+`Expand-Archive`), and **it published in 0.3.0**. The only thing left is the consumer
+deleting its own wrapper — which is SignageMaster's work, not this workspace's, and is why
+this section is only waiting on a downstream commit rather than on code.
 
 **Exit:** `tv-rs-app` publishes; Tizen and web bundles are produced from a payload and
 open with the platform's own tooling; the manifest and key-map functions are covered
@@ -61,7 +62,8 @@ in its `win32.rs` are output *control*, which is [item 6](#6-ddcci-in-tv-rs-loca
 and the expansion plan's `tv-rs-local` v2 — not part of the probe.
 
 **Exit:** SignageMaster depends on `tv-rs-local` for EDID identity and deletes
-`edid.rs`; this section is deleted.
+`edid.rs`; this section is deleted. **The tv-rs half is complete** — what this section now
+waits on is the consumer's commit, not any work in this repository.
 
 ## 2. Companion-app gaps — the tv-rs side
 
@@ -109,9 +111,15 @@ distinguish working from refused. That is a refusal with evidence behind it, not
 our research. Refusing
 is the honest answer until someone traces one.
 
-**Exit:** a provenance-traced source for each endpoint (added to
-[`01-playbook.md`](01-playbook.md) the way the other protocol facts are), `learn_mac()`
-returning the address on both vendors, and a test pinning the parsed field.
+**This half is closed as a refusal with evidence, not left open.** The exit below asked
+for `learn_mac()` on *both* vendors; webOS cannot satisfy it, and the evidence above is why
+that is a result rather than an unfinished task. What remains on A4 is nothing this
+workspace can do: the address is not obtainable on a consumer LG panel through any
+documented surface.
+
+**Exit (met for Roku and Samsung; refused with evidence for webOS):** provenance-traced
+sources in [`01-playbook.md`](01-playbook.md), `learn_mac()` answering on both vendors that
+provide one, and a test pinning the parsed field.
 
 ### 2.2 B2 · G10b (the remainder) — foreground on Tizen
 
@@ -166,10 +174,21 @@ app reports `running: true`, and an absent `visible` parses as `None` rather tha
 
 **What is left, and why it is not guessed:** the id source. The REST list is unverified, and
 the DIAL manifest — which `apps.rs` names as "list[ing] what is installed" — has **no parser
-anywhere in the workspace**: `dial_device_description()` returns raw XML, and the facade
-reads only the manufacturer out of it. Parsing it would mean inventing where the ids live,
+anywhere in the workspace**: `dial_device_description()` returns raw XML, there is **no DIAL
+XML fixture in the repo at all**, and the facade reads that description with a substring
+check for `"samsung"`. Parsing it would mean inventing both the endpoint and the XML shape,
 which this workspace does not do. So `foreground()` on Tizen stays refusing, and the refusal
 now has a precise reason: the endpoint is done and tested, the ids are not.
+
+**A trace for the id source is in flight** (the same two-source bar as the endpoint above):
+does DIAL's `/apps` endpoint exist on Samsung sets and what does it return, does the
+device-description XML list apps or only services, what do real clients do to enumerate,
+and — if enumeration exists only over the WebSocket control channel — which method. Until
+that comes back with two sources, nothing here is implemented.
+
+**A trap this item should not repeat.** `apps.rs`'s comment asserting that the DIAL manifest
+"lists what is installed" is itself an unverified claim, and it is the kind that reads as
+settled fact. Whoever picks this up should treat it as a lead, not as documentation.
 
 ### 2.3 D — the rest, in the companion's order
 
@@ -209,30 +228,39 @@ unused. A unicast SSDP probe *would* add something the facade's vendor-by-vendor
 cannot (it could name a device whose HTTP APIs are unreachable), but nothing needs that
 today, so it is a note rather than code.
 
-- **G16** Tizen DIAL URL launching through `TvClient::open_url`. **The premise conflates
-  two different operations, and that is the decision to make before writing anything.**
-  - The audit's pointers were wrong in detail: `crates/tizen/src/apps.rs` only *resolves
-    app ids*. The DIAL surface is in `crates/tizen/src/client.rs` —
-    `build_dial_launch_url(host, dial_port, app_id)`, `TizenClient::dial_device_description()`
-    and the `dial_port` field. Both ends do exist.
-  - But they do not meet. `TvClient::open_url(url)` means "load this page" (that is what
-    the webOS arm does, through the browser), while DIAL's launch is
-    `http://host:8080/ws/apps/{app_id}` — **an app id with an optional payload**, not a
-    URL. Wiring one into the other would make `open_url` mean two different things
-    depending on vendor, which is the quiet divergence the capability table exists to
-    prevent.
-  - **Decided shape:** keep `open_url` refusing on Tizen — a set with no browser has no
-    browser — and expose the DIAL capability as its own operation, taking an app id and a
-    payload, because that is what the protocol actually offers. A caller wanting to
-    deep-link a URL into a Tizen player app passes it as that payload, and the operation's
-    name says what happened.
-- **G17** DLNA `get_transport_info` / `get_position_info`, so a cast's position is a
-  cold read rather than a session-scoped estimate. **Open, premise holds:** neither
-  action appears in the crate.
-- **G18** event streams (`tv-rs` push instead of request/response) — the companion's
-  own list added it while this plan was written; it follows Tier B. **Open:** the only
-  `subscribe` in the tree is the agent's MQTT transport, which is not a facade push
-  API.
+**The D list is empty of buildable items, and that is a finding rather than a
+completion.** Each remaining bullet was checked against the code before this was written,
+and three of the four were already done:
+
+- **G16 — DIAL launching: DONE.** The item's own "decided shape" — *expose the DIAL
+  capability as its own operation, taking an app id and a payload* — is exactly what
+  exists: `build_dial_launch_url` (`crates/tizen/src/client.rs:234`),
+  `TizenClient::dial_launch(app_id, payload)` (line 625), `launch_with_payload` as a
+  **public trait method** (`crates/core/src/capability.rs:422`), and the facade routing
+  Tizen + payload to DIAL (`crates/tv-rs/src/handle.rs:348`) — whose doc comment already
+  states that `open_url` stays untouched because a set with no browser has no browser.
+  Nothing to build.
+- **G17 — DLNA transport info: DONE.** `get_transport_info` and `get_position_info` exist
+  as free functions (`crates/dlna/src/soap.rs:292`/`301`) *and* as `AvTransport` trait
+  methods (lines 394/396). The audit's "neither action appears in the crate" was false.
+- **G18 — event push: open, but smaller than the audit said.** The audit claimed "the only
+  `subscribe` in the tree is the agent's MQTT transport". False: `tv-rs-dlna` carries a
+  complete GENA surface — `subscribe_renderer`, `renew`, `unsubscribe`, a
+  `SubscriptionRegistry` with renew-failure accounting, `parse_notify_body`, and
+  `TransportEvent`/`TransportState`. What is genuinely missing is the **facade** push API,
+  and a design question sits in front of it: DLNA renderers are not part of `TvClient`
+  (which holds Tizen/webOS/Roku plus the erased MDC handle), so a push surface must decide
+  whether a renderer becomes a fourth arm or a separate subscription handle. **That
+  decision is the work, not the plumbing.**
+
+**The pattern is now four for four, and it is the most useful thing this page has
+produced.** G15, G16 and G17 were all reported open and all three were already
+implemented; G18 was reported smaller than it is. Every one failed the same way: a grep
+for the identifier the plan used, concluding "absent" when the *behaviour* existed under
+another name or in another crate. The rule that follows is in the
+`docs-source-reconciliation` skill — **before implementing a plan item, grep for the
+capability, not the signature** — and it is why this page now records what was checked
+next to each item rather than only what remains.
 
 ### 2.4 X · Android TV as a target — the spike that decides (not a crate yet)
 
@@ -278,14 +306,13 @@ transcripts are checked against the protocol facts in
 [`01-playbook.md`](01-playbook.md); a doc records which exits are now CI-verified and
 which still need a panel.
 
-## 4. `tv-rs-sony` — Bravia REST + IRCC
+## 4. `tv-rs-sony` — DROPPED
 
-Sony's consumer and pro panels expose a documented JSON-REST API plus IRCC-IP for key
-presses, authenticated with a pre-shared key. It is the smallest remaining vendor
-integration: power, input, volume, app launch, and key codes.
-
-**Exit:** passes the conformance suite; capability set is honest (no absolute volume if
-the API only takes steps); pairing failure maps to `Auth` with `Remedy::Reprovision`.
+**Removed at the owner's instruction** ("certainly not sony"). It is not deferred and not
+queued: it is out of scope for this workspace. Recorded rather than deleted so the next
+reader does not rediscover the Bravia REST + IRCC research and re-add it as an open item —
+the expansion proposal ([`08-expansion-plan.md`](08-expansion-plan.md)) still lists
+`tv-rs-bravia` among its port candidates, and that entry is a proposal, not a commitment.
 
 ## 5. Native CEC — only after a measurement
 
@@ -331,7 +358,7 @@ Every open item above, shipped in the order of this page: `tv-rs-core`, protocol
 crates, `tv-rs-mdc`, then the agent, media and facade. Under the policy in
 `CONTRIBUTING.md` the additions are a **minor** bump.
 
-**Exit:** all fourteen crates published at the same version; `docs/hil-results.md` has
+**Exit:** all sixteen crates published at the same version; `docs/hil-results.md` has
 at least one real row; the vendor capability table
 ([`03-matrix.md` §Capability truth](03-matrix.md#capability-truth)) states each
 vendor's absence rather than implying a capability it lacks.
