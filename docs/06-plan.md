@@ -115,23 +115,31 @@ returning the address on both vendors, and a test pinning the parsed field.
 
 ### 2.2 B2 · G10b (the remainder) — foreground on Tizen
 
-Roku landed: `GET /query/active-app` (verified against Roku's External Control
-Protocol documentation, recorded in [`01-playbook.md`](01-playbook.md) §5) parses to
-`RokuActiveApp`, the facade's `foreground()` returns the active app's id, and
-`Capability::Foreground` is advertised. The home screen reports `Roku` with no `id`,
-so it answers `None` — "nothing is in front" — rather than inventing an application.
+Roku landed (`/query/active-app`) and the facade's `foreground()` answers there. Tizen is
+open, and a trace attempt has now been made and **failed without reaching a verdict** —
+recorded here so the next attempt starts from what it found rather than from zero.
 
-**Tizen is open, and not because the code is hard:** this workspace has no verified
-foreground-app command for the consumer remote channel. The playbook records
-`ssap://com.webos.applicationManager/getForegroundAppInfo` for webOS and nothing
-equivalent for Samsung, and a capability without a verified vendor command does not
-exist here. The candidate (`GET http://<ip>:8001/api/v2/applications`, reading the
-entry with `running: true`) needs the same provenance treatment the Roku endpoint just
-got — two independent implementations, recorded in the playbook — before it becomes
-code.
+**What the failed attempt established** (leads, not verdicts — nothing below has two
+independent sources yet, so none of it is code):
 
-**Exit:** the endpoint traced and recorded, `TizenClient` returning the foreground app
-id, `foreground()` answering on Tizen, and a test pinning the parsed shape.
+- The endpoint exists. A public capture shows `POST
+  http://<ip>:8001/api/v2/applications/111299001912` answering `HTTP 200`, and a
+  Home-Assistant thread documents the same `http://{host}:8001/api/v2/applications/{value}`
+  form as "running an app on the TV".
+- **The trap is that `/api/v2/applications` and `/api/v2/applications/{id}` are different
+  operations.** The first is the *list*; the second *launches* by id. A reader who greps
+  for the endpoint and takes the first hit will implement a launcher while believing they
+  are implementing a foreground read — which is exactly the confusion G16 hit with DIAL,
+  and the reason this needs a captured *list* response rather than a captured *launch*.
+- An app-list-shaped fragment surfaced (an entry with `app_type`, `icon`, and the numeric
+  id `111299001912`), consistent with a list carrying per-app fields. Whether the
+  foreground marker is `running`, `visible`, or something else is **not established** —
+  both names appear in search results, neither in a verbatim list response.
+
+**To finish it:** capture one real `GET /api/v2/applications` response body (not the
+`/{id}` form), confirm the field that identifies the foreground entry, and find a second
+independent implementation that reads it. Until then Tizen keeps refusing, which is the
+right answer for an untraced command.
 
 ### 2.3 D — the rest, in the companion's order
 
