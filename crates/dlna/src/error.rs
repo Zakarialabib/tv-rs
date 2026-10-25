@@ -32,9 +32,14 @@ pub enum DlnaError {
     #[error("XML parse error: {0}")]
     ParseError(String),
 
-    /// The device has no AVTransport service (it cannot be cast to).
-    #[error("Device has no AVTransport service (cannot cast to it)")]
-    AvTransportNotFound,
+    /// The device exposes no service of the requested type, so that function is
+    /// not available on it.
+    ///
+    /// Names the service type rather than one specific service: a renderer can
+    /// offer AVTransport (castable) without RenderingControl (no volume), and the
+    /// caller needs to know which of the two it asked for.
+    #[error("Device has no {0} service")]
+    ServiceNotFound(String),
 
     /// The renderer answered a SOAP action with a UPnP fault body.
     #[error("AVTransport SOAP fault: {0}")]

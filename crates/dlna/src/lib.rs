@@ -60,7 +60,8 @@ pub mod gena_registry;
 pub mod metadata;
 /// transport state models (`Renderer`).
 pub mod models;
-/// AVTransport SOAP control (`SetAVTransportURI` / `Play` / `Pause` / `Stop` / `Seek`).
+/// SOAP control for two UPnP services: AVTransport (casting/playback) and
+/// RenderingControl (volume/mute).
 pub mod soap;
 
 pub use advertise::{
@@ -82,7 +83,9 @@ pub use gena_registry::{
 pub use metadata::build_didl_lite;
 pub use models::Renderer;
 pub use soap::{
-    cast, extract_av_transport_control_url, pause, seek, stop, AvTransport, SoapAvTransport,
+    cast, extract_service_control_url, get_mute, get_volume, pause, seek, set_mute, set_volume,
+    stop, AvTransport, RenderingControl, SoapAvTransport, SoapRenderingControl,
+    AV_TRANSPORT_ACTION, RENDERING_CONTROL_ACTION,
 };
 
 #[cfg(test)]

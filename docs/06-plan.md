@@ -179,6 +179,23 @@ gone from the list — G3 (streaming discovery), G8 (release from quarantine) an
 behind the facade) all landed, and their rationale now lives in the CHANGELOG and the
 glossary.
 
+**G10d landed**, and its premise was right in the way that matters: `soap.rs` did
+already parse the `RenderingControl:1` service out of the device description, and the
+actions were genuinely missing. `GetVolume`/`SetVolume`/`GetMute`/`SetMute` now exist as
+free functions and behind a `RenderingControl` trait, with `Renderer` carrying
+`rendering_control_url` alongside `av_transport_url`. Two things the implementation had
+to decide, both worth recording:
+
+- **The two services share one HTTP path.** `post_soap`/`send_soap` hardcoded the
+  AVTransport URN in the `SOAPACTION` header, so RenderingControl needed the service
+  type as a parameter — a private function, so no shim and no duplication of the
+  plumbing. The public `extract_av_transport_control_url` became
+  `extract_service_control_url(xml, base, service_urn)`, with both callers updated.
+- **The range check could not be a cast.** `u8::try_from(101)` succeeds — `u8` holds
+  0..=255 — so the declared 0..=100 bound has to be an explicit comparison. The test
+  suite caught this one: `101` was accepted as a volume until the bound was written
+  out.
+
 **G15 was already done when the audit read it, and the audit was wrong.** `tv_rs::probe()`
 exists and answers exactly the item's question — Roku first (authoritative, carries the
 MAC, model and serial), then Tizen through its DIAL description, then LG as a port
@@ -192,10 +209,6 @@ unused. A unicast SSDP probe *would* add something the facade's vendor-by-vendor
 cannot (it could name a device whose HTTP APIs are unreachable), but nothing needs that
 today, so it is a note rather than code.
 
-- **G10d** DLNA `RenderingControl` (volume/mute for renderers). **Open, with
-  groundwork:** `dlna/src/soap.rs` already *parses* the `RenderingControl:1` service
-  and its `controlURL` out of the device description, but no volume or mute action is
-  implemented — the discovery half is done, the SOAP actions are not.
 - **G16** Tizen DIAL URL launching through `TvClient::open_url`. **The premise conflates
   two different operations, and that is the decision to make before writing anything.**
   - The audit's pointers were wrong in detail: `crates/tizen/src/apps.rs` only *resolves

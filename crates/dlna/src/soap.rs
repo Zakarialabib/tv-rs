@@ -1,14 +1,24 @@
-//! AVTransport SOAP control for DLNA/UPnP MediaRenderers.
+//! SOAP control for DLNA/UPnP MediaRenderers.
 //!
 //! Given a control URL (extracted from the device description during discovery),
-//! this module sends SOAP `SetAVTransportURI` / `Play` / `Pause` / `Stop` / `Seek`
-//! actions.
+//! this module sends the actions of two UPnP services, which a renderer may expose
+//! independently of each other:
 //!
-//! Two flavours are offered:
+//! - **AVTransport** (`SetAVTransportURI` / `Play` / `Pause` / `Stop` / `Seek` /
+//!   `GetTransportInfo` / `GetPositionInfo`) — casting and playback.
+//! - **RenderingControl** (`GetVolume` / `SetVolume` / `GetMute` / `SetMute`) —
+//!   volume and mute.
 //!
-//! - free functions ([`cast`], [`stop`], [`pause`], [`seek`]) for one-shot use,
-//! - [`SoapAvTransport`] implementing the [`AvTransport`] trait, for callers that
-//!   hold a renderer handle and want a typed control surface.
+//! A renderer can cast without being able to report volume, so discovery records
+//! both control URLs and each is optional.
+//!
+//! Two flavours are offered for each service:
+//!
+//! - free functions ([`cast`], [`stop`], [`pause`], [`seek`], [`get_volume`]) for
+//!   one-shot use,
+//! - [`SoapAvTransport`] / [`SoapRenderingControl`] implementing the [`AvTransport`]
+//!   / [`RenderingControl`] traits, for callers that hold a renderer handle and
+//!   want a typed control surface.
 
 /// Decodes a text event and resolves XML entities.
 ///
@@ -32,19 +42,36 @@ use crate::metadata::escape_xml;
 /// AVTransport service type used for the `SOAPACTION` header.
 pub const AV_TRANSPORT_ACTION: &str = "urn:schemas-upnp-org:service:AVTransport:1";
 
+/// RenderingControl service type used for the `SOAPACTION` header.
+///
+/// A separate service with its own control URL, which a renderer may expose
+/// without AVTransport.
+pub const RENDERING_CONTROL_ACTION: &str = "urn:schemas-upnp-org:service:RenderingControl:1";
+
 /// Product token advertised to renderers.
 ///
 /// `DLNADOC/1.50` matters: some renderers gate behaviour on seeing a
 /// DLNA-document version in the user agent.
 const USER_AGENT: &str = "tv-rs-dlna/0.1.0 DLNADOC/1.50";
 
-/// Find the AVTransport service's `controlURL` within a device description XML.
+/// Find one service's `controlURL` within a device description XML.
+///
+/// `service_urn` is the UPnP service type to match — [`AV_TRANSPORT_ACTION`] or
+/// [`RENDERING_CONTROL_ACTION`] — so the same walk serves both services instead of
+/// duplicating the XML handling for each.
 ///
 /// Returns the absolute control URL (resolved against the description base if
 /// the `controlURL` is relative, which UPnP permits).
-pub fn extract_av_transport_control_url(
+///
+/// # Errors
+///
+/// Returns [`DlnaError::ServiceNotFound`] when the description carries no service
+/// of that type, naming the type so a caller can tell "not castable" from "no
+/// volume control" apart.
+pub fn extract_service_control_url(
     description_xml: &str,
     base_url: &str,
+    service_urn: &str,
 ) -> Result<String, DlnaError> {
     let mut reader = quick_xml::Reader::from_str(description_xml);
     // Text nodes in these documents are usually indented; without trimming, the
@@ -72,7 +99,7 @@ pub fn extract_av_transport_control_url(
             }
             Ok(quick_xml::events::Event::End(ref e)) => {
                 if local_name(e.name().as_ref()) == "service" {
-                    if service_type.trim() == AV_TRANSPORT_ACTION && !control_url.is_empty() {
+                    if service_type.trim() == service_urn && !control_url.is_empty() {
                         return Ok(resolve_url(base_url, &control_url));
                     }
                     in_service = false;
@@ -98,7 +125,7 @@ pub fn extract_av_transport_control_url(
         }
     }
 
-    Err(DlnaError::AvTransportNotFound)
+    Err(DlnaError::ServiceNotFound(service_urn.to_string()))
 }
 
 /// Strip a namespace prefix from an element name.
@@ -122,11 +149,16 @@ fn resolve_url(base: &str, control: &str) -> String {
 ///
 /// Split from [`send_soap`] because the queries need the body and the commands
 /// throw it away — and a renderer puts its answer in that body, not in the status.
-async fn post_soap(control_url: &str, action: &str, body: &str) -> Result<String, DlnaError> {
+async fn post_soap(
+    control_url: &str,
+    service_urn: &str,
+    action: &str,
+    body: &str,
+) -> Result<String, DlnaError> {
     let envelope = format!(
         r#"<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>{body}</s:Body></s:Envelope>"#
     );
-    let soap_action = format!("\"{AV_TRANSPORT_ACTION}#{action}\"");
+    let soap_action = format!("\"{service_urn}#{action}\"");
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
@@ -156,8 +188,15 @@ async fn post_soap(control_url: &str, action: &str, body: &str) -> Result<String
     Ok(text)
 }
 
-async fn send_soap(control_url: &str, action: &str, body: &str) -> Result<(), DlnaError> {
-    post_soap(control_url, action, body).await.map(|_| ())
+async fn send_soap(
+    control_url: &str,
+    service_urn: &str,
+    action: &str,
+    body: &str,
+) -> Result<(), DlnaError> {
+    post_soap(control_url, service_urn, action, body)
+        .await
+        .map(|_| ())
 }
 
 /// `SetAVTransportURI` + `Play` — push `media_url` to the renderer and start it.
@@ -178,7 +217,13 @@ pub async fn set_uri(control_url: &str, media_url: &str, didl: &str) -> Result<(
         uri = escape_xml(media_url),
         meta = escape_xml(didl),
     );
-    send_soap(control_url, "SetAVTransportURI", &set_body).await
+    send_soap(
+        control_url,
+        AV_TRANSPORT_ACTION,
+        "SetAVTransportURI",
+        &set_body,
+    )
+    .await
 }
 
 /// `Play` the currently-set URI at normal speed.
@@ -186,21 +231,21 @@ pub async fn play(control_url: &str) -> Result<(), DlnaError> {
     let play_body = format!(
         "<u:Play xmlns:u=\"{AV_TRANSPORT_ACTION}\"><InstanceID>0</InstanceID><Speed>1</Speed></u:Play>",
     );
-    send_soap(control_url, "Play", &play_body).await
+    send_soap(control_url, AV_TRANSPORT_ACTION, "Play", &play_body).await
 }
 
 /// `Stop` the current playback on the renderer.
 pub async fn stop(control_url: &str) -> Result<(), DlnaError> {
     let stop_body =
         format!("<u:Stop xmlns:u=\"{AV_TRANSPORT_ACTION}\"><InstanceID>0</InstanceID></u:Stop>",);
-    send_soap(control_url, "Stop", &stop_body).await
+    send_soap(control_url, AV_TRANSPORT_ACTION, "Stop", &stop_body).await
 }
 
 /// `Pause` the current playback.
 pub async fn pause(control_url: &str) -> Result<(), DlnaError> {
     let pause_body =
         format!("<u:Pause xmlns:u=\"{AV_TRANSPORT_ACTION}\"><InstanceID>0</InstanceID></u:Pause>",);
-    send_soap(control_url, "Pause", &pause_body).await
+    send_soap(control_url, AV_TRANSPORT_ACTION, "Pause", &pause_body).await
 }
 
 /// `Seek` to a position within the current track, from its start.
@@ -215,7 +260,7 @@ pub async fn seek(control_url: &str, position: Duration) -> Result<(), DlnaError
     let seek_body = format!(
         "<u:Seek xmlns:u=\"{AV_TRANSPORT_ACTION}\"><InstanceID>0</InstanceID><Unit>REL_TIME</Unit><Target>{target}</Target></u:Seek>",
     );
-    send_soap(control_url, "Seek", &seek_body).await
+    send_soap(control_url, AV_TRANSPORT_ACTION, "Seek", &seek_body).await
 }
 
 /// What a renderer reports about its transport right now.
@@ -248,7 +293,7 @@ pub async fn get_transport_info(control_url: &str) -> Result<TransportInfo, Dlna
     let body = format!(
         "<u:GetTransportInfo xmlns:u=\"{AV_TRANSPORT_ACTION}\"><InstanceID>0</InstanceID></u:GetTransportInfo>",
     );
-    let response = post_soap(control_url, "GetTransportInfo", &body).await?;
+    let response = post_soap(control_url, AV_TRANSPORT_ACTION, "GetTransportInfo", &body).await?;
     parse_transport_info(&response)
 }
 
@@ -257,7 +302,7 @@ pub async fn get_position_info(control_url: &str) -> Result<PositionInfo, DlnaEr
     let body = format!(
         "<u:GetPositionInfo xmlns:u=\"{AV_TRANSPORT_ACTION}\"><InstanceID>0</InstanceID></u:GetPositionInfo>",
     );
-    let response = post_soap(control_url, "GetPositionInfo", &body).await?;
+    let response = post_soap(control_url, AV_TRANSPORT_ACTION, "GetPositionInfo", &body).await?;
     parse_position_info(&response)
 }
 
@@ -485,14 +530,20 @@ mod tests {
     fn picks_the_avtransport_control_url_not_another_service() {
         // RenderingControl comes first and has its own controlURL; a parser that
         // takes the first match would send volume commands instead of casts.
-        let url = extract_av_transport_control_url(DESC, "http://10.0.0.5:8080/desc.xml").unwrap();
+        let url =
+            extract_service_control_url(DESC, "http://10.0.0.5:8080/desc.xml", AV_TRANSPORT_ACTION)
+                .unwrap();
         assert_eq!(url, "http://10.0.0.5:8080/AVTransport/ctrl");
     }
 
     #[test]
     fn a_relative_control_path_is_joined_to_the_authority_not_the_directory() {
-        let url =
-            extract_av_transport_control_url(DESC, "http://10.0.0.5:8080/dmr/desc.xml").unwrap();
+        let url = extract_service_control_url(
+            DESC,
+            "http://10.0.0.5:8080/dmr/desc.xml",
+            AV_TRANSPORT_ACTION,
+        )
+        .unwrap();
         assert_eq!(url, "http://10.0.0.5:8080/AVTransport/ctrl");
     }
 
@@ -502,7 +553,9 @@ mod tests {
         <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
         <controlURL>http://other.host:1400/ctrl</controlURL>
         </service></root>"#;
-        let url = extract_av_transport_control_url(desc, "http://10.0.0.5:8080/desc.xml").unwrap();
+        let url =
+            extract_service_control_url(desc, "http://10.0.0.5:8080/desc.xml", AV_TRANSPORT_ACTION)
+                .unwrap();
         assert_eq!(url, "http://other.host:1400/ctrl");
     }
 
@@ -512,7 +565,9 @@ mod tests {
         <serviceType>urn:schemas-upnp-org:service:RenderingControl:1</serviceType>
         <controlURL>/rc/ctrl</controlURL>
         </service></root>"#;
-        assert!(extract_av_transport_control_url(desc, "http://h/desc.xml").is_err());
+        assert!(
+            extract_service_control_url(desc, "http://h/desc.xml", AV_TRANSPORT_ACTION).is_err()
+        );
     }
 
     #[test]
@@ -523,7 +578,8 @@ mod tests {
         <e:serviceType>urn:schemas-upnp-org:service:AVTransport:1</e:serviceType>
         <e:controlURL>/AVTransport/ctrl</e:controlURL>
         </e:service></root>"#;
-        let url = extract_av_transport_control_url(desc, "http://h/desc.xml").unwrap();
+        let url =
+            extract_service_control_url(desc, "http://h/desc.xml", AV_TRANSPORT_ACTION).unwrap();
         assert_eq!(url, "http://h/AVTransport/ctrl");
     }
 
@@ -548,5 +604,272 @@ mod tests {
         let result = client.stop().await;
         assert!(matches!(result, Err(DlnaError::SoapError(_))));
         assert_eq!(client.control_url(), "http://127.0.0.1:1/ctrl");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// RenderingControl — volume and mute. A separate UPnP service with its own
+// control URL, which a renderer may expose without AVTransport.
+// ---------------------------------------------------------------------------
+
+/// `GetVolume` — the renderer's current volume, 0..=100.
+///
+/// The UPnP `Volume` state variable is `ui2` with a declared range of 0..100, so
+/// the answer is parsed as a `u8` and a value outside that range is a protocol
+/// fault rather than a volume. A renderer that reports `0` is silent, not broken.
+pub async fn get_volume(control_url: &str) -> Result<u8, DlnaError> {
+    let body = format!(
+        "<u:GetVolume xmlns:u=\"{RENDERING_CONTROL_ACTION}\"><InstanceID>0</InstanceID><Channel>Master</Channel></u:GetVolume>",
+    );
+    let response = post_soap(control_url, RENDERING_CONTROL_ACTION, "GetVolume", &body).await?;
+    parse_volume(&response)
+}
+
+/// Parses a `GetVolume` response body into 0..=100.
+///
+/// Split from the request so the shape is testable without a renderer. The UPnP
+/// `Volume` variable is `ui2` with a declared range of 0..100, so a value outside
+/// that is a protocol fault rather than a volume: a renderer that reports `0` is
+/// silent, not broken, and one that reports `101` is lying.
+fn parse_volume(xml: &str) -> Result<u8, DlnaError> {
+    let raw = field(xml, "CurrentVolume")
+        .ok_or_else(|| DlnaError::SoapError("GetVolume carried no CurrentVolume".to_string()))?;
+    let trimmed = raw.trim();
+    let volume = trimmed.parse::<u8>().map_err(|e| {
+        DlnaError::SoapError(format!("CurrentVolume is not a number: {trimmed:?} ({e})"))
+    })?;
+    // `u8` holds 0..=255, so the cast alone would happily accept 101..=255. The
+    // declared range is 0..=100, so the bound has to be checked explicitly: a
+    // renderer reporting 101 is lying, not loud, and `try_from` cannot tell the two
+    // apart.
+    if volume > 100 {
+        return Err(DlnaError::SoapError(format!(
+            "CurrentVolume {volume} is outside the declared 0..=100 range"
+        )));
+    }
+    Ok(volume)
+}
+
+/// `SetVolume` — set the renderer's volume, 0..=100.
+///
+/// A renderer clamps rather than faults, so the value it settles on is not
+/// necessarily the one asked for; read it back with [`get_volume`] if the exact
+/// level matters.
+pub async fn set_volume(control_url: &str, volume: u8) -> Result<(), DlnaError> {
+    let body = format!(
+        "<u:SetVolume xmlns:u=\"{RENDERING_CONTROL_ACTION}\"><InstanceID>0</InstanceID><Channel>Master</Channel><DesiredVolume>{volume}</DesiredVolume></u:SetVolume>",
+    );
+    send_soap(control_url, RENDERING_CONTROL_ACTION, "SetVolume", &body).await
+}
+
+/// `GetMute` — whether the renderer is muted.
+///
+/// UPnP encodes a boolean as `0`/`1`, but a handful of renderers answer
+/// `true`/`false`, so both spellings are accepted rather than one being a fault.
+pub async fn get_mute(control_url: &str) -> Result<bool, DlnaError> {
+    let body = format!(
+        "<u:GetMute xmlns:u=\"{RENDERING_CONTROL_ACTION}\"><InstanceID>0</InstanceID><Channel>Master</Channel></u:GetMute>",
+    );
+    let response = post_soap(control_url, RENDERING_CONTROL_ACTION, "GetMute", &body).await?;
+    parse_mute(&response)
+}
+
+/// Parses a `GetMute` response body.
+///
+/// UPnP encodes a boolean as `0`/`1`, but a handful of renderers answer
+/// `true`/`false`, so both spellings are accepted rather than one being a fault.
+/// `0` is muted-off rather than an error: a muted renderer is a real state, not a
+/// failure.
+fn parse_mute(xml: &str) -> Result<bool, DlnaError> {
+    let raw = field(xml, "CurrentMute")
+        .ok_or_else(|| DlnaError::SoapError("GetMute carried no CurrentMute".to_string()))?;
+    Ok(matches!(raw.trim(), "1" | "true" | "TRUE" | "True"))
+}
+
+/// `SetMute` — mute or unmute the renderer.
+///
+/// Sends `1`/`0`, the `ui2`-style encoding the UPnP boolean datatype uses in SOAP.
+pub async fn set_mute(control_url: &str, muted: bool) -> Result<(), DlnaError> {
+    let desired = u8::from(muted);
+    let body = format!(
+        "<u:SetMute xmlns:u=\"{RENDERING_CONTROL_ACTION}\"><InstanceID>0</InstanceID><Channel>Master</Channel><DesiredMute>{desired}</DesiredMute></u:SetMute>",
+    );
+    send_soap(control_url, RENDERING_CONTROL_ACTION, "SetMute", &body).await
+}
+
+/// Volume and mute control for a renderer's `RenderingControl` service.
+///
+/// Separate from [`AvTransport`] because it is a separate UPnP service: a
+/// renderer can offer playback control without exposing volume, and discovery
+/// records which of the two it has.
+#[async_trait]
+pub trait RenderingControl: Send + Sync {
+    /// Current volume, 0..=100.
+    async fn volume(&self) -> Result<u8, DlnaError>;
+
+    /// Set the volume. The renderer clamps rather than faults.
+    async fn set_volume(&self, volume: u8) -> Result<(), DlnaError>;
+
+    /// Whether the renderer is muted.
+    async fn muted(&self) -> Result<bool, DlnaError>;
+
+    /// Mute or unmute.
+    async fn set_muted(&self, muted: bool) -> Result<(), DlnaError>;
+}
+
+/// [`RenderingControl`] implementation that talks SOAP to one control URL.
+#[derive(Debug, Clone)]
+pub struct SoapRenderingControl {
+    /// The RenderingControl control endpoint of the target renderer.
+    control_url: String,
+}
+
+impl SoapRenderingControl {
+    /// Create a control handle for the given RenderingControl control URL.
+    pub fn new(control_url: impl Into<String>) -> Self {
+        Self {
+            control_url: control_url.into(),
+        }
+    }
+
+    /// The underlying control URL.
+    pub fn control_url(&self) -> &str {
+        &self.control_url
+    }
+}
+
+#[async_trait]
+impl RenderingControl for SoapRenderingControl {
+    async fn volume(&self) -> Result<u8, DlnaError> {
+        get_volume(&self.control_url).await
+    }
+
+    async fn set_volume(&self, volume: u8) -> Result<(), DlnaError> {
+        set_volume(&self.control_url, volume).await
+    }
+
+    async fn muted(&self) -> Result<bool, DlnaError> {
+        get_mute(&self.control_url).await
+    }
+
+    async fn set_muted(&self, muted: bool) -> Result<(), DlnaError> {
+        set_mute(&self.control_url, muted).await
+    }
+}
+
+#[cfg(test)]
+mod rendering_control_tests {
+    use super::*;
+
+    /// A description with BOTH services, RenderingControl first, so a parser that
+    /// takes the first match answers volume for a cast. This is the same trap the
+    /// AVTransport test pins from the other side.
+    const BOTH_SERVICES: &str = r#"<root><device><serviceList>
+        <service><serviceType>urn:schemas-upnp-org:service:RenderingControl:1</serviceType>
+        <controlURL>/RenderingControl/ctrl</controlURL></service>
+        <service><serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+        <controlURL>/AVTransport/ctrl</controlURL></service>
+    </serviceList></device></root>"#;
+
+    /// A renderer that advertises only AVTransport has no volume control, and that is
+    /// a normal renderer rather than a broken one.
+    const CAST_ONLY: &str = r#"<root><device><serviceList>
+        <service><serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+        <controlURL>/AVTransport/ctrl</controlURL></service>
+    </serviceList></device></root>"#;
+
+    #[test]
+    fn the_rendering_control_url_is_the_renderers_own_not_the_first_service() {
+        let url = extract_service_control_url(
+            BOTH_SERVICES,
+            "http://10.0.0.5:8080/desc.xml",
+            RENDERING_CONTROL_ACTION,
+        )
+        .unwrap();
+        assert_eq!(url, "http://10.0.0.5:8080/RenderingControl/ctrl");
+    }
+
+    #[test]
+    fn a_missing_service_is_reported_by_name_so_the_two_absences_are_distinguishable() {
+        let error = extract_service_control_url(
+            CAST_ONLY,
+            "http://10.0.0.5:8080/desc.xml",
+            RENDERING_CONTROL_ACTION,
+        )
+        .expect_err("a cast-only renderer has no RenderingControl");
+        match error {
+            DlnaError::ServiceNotFound(service) => {
+                assert_eq!(
+                    service, RENDERING_CONTROL_ACTION,
+                    "the error must name WHICH service is absent, or 'no volume' and
+                     'cannot cast' become the same failure"
+                );
+            }
+            other => panic!("expected ServiceNotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_volume_response_parses_to_its_number() {
+        let xml = r#"<?xml version="1.0"?><s:Envelope><s:Body>
+            <u:GetVolumeResponse xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1">
+            <CurrentVolume>42</CurrentVolume></u:GetVolumeResponse></s:Body></s:Envelope>"#;
+        assert_eq!(parse_volume(xml).unwrap(), 42);
+    }
+
+    /// `0` is a silent renderer, which is a real answer and not an error or a
+    /// sentinel. A parser that treats it as "no data" would report a muted set as
+    /// unreachable.
+    #[test]
+    fn a_silent_renderer_reports_zero_rather_than_an_error() {
+        let xml = r#"<u:GetVolumeResponse><CurrentVolume>0</CurrentVolume></u:GetVolumeResponse>"#;
+        assert_eq!(parse_volume(xml).unwrap(), 0);
+    }
+
+    /// The UPnP `Volume` variable declares 0..100, so a value outside it is the
+    /// renderer lying rather than a volume to store.
+    #[test]
+    fn a_volume_outside_the_declared_range_is_a_fault() {
+        let xml =
+            r#"<u:GetVolumeResponse><CurrentVolume>101</CurrentVolume></u:GetVolumeResponse>"#;
+        let error = parse_volume(xml).expect_err("101 is outside the declared range");
+        assert!(matches!(error, DlnaError::SoapError(_)), "got {error:?}");
+    }
+
+    #[test]
+    fn a_non_numeric_volume_is_a_fault() {
+        let xml =
+            r#"<u:GetVolumeResponse><CurrentVolume>loud</CurrentVolume></u:GetVolumeResponse>"#;
+        let error = parse_volume(xml).expect_err("a word is not a volume");
+        assert!(matches!(error, DlnaError::SoapError(_)), "got {error:?}");
+    }
+
+    #[test]
+    fn a_missing_current_volume_is_a_fault() {
+        let xml = r#"<u:GetVolumeResponse><SomethingElse>42</SomethingElse></u:GetVolumeResponse>"#;
+        let error = parse_volume(xml).expect_err("no CurrentVolume is not a volume");
+        assert!(matches!(error, DlnaError::SoapError(_)), "got {error:?}");
+    }
+
+    /// UPnP encodes a boolean as `0`/`1`; some renderers answer `true`/`false`.
+    /// Both spellings are accepted so one is not a fault.
+    #[test]
+    fn both_boolean_spellings_parse() {
+        for (body, expected) in [
+            ("<CurrentMute>1</CurrentMute>", true),
+            ("<CurrentMute>0</CurrentMute>", false),
+            ("<CurrentMute>true</CurrentMute>", true),
+            ("<CurrentMute>false</CurrentMute>", false),
+        ] {
+            let xml = format!("<u:GetMuteResponse>{body}</u:GetMuteResponse>");
+            assert_eq!(parse_mute(&xml).unwrap(), expected, "body was {body}");
+        }
+    }
+
+    #[test]
+    fn a_missing_current_mute_is_a_fault() {
+        let xml = r#"<u:GetMuteResponse><CurrentVolume>42</CurrentVolume></u:GetMuteResponse>"#;
+        let error = parse_mute(xml).expect_err("volume is not mute");
+        assert!(matches!(error, DlnaError::SoapError(_)), "got {error:?}");
     }
 }

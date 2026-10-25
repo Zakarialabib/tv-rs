@@ -277,7 +277,7 @@ pub fn extract_event_sub_url(description_xml: &str, base_url: &str) -> Result<St
         }
     }
 
-    Err(DlnaError::AvTransportNotFound)
+    Err(DlnaError::ServiceNotFound(AV_TRANSPORT_SERVICE.to_string()))
 }
 
 /// Strip a namespace prefix from an element name.

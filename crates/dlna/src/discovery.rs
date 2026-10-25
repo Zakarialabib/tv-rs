@@ -184,7 +184,15 @@ async fn fetch_device_description(location: &str) -> Result<Renderer, DlnaError>
         .unwrap_or_default();
 
     // Extract the AVTransport control URL so the device is immediately castable.
-    let av_transport_url = crate::soap::extract_av_transport_control_url(&body, location).ok();
+    let av_transport_url =
+        crate::soap::extract_service_control_url(&body, location, crate::soap::AV_TRANSPORT_ACTION)
+            .ok();
+    let rendering_control_url = crate::soap::extract_service_control_url(
+        &body,
+        location,
+        crate::soap::RENDERING_CONTROL_ACTION,
+    )
+    .ok();
 
     // And its eventSubURL, so the caller can SUBSCRIBE for state changes
     // without re-fetching the description. `.ok()` because eventing is optional: a
@@ -194,6 +202,7 @@ async fn fetch_device_description(location: &str) -> Result<Renderer, DlnaError>
     let mut renderer = Renderer::new(udn, friendly_name, manufacturer, model_name, ip, location);
     renderer.av_transport_url = av_transport_url;
     renderer.event_sub_url = event_sub_url;
+    renderer.rendering_control_url = rendering_control_url;
     Ok(renderer)
 }
 

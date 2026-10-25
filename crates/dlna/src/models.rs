@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 /// A renderer that reports `av_transport_url: None` cannot be cast to (no
 /// AVTransport service in its description); one with `av_transport_url` set but
 /// `event_sub_url: None` is castable but cannot report state back via GENA —
-/// both are legal per UPnP.
+/// both are legal per UPnP. The same independence holds for
+/// `rendering_control_url`: volume control is a separate service, so a
+/// castable renderer may still have none.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Renderer {
     /// Unique device name (UDN), e.g. `uuid:2f...-MR-1`.
@@ -40,6 +42,13 @@ pub struct Renderer {
     /// the caller falls back to knowing only what it commanded.
     #[serde(default)]
     pub event_sub_url: Option<String>,
+
+    /// RenderingControl control URL extracted from the same device description.
+    ///
+    /// `None` for a renderer that exposes no RenderingControl service — it may be
+    /// perfectly castable and still have no volume control to reach.
+    #[serde(default)]
+    pub rendering_control_url: Option<String>,
 }
 
 impl Renderer {
@@ -64,6 +73,7 @@ impl Renderer {
             location: location.into(),
             av_transport_url: None,
             event_sub_url: None,
+            rendering_control_url: None,
         }
     }
 }

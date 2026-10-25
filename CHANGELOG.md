@@ -21,6 +21,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **DLNA renderers report and take volume** — `GetVolume` / `SetVolume` / `GetMute` /
+  `SetMute` over the UPnP `RenderingControl` service, as free functions and behind a new
+  `RenderingControl` trait (`SoapRenderingControl`). `Renderer` now carries
+  `rendering_control_url` next to `av_transport_url`, because a renderer can be castable
+  without exposing volume. `extract_av_transport_control_url` became
+  `extract_service_control_url(xml, base, service_urn)` — one XML walk serving both
+  services — and a missing service is `DlnaError::ServiceNotFound(urn)`, which names
+  *which* service is absent so "no volume" and "cannot cast" are not the same failure.
+
 - **Tizen reads one application's status** — `TizenClient::app_status(app_id)` over
   `GET /api/v2/applications/{app_id}` (no pairing, no token), verified against four
   independent sources. `TizenAppStatus` keeps `running` and `visible` **distinct**, because
