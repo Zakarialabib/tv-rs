@@ -283,7 +283,9 @@ mod tests {
             let handle = thread::spawn(move || {
                 let ip = format!("10.0.0.{i}");
                 let mut guard = store_clone.lock().unwrap();
-                guard.upsert(&ip, &format!("tok-{i}"), &format!("TV-{i}")).unwrap();
+                guard
+                    .upsert(&ip, &format!("tok-{i}"), &format!("TV-{i}"))
+                    .unwrap();
             });
             handles.push(handle);
         }

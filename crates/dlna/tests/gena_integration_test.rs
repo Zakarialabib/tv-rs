@@ -117,7 +117,10 @@ async fn test_gena_notify_parsing_and_registry_state_transitions() {
 
     // Initial action should be Resubscribe (since pending)
     let due = registry.due(now);
-    assert_eq!(due, vec![(udn.to_string(), SubscriptionAction::Resubscribe)]);
+    assert_eq!(
+        due,
+        vec![(udn.to_string(), SubscriptionAction::Resubscribe)]
+    );
 
     // Simulate establishing a subscription with 600s timeout, established 500s ago (in renewal window)
     let sub = tv_rs_dlna::Subscription {
@@ -129,7 +132,10 @@ async fn test_gena_notify_parsing_and_registry_state_transitions() {
     };
 
     registry.record_success(udn, sub.clone());
-    assert_eq!(registry.udn_for_sid("uuid:test-sid-99"), Some(udn.to_string()));
+    assert_eq!(
+        registry.udn_for_sid("uuid:test-sid-99"),
+        Some(udn.to_string())
+    );
 
     // Because it's 500s old out of 600s (renewal margin is 600 / 5 = 120s remaining), it needs renewal
     let due = registry.due(now);
@@ -153,7 +159,10 @@ async fn test_gena_notify_parsing_and_registry_state_transitions() {
     registry.record_renew_failure(udn);
 
     let due = registry.due(now);
-    assert_eq!(due, vec![(udn.to_string(), SubscriptionAction::Resubscribe)]);
+    assert_eq!(
+        due,
+        vec![(udn.to_string(), SubscriptionAction::Resubscribe)]
+    );
 
     // Simulate subscribe failures leading to Abandon
     for _ in 0..5 {
@@ -170,28 +179,40 @@ async fn soap_control_actions_wire_mock() {
     // SetAVTransportURI & Play
     Mock::given(method("POST"))
         .and(path("/AVTransport/ctrl"))
-        .and(header("SOAPACTION", "\"urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI\""))
+        .and(header(
+            "SOAPACTION",
+            "\"urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI\"",
+        ))
         .respond_with(ResponseTemplate::new(200))
         .mount(&server)
         .await;
 
     Mock::given(method("POST"))
         .and(path("/AVTransport/ctrl"))
-        .and(header("SOAPACTION", "\"urn:schemas-upnp-org:service:AVTransport:1#Play\""))
+        .and(header(
+            "SOAPACTION",
+            "\"urn:schemas-upnp-org:service:AVTransport:1#Play\"",
+        ))
         .respond_with(ResponseTemplate::new(200))
         .mount(&server)
         .await;
 
     Mock::given(method("POST"))
         .and(path("/AVTransport/ctrl"))
-        .and(header("SOAPACTION", "\"urn:schemas-upnp-org:service:AVTransport:1#Pause\""))
+        .and(header(
+            "SOAPACTION",
+            "\"urn:schemas-upnp-org:service:AVTransport:1#Pause\"",
+        ))
         .respond_with(ResponseTemplate::new(200))
         .mount(&server)
         .await;
 
     Mock::given(method("POST"))
         .and(path("/AVTransport/ctrl"))
-        .and(header("SOAPACTION", "\"urn:schemas-upnp-org:service:AVTransport:1#Stop\""))
+        .and(header(
+            "SOAPACTION",
+            "\"urn:schemas-upnp-org:service:AVTransport:1#Stop\"",
+        ))
         .respond_with(ResponseTemplate::new(200))
         .mount(&server)
         .await;

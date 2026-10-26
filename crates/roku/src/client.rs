@@ -615,7 +615,9 @@ mod tests {
     #[test]
     fn parse_apps_handles_malformed_xml_and_unexpected_nodes() {
         assert!(parse_apps("not xml").is_err());
-        assert!(parse_apps("<apps><app>No ID</app></apps>").map(|apps| apps[0].id.is_empty()).unwrap_or(false));
+        assert!(parse_apps("<apps><app>No ID</app></apps>")
+            .map(|apps| apps[0].id.is_empty())
+            .unwrap_or(false));
         let xml = r#"<apps>
             <!-- comment -->
             <other-node>test</other-node>

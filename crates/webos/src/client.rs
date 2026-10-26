@@ -788,7 +788,8 @@ mod tests {
         // Invalid data types for typed fields cause a JSON error
         assert!(parse_ssap_response(r#"{"id":123,"type":"response"}"#).is_err());
 
-        let resp_empty = parse_ssap_response("{}").expect("empty object deserializes to default SsapResponse");
+        let resp_empty =
+            parse_ssap_response("{}").expect("empty object deserializes to default SsapResponse");
         assert_eq!(resp_empty.id, None);
         assert_eq!(resp_empty.kind, None);
     }

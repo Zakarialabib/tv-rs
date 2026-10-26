@@ -97,7 +97,10 @@ mod tests {
     fn boundary_tests_for_resolve_app_id() {
         assert!(resolve_app_id("   ").is_err());
         assert_eq!(resolve_app_id("  netFLIX  ").unwrap(), NETFLIX_APP_ID);
-        assert_eq!(resolve_app_id("  AMAZON PRIME ").unwrap(), PRIME_VIDEO_APP_ID);
+        assert_eq!(
+            resolve_app_id("  AMAZON PRIME ").unwrap(),
+            PRIME_VIDEO_APP_ID
+        );
         // Ultra-long numeric ID passes through cleanly
         let long_id = "1".repeat(100);
         assert_eq!(resolve_app_id(&long_id).unwrap(), long_id);
