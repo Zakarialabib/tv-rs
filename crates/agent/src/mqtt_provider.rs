@@ -328,7 +328,10 @@ mod tests {
             config.client_cert,
             Some(PathBuf::from("/path/to/client.pem"))
         );
-        assert_eq!(config.client_key, Some(PathBuf::from("/path/to/client.key")));
+        assert_eq!(
+            config.client_key,
+            Some(PathBuf::from("/path/to/client.key"))
+        );
     }
 
     #[tokio::test]
