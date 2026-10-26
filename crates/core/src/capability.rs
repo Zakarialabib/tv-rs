@@ -8,7 +8,6 @@ use async_trait::async_trait;
 use crate::command::CommandId;
 use crate::descriptor::{DeviceDescriptor, DeviceId, PowerState};
 use crate::error::TvError;
-use crate::permission::HardwarePermission;
 use crate::telemetry::TelemetryProvider;
 
 /// One thing a device can be asked to do.
@@ -68,8 +67,6 @@ pub enum Capability {
     AppList,
     /// Screen casting or screen receiving preview / mirroring stream capability.
     ScreenCast,
-    /// Request and check OS hardware access permissions.
-    HardwarePermission,
 }
 
 impl Capability {
@@ -97,7 +94,6 @@ impl Capability {
             Self::TextInput => "text_input",
             Self::AppList => "app_list",
             Self::ScreenCast => "screen_cast",
-            Self::HardwarePermission => "hardware_permission",
         }
     }
 }
@@ -179,7 +175,6 @@ const ALL_CAPABILITIES: &[Capability] = &[
     Capability::AppList,
     Capability::TextInput,
     Capability::ScreenCast,
-    Capability::HardwarePermission,
 ];
 
 const fn capability_index(capability: Capability) -> u16 {
@@ -204,7 +199,6 @@ const fn capability_index(capability: Capability) -> u16 {
         Capability::AppList => 15,
         Capability::TextInput => 16,
         Capability::ScreenCast => 17,
-        Capability::HardwarePermission => 17,
     }
 }
 
@@ -774,11 +768,6 @@ pub trait DeviceHandle: Send + Sync {
 
     /// Control-plane latency measurement, or `None`.
     fn as_probe(&self) -> Option<&dyn Probe> {
-        None
-    }
-
-    /// Hardware permission control, or `None`.
-    fn as_hardware_permission(&self) -> Option<&dyn HardwarePermission> {
         None
     }
 
