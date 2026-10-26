@@ -43,6 +43,7 @@ pub mod descriptor;
 pub mod error;
 #[cfg(feature = "mock-backend")]
 pub mod mock;
+pub mod permission;
 #[cfg(feature = "quirks")]
 pub mod quirks;
 pub mod state;
@@ -61,5 +62,6 @@ pub use capability::{FrameFormat, PanelHoursProvider, ScreenCapturer, ScreenFram
 pub use command::CommandId;
 pub use descriptor::{DeviceDescriptor, DeviceId, DeviceOs, PowerState};
 pub use error::{AuthError, ProtocolError, QuirkId, Remedy, StateError, TransportError, TvError};
+pub use permission::{HardwarePermission, PermissionStatus, PermissionType};
 pub use state::{Confidence, ObservedField, ObservedState};
 pub use telemetry::{Telemetry, TelemetryProvider};
