@@ -2318,6 +2318,7 @@ dependencies = [
  "serde",
  "thiserror",
  "tokio",
+ "wiremock",
 ]
 
 [[package]]
