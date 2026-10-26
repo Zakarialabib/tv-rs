@@ -312,3 +312,47 @@ fn a_lost_ack_does_not_double_toggle() {
         Decision::ProbePower
     );
 }
+
+#[tokio::test]
+async fn thousand_device_fleet_benchmark() {
+    use tv_rs_agent::{AuditLog, Reconciler, StaticFileProvider};
+
+    let dir = std::env::temp_dir().join(format!("tv-rs-bench-{}", std::process::id()));
+    tokio::fs::create_dir_all(&dir).await.unwrap();
+    let path = dir.join("desired.json");
+
+    let mut map = std::collections::HashMap::new();
+    for i in 0..1000 {
+        map.insert(format!("tv-{i:04}"), DesiredState::showing("netflix"));
+    }
+    let json = serde_json::to_string(&map).unwrap();
+    tokio::fs::write(&path, json).await.unwrap();
+
+    let provider = Arc::new(StaticFileProvider::new(&path));
+
+    let devices: Vec<Arc<dyn DeviceHandle>> = (0..1000)
+        .map(|i| {
+            let descriptor = DeviceDescriptor::new(
+                DeviceId::new(format!("tv-{i:04}")).unwrap(),
+                DeviceOs::Roku,
+                format!("10.0.{}.{}", i / 250, i % 250 + 1),
+            );
+            Arc::new(MockBackend::new(descriptor)) as Arc<dyn DeviceHandle>
+        })
+        .collect();
+
+    let log_path = dir.join("audit.jsonl");
+    let log = AuditLog::new(&log_path);
+
+    let mut reconciler = Reconciler::new(devices, provider).with_audit(log.clone());
+
+    let start = std::time::Instant::now();
+    let outcomes = reconciler.tick().await;
+    let duration = start.elapsed();
+    log.flush().await.unwrap();
+
+    println!("OPTIMIZED 1000-device fleet tick duration: {:?}", duration);
+    assert_eq!(outcomes.len(), 1000);
+
+    tokio::fs::remove_dir_all(&dir).await.unwrap();
+}

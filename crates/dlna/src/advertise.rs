@@ -374,6 +374,36 @@ mod tests {
     }
 
     #[test]
+    fn msearch_parse_handles_malformed_and_non_msearch_inputs() {
+        // Non-M-SEARCH HTTP requests
+        assert!(
+            parse_msearch_st("GET /description.xml HTTP/1.1\r\nST: ssdp:all\r\n\r\n").is_none()
+        );
+        assert!(parse_msearch_st("POST /event HTTP/1.1\r\nST: ssdp:all\r\n\r\n").is_none());
+
+        // Missing ST header
+        assert!(
+            parse_msearch_st("M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\n\r\n").is_none()
+        );
+
+        // Whitespace only ST header value
+        assert!(parse_msearch_st("M-SEARCH * HTTP/1.1\r\nST:    \r\n").is_none());
+
+        // Malformed lines without colons
+        assert!(
+            parse_msearch_st("M-SEARCH * HTTP/1.1\r\nINVALID_HEADER_LINE\r\nST: ssdp:all\r\n")
+                .as_deref()
+                == Some("ssdp:all")
+        );
+
+        // Case variation and extra whitespace trimming in header key and value
+        assert_eq!(
+            parse_msearch_st("M-SEARCH * HTTP/1.1\r\nSt:   upnp:rootdevice   \r\n").as_deref(),
+            Some("upnp:rootdevice")
+        );
+    }
+
+    #[test]
     fn search_response_carries_usn_pairing_udn_and_st() {
         let r = search_response(&cfg(), "urn:schemas-upnp-org:device:MediaServer:1");
         assert!(r.starts_with("HTTP/1.1 200 OK\r\n"));

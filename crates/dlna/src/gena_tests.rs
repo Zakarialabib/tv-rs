@@ -6,8 +6,8 @@
 use std::time::{Duration, SystemTime};
 
 use crate::gena::{
-    callback_header, extract_event_sub_url, parse_timeout_header, Subscription, TransportState,
-    REQUESTED_TIMEOUT_SECS,
+    callback_header, extract_event_sub_url, parse_timeout_header, resolve_relative, Subscription,
+    TransportState, REQUESTED_TIMEOUT_SECS,
 };
 use crate::gena_parse::parse_notify_body;
 
@@ -122,6 +122,26 @@ fn a_truncated_body_does_not_panic() {
     }
 }
 
+#[test]
+fn parse_notify_body_handles_transport_error_description() {
+    let xml = r#"<propertyset><property><LastChange>&lt;Event&gt;&lt;InstanceID val="0"&gt;&lt;TransportErrorDescription val="Resource not found"/&gt;&lt;/InstanceID&gt;&lt;/Event&gt;</LastChange></property></propertyset>"#;
+    let ev = parse_notify_body(xml).expect("must parse error description");
+    assert!(ev.is_error());
+    assert_eq!(ev.error_code, Some(1));
+}
+
+#[test]
+fn parse_notify_body_returns_none_when_no_actionable_fields() {
+    let xml = r#"<propertyset><property><LastChange>&lt;Event&gt;&lt;InstanceID val="0"&gt;&lt;SomeOtherProperty val="hello"/&gt;&lt;/InstanceID&gt;&lt;/Event&gt;</LastChange></property></propertyset>"#;
+    assert!(parse_notify_body(xml).is_none());
+}
+
+#[test]
+fn parse_notify_body_handles_mismatched_or_unclosed_lastchange_tags() {
+    let xml = r#"<propertyset><property><LastChange>&lt;Event&gt;&lt;InstanceID val="0"&gt;&lt;TransportState val="PLAYING"/&gt;&lt;/InstanceID&gt;&lt;/Event&gt;</OtherTag></property></propertyset>"#;
+    assert!(parse_notify_body(xml).is_none());
+}
+
 // ── TransportState semantics ──────────────────────────────────────────────────
 
 #[test]
@@ -210,6 +230,33 @@ fn parses_the_standard_second_form() {
         parse_timeout_header(Some("second-600")),
         Duration::from_secs(600)
     );
+    assert_eq!(
+        parse_timeout_header(Some("SECOND-300")),
+        Duration::from_secs(300)
+    );
+}
+
+#[test]
+fn parses_timeout_header_with_surrounding_whitespace() {
+    assert_eq!(
+        parse_timeout_header(Some("  Second-120  ")),
+        Duration::from_secs(120)
+    );
+}
+
+#[test]
+fn parse_timeout_header_handles_invalid_or_negative_values() {
+    let fallback = Duration::from_secs(REQUESTED_TIMEOUT_SECS);
+    assert_eq!(parse_timeout_header(Some("Second--100")), fallback);
+    assert_eq!(parse_timeout_header(Some("Second-abc")), fallback);
+    assert_eq!(parse_timeout_header(Some("Second-12.5")), fallback);
+}
+
+#[test]
+fn parse_timeout_header_handles_case_insensitive_infinite() {
+    let fallback = Duration::from_secs(REQUESTED_TIMEOUT_SECS);
+    assert_eq!(parse_timeout_header(Some("INFINITE")), fallback);
+    assert_eq!(parse_timeout_header(Some("  Infinite  ")), fallback);
 }
 
 #[test]
@@ -251,6 +298,64 @@ fn the_callback_header_is_bracketed() {
     assert_eq!(
         callback_header("http://10.0.0.2:9999/dlna/events"),
         "<http://10.0.0.2:9999/dlna/events>"
+    );
+}
+
+// ── resolve_relative URL resolution ──────────────────────────────────────────
+
+#[test]
+fn resolve_relative_handles_absolute_http_and_https_urls() {
+    assert_eq!(
+        resolve_relative("http://10.0.0.5:8080/desc.xml", "http://other.host/evt"),
+        "http://other.host/evt"
+    );
+    assert_eq!(
+        resolve_relative("http://10.0.0.5:8080/desc.xml", "https://secure.host/evt"),
+        "https://secure.host/evt"
+    );
+}
+
+#[test]
+fn resolve_relative_handles_absolute_paths_with_leading_slash() {
+    assert_eq!(
+        resolve_relative("http://10.0.0.5:8080/dmr/desc.xml", "/AVTransport/evt"),
+        "http://10.0.0.5:8080/AVTransport/evt"
+    );
+    assert_eq!(
+        resolve_relative("http://10.0.0.5/desc.xml", "/evt"),
+        "http://10.0.0.5/evt"
+    );
+    assert_eq!(
+        resolve_relative("http://10.0.0.5:8080", "/evt"),
+        "http://10.0.0.5:8080/evt"
+    );
+}
+
+#[test]
+fn resolve_relative_handles_relative_paths_without_leading_slash() {
+    assert_eq!(
+        resolve_relative("http://10.0.0.5:8080/dmr/desc.xml", "evt"),
+        "http://10.0.0.5:8080/dmr/evt"
+    );
+    assert_eq!(
+        resolve_relative("http://10.0.0.5:8080/dmr/", "evt"),
+        "http://10.0.0.5:8080/dmr/evt"
+    );
+    assert_eq!(
+        resolve_relative("http://10.0.0.5:8080/desc.xml", "sub/evt"),
+        "http://10.0.0.5:8080/sub/evt"
+    );
+}
+
+#[test]
+fn resolve_relative_handles_base_with_or_without_trailing_slash() {
+    assert_eq!(
+        resolve_relative("http://10.0.0.5:8080", "/evt"),
+        "http://10.0.0.5:8080/evt"
+    );
+    assert_eq!(
+        resolve_relative("http://10.0.0.5:8080/", "evt"),
+        "http://10.0.0.5:8080/evt"
     );
 }
 
@@ -302,4 +407,29 @@ fn a_renderer_without_avtransport_is_an_error() {
       <eventSubURL>/rc/evt</eventSubURL>
     </service></root>"#;
     assert!(extract_event_sub_url(desc, "http://h/desc.xml").is_err());
+}
+
+#[test]
+fn extract_event_sub_url_handles_malformed_xml() {
+    let invalid_xml = "<root><service><serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType><eventSubURL>/evt";
+    assert!(extract_event_sub_url(invalid_xml, "http://h/desc.xml").is_err());
+}
+
+#[test]
+fn extract_event_sub_url_handles_empty_or_whitespace_eventsuburl() {
+    let desc = r#"<root><service>
+      <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+      <eventSubURL>   </eventSubURL>
+    </service></root>"#;
+    assert!(extract_event_sub_url(desc, "http://h/desc.xml").is_err());
+}
+
+#[test]
+fn extract_event_sub_url_handles_whitespace_and_casing_in_tags() {
+    let desc = r#"<root><service>
+      <serviceType>  urn:schemas-upnp-org:service:AVTransport:1  </serviceType>
+      <eventSubURL> /evt/path </eventSubURL>
+    </service></root>"#;
+    let url = extract_event_sub_url(desc, "http://10.0.0.5:8080/desc.xml").unwrap();
+    assert_eq!(url, "http://10.0.0.5:8080/evt/path");
 }
