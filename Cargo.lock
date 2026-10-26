@@ -2255,9 +2255,12 @@ dependencies = [
  "reqwest",
  "roxmltree",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tv-rs-transport",
+ "url",
+ "uuid",
 ]
 
 [[package]]

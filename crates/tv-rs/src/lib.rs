@@ -65,7 +65,7 @@ pub use types::{DiscoveredTv, TvVendor};
 /// variant is a compile error here until someone names its remedy.
 pub mod map;
 
-/// SSDP discovery and UPnP descriptor parsing: [`discovery::SsdpScanner`] (mDNS is planned).
+/// SSDP & mDNS discovery, UPnP descriptor parsing, and signage pairing: [`discovery::SsdpScanner`], [`discovery::MdnsScanner`].
 pub use tv_rs_core as core;
 pub use tv_rs_discovery as discovery;
 /// Samsung MDC commercial display protocol client: [`mdc::MdcClient`].
