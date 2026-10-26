@@ -4,11 +4,15 @@
 //! is the loop around it. Keeping them separate means the interesting behaviour
 //! (decide, act, audit, escalate) is testable without sleeping or spawning.
 
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use futures::stream::{self, StreamExt};
 use tokio::sync::oneshot;
-use tv_rs_core::{Capability, CommandId, DeviceHandle, ObservedField, ObservedState, Telemetry};
+use tv_rs_core::{
+    Capability, CommandId, DeviceHandle, DeviceId, ObservedField, ObservedState, Telemetry,
+};
 
 use crate::audit::{AuditEntry, AuditLog};
 use crate::desired::DesiredStateProvider;
@@ -28,6 +32,8 @@ pub struct ReconcilePolicy {
     pub telemetry: Option<TelemetryPolicy>,
     /// The numbers the remediation ladder needs (the dim target).
     pub remedy: RemedyPolicy,
+    /// Maximum number of devices to reconcile concurrently in a single tick pass.
+    pub concurrency: usize,
 }
 
 impl Default for ReconcilePolicy {
@@ -37,6 +43,7 @@ impl Default for ReconcilePolicy {
             max_failures: 3,
             telemetry: Some(TelemetryPolicy::default()),
             remedy: RemedyPolicy::default(),
+            concurrency: 32,
         }
     }
 }
@@ -59,9 +66,9 @@ pub struct Reconciler {
     fleet: Vec<Arc<dyn DeviceHandle>>,
     provider: Arc<dyn DesiredStateProvider>,
     audit: Option<AuditLog>,
-    ladder: HealerLadder,
+    ladder: Mutex<HealerLadder>,
     policy: ReconcilePolicy,
-    quarantined: Vec<String>,
+    quarantined: HashSet<DeviceId>,
 }
 
 impl Reconciler {
@@ -79,12 +86,12 @@ impl Reconciler {
         policy: ReconcilePolicy,
     ) -> Self {
         Self {
-            ladder: HealerLadder::new(policy.max_failures),
+            ladder: Mutex::new(HealerLadder::new(policy.max_failures)),
             fleet,
             provider,
             audit: None,
             policy,
-            quarantined: Vec::new(),
+            quarantined: HashSet::new(),
         }
     }
 
@@ -97,7 +104,7 @@ impl Reconciler {
 
     /// Devices currently out of rotation.
     #[must_use]
-    pub fn quarantined(&self) -> &[String] {
+    pub fn quarantined(&self) -> &HashSet<DeviceId> {
         &self.quarantined
     }
 
@@ -117,11 +124,11 @@ impl Reconciler {
     /// The attempt is audited either way: a technician grepping the log for a device
     /// should see that someone tried, not only when it worked.
     pub async fn release(&mut self, device_id: &str) -> bool {
-        let held = self.quarantined.iter().any(|id| id == device_id);
-        self.quarantined.retain(|id| id != device_id);
+        let mut held = false;
 
-        if let Ok(id) = tv_rs_core::DeviceId::new(device_id) {
-            self.ladder.release(&id);
+        if let Ok(id) = DeviceId::new(device_id) {
+            held = self.quarantined.remove(&id);
+            self.ladder.lock().unwrap().release(&id);
         }
 
         self.record(
@@ -138,28 +145,40 @@ impl Reconciler {
 
     /// Runs one pass over every device and returns what happened.
     pub async fn tick(&mut self) -> Vec<Outcome> {
+        let concurrency = self.policy.concurrency.max(1);
         let mut outcomes = Vec::with_capacity(self.fleet.len());
+        let mut eligible = Vec::new();
 
-        for handle in self.fleet.clone() {
+        for handle in &self.fleet {
             let id = handle.id();
-            let key = id.as_str().to_string();
-
-            if self.quarantined.contains(&key) {
+            if self.quarantined.contains(&id) {
                 outcomes.push(Outcome {
-                    device: key,
+                    device: id.as_str().to_string(),
                     action: None,
                     result: "quarantined",
                     error: None,
                 });
-                continue;
+            } else {
+                eligible.push(handle.clone());
             }
+        }
 
-            let outcome = self.reconcile_one(handle.as_ref()).await;
-            if outcome.result == "quarantined" && !self.quarantined.contains(&outcome.device) {
-                self.quarantined.push(outcome.device.clone());
+        let reconciler = &*self;
+        let mut stream = stream::iter(eligible.into_iter().map(|handle| async move {
+            (handle.id(), reconciler.reconcile_one(handle.as_ref()).await)
+        }))
+        .buffer_unordered(concurrency);
+
+        let mut newly_quarantined = Vec::new();
+        while let Some((id, outcome)) = stream.next().await {
+            if outcome.result == "quarantined" {
+                newly_quarantined.push(id);
             }
             outcomes.push(outcome);
         }
+        drop(stream);
+
+        self.quarantined.extend(newly_quarantined);
 
         outcomes
     }
@@ -241,7 +260,7 @@ impl Reconciler {
         Some((step, outcome))
     }
 
-    async fn reconcile_one(&mut self, handle: &dyn DeviceHandle) -> Outcome {
+    async fn reconcile_one(&self, handle: &dyn DeviceHandle) -> Outcome {
         let id = handle.id();
         let key = id.as_str().to_string();
         let descriptor = handle.descriptor();
@@ -309,7 +328,7 @@ impl Reconciler {
 
         match self.act(handle, &decision).await {
             Ok(()) => {
-                self.ladder.on_success(&id);
+                self.ladder.lock().unwrap().on_success(&id);
                 self.record(
                     &key,
                     &describe(&desired),
@@ -326,7 +345,7 @@ impl Reconciler {
                 }
             }
             Err(error) => {
-                let action = self.ladder.on_failure(&id, &error);
+                let action = self.ladder.lock().unwrap().on_failure(&id, &error);
                 let quarantined = action == HealerAction::Quarantine;
                 self.record(
                     &key,
@@ -526,6 +545,7 @@ mod tests {
                 max_failures: 3,
                 telemetry: None,
                 remedy: RemedyPolicy::default(),
+                concurrency: 32,
             },
         );
 
@@ -533,7 +553,9 @@ mod tests {
         for _ in 0..3 {
             reconciler.tick().await;
         }
-        assert_eq!(reconciler.quarantined(), ["tv-3".to_string()]);
+        assert!(reconciler
+            .quarantined()
+            .contains(&DeviceId::new("tv-3").unwrap()));
 
         let actions_before = mock.actions().len();
         let outcomes = reconciler.tick().await;
@@ -565,6 +587,7 @@ mod tests {
         let mut reconciler =
             Reconciler::new(vec![failing, healthy], provider).with_audit(log.clone());
         let outcomes = reconciler.tick().await;
+        log.flush().await.unwrap();
 
         assert_eq!(outcomes.len(), 2, "one failure does not abort the fleet");
         let text = tokio::fs::read_to_string(log.path()).await.unwrap();
@@ -614,7 +637,9 @@ mod tests {
         // Second: now it is held.
         let outcomes = reconciler.tick().await;
         assert_eq!(outcomes[0].result, "quarantined", "{outcomes:?}");
-        assert_eq!(reconciler.quarantined(), ["tv-6"]);
+        assert!(reconciler
+            .quarantined()
+            .contains(&DeviceId::new("tv-6").unwrap()));
 
         // A further pass touches nothing at all: that is what quarantine means.
         let actions_before = device.actions().len();
@@ -633,6 +658,7 @@ mod tests {
             "the ladder restarted rather than resuming: {outcomes:?}"
         );
 
+        log.flush().await.unwrap();
         let text = tokio::fs::read_to_string(log.path()).await.unwrap();
         assert!(text.contains("release_from_quarantine"), "{text}");
         assert!(text.contains("\"ok\""), "{text}");
@@ -654,6 +680,7 @@ mod tests {
 
         let mut reconciler = Reconciler::new(vec![device], provider).with_audit(log.clone());
         assert!(!reconciler.release("tv-7").await, "nothing was held");
+        log.flush().await.unwrap();
 
         let text = tokio::fs::read_to_string(log.path()).await.unwrap();
         assert!(text.contains("release_from_quarantine"), "{text}");
@@ -753,7 +780,9 @@ mod tests {
             outcomes[0].error.as_deref(),
             Some("temperature is critical; applied reboot_panel")
         );
-        assert_eq!(reconciler.quarantined(), ["tv-critical".to_string()]);
+        assert!(reconciler
+            .quarantined()
+            .contains(&DeviceId::new("tv-critical").unwrap()));
         assert_eq!(
             mock.actions(),
             [Action::Reboot],
@@ -781,7 +810,9 @@ mod tests {
         assert_eq!(outcomes[0].result, "quarantined", "{outcomes:?}");
         let error = outcomes[0].error.as_deref().unwrap_or_default();
         assert!(error.contains("reboot_panel failed"), "{error}");
-        assert_eq!(reconciler.quarantined(), ["tv-dead".to_string()]);
+        assert!(reconciler
+            .quarantined()
+            .contains(&DeviceId::new("tv-dead").unwrap()));
         assert!(mock.actions().is_empty());
 
         tokio::fs::remove_dir_all(dir).await.unwrap();
@@ -821,6 +852,7 @@ mod tests {
             Reconciler::new(vec![hot.clone(), critical.clone()], provider).with_audit(log.clone());
 
         let outcomes = reconciler.tick().await;
+        log.flush().await.unwrap();
         assert_eq!(outcomes.len(), 2);
         assert_eq!(hot.actions(), [Action::SetBrightness(20)]);
         assert_eq!(critical.actions(), [Action::Reboot]);
@@ -850,6 +882,7 @@ mod tests {
                 max_failures: 3,
                 telemetry: None,
                 remedy: RemedyPolicy::default(),
+                concurrency: 32,
             },
         );
 
