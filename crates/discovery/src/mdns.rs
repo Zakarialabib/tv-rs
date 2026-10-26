@@ -303,14 +303,12 @@ pub fn parse_mdns_packet(buf: &[u8]) -> Option<MdnsServiceRecord> {
                     txt_offset += len;
                 }
             }
-            33 => {
+            33 if rd_length >= 7 => {
                 // SRV Record: Priority (2), Weight (2), Port (2), Target Name
-                if rd_length >= 7 {
-                    let srv_port = u16::from_be_bytes([rdata[4], rdata[5]]);
-                    port = Some(srv_port);
-                    if let Some((target, _)) = decode_dns_name(buf, offset - rd_length + 6) {
-                        host_name = Some(target);
-                    }
+                let srv_port = u16::from_be_bytes([rdata[4], rdata[5]]);
+                port = Some(srv_port);
+                if let Some((target, _)) = decode_dns_name(buf, offset - rd_length + 6) {
+                    host_name = Some(target);
                 }
             }
             _ => {}

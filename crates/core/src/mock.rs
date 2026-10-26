@@ -5,7 +5,6 @@
 //! ways real televisions fail, and it records the physical actions it performed so
 //! tests can assert what actually happened rather than what was returned.
 
-use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -21,7 +20,6 @@ use crate::capability::{FrameFormat, PanelHours, PanelHoursProvider, ScreenCaptu
 use crate::command::CommandId;
 use crate::descriptor::{DeviceDescriptor, DeviceId, PowerState};
 use crate::error::{AuthError, ProtocolError, StateError, TransportError, TvError};
-use crate::permission::{HardwarePermission, PermissionStatus, PermissionType};
 use crate::telemetry::{Telemetry, TelemetryProvider};
 
 /// A failure the mock should produce for the next mutating command.
@@ -74,8 +72,6 @@ pub enum Action {
     SetPanelLock(bool),
     /// The content orientation was set.
     SetOrientation(Orientation),
-    /// Permission request was made.
-    RequestPermission(PermissionType),
 }
 
 /// A television that exists only in tests.
@@ -96,7 +92,6 @@ pub struct MockBackend {
     panel_lock: Mutex<Option<bool>>,
     orientation: Mutex<Option<Orientation>>,
     panel_health: Mutex<PanelHealth>,
-    permissions: Mutex<HashMap<PermissionType, PermissionStatus>>,
     #[cfg(feature = "supporting")]
     panel_hours: Mutex<PanelHours>,
     #[cfg(feature = "supporting")]
@@ -122,7 +117,6 @@ impl MockBackend {
             Capability::PanelLock,
             Capability::Orientation,
             Capability::NoSignalStatus,
-            Capability::HardwarePermission,
             #[cfg(feature = "supporting")]
             Capability::LampOrPanelHours,
             #[cfg(feature = "supporting")]
@@ -151,7 +145,6 @@ impl MockBackend {
                 temperature_celsius: Some(38),
                 lamp_error: false,
             }),
-            permissions: Mutex::new(HashMap::new()),
             #[cfg(feature = "supporting")]
             panel_hours: Mutex::new(PanelHours {
                 panel_hours: 12_345,
@@ -212,14 +205,6 @@ impl MockBackend {
     /// Makes the next mutating command fail with `failure`.
     pub fn fail_next(&self, failure: Failure) {
         *self.next_failure.lock().expect("mock lock") = Some(failure);
-    }
-
-    /// Sets the permission status for a given permission type.
-    pub fn set_permission_status(&self, permission: PermissionType, status: PermissionStatus) {
-        self.permissions
-            .lock()
-            .expect("mock lock")
-            .insert(permission, status);
     }
 
     /// Makes the next telemetry read fail with `failure`.
@@ -398,12 +383,6 @@ impl DeviceHandle for MockBackend {
 
     fn as_probe(&self) -> Option<&dyn Probe> {
         Some(self)
-    }
-
-    fn as_hardware_permission(&self) -> Option<&dyn HardwarePermission> {
-        self.capabilities
-            .contains(Capability::HardwarePermission)
-            .then_some(self as &dyn HardwarePermission)
     }
 
     fn as_telemetry(&self) -> Option<&dyn TelemetryProvider> {
@@ -626,48 +605,6 @@ impl PanelHealthProvider for MockBackend {
             return Err(self.unsupported(Capability::NoSignalStatus));
         }
         Ok(Some(*self.panel_health.lock().expect("mock lock")))
-    }
-}
-
-#[async_trait]
-impl HardwarePermission for MockBackend {
-    async fn check_permission(
-        &self,
-        permission: PermissionType,
-    ) -> Result<PermissionStatus, TvError> {
-        if !self.capabilities.contains(Capability::HardwarePermission) {
-            return Err(self.unsupported(Capability::HardwarePermission));
-        }
-        let status = self
-            .permissions
-            .lock()
-            .expect("mock lock")
-            .get(&permission)
-            .copied()
-            .unwrap_or(PermissionStatus::PromptRequired);
-        Ok(status)
-    }
-
-    async fn request_permission(
-        &self,
-        permission: PermissionType,
-    ) -> Result<PermissionStatus, TvError> {
-        if !self.capabilities.contains(Capability::HardwarePermission) {
-            return Err(self.unsupported(Capability::HardwarePermission));
-        }
-        self.perform(Action::RequestPermission(permission))?;
-        let mut lock = self.permissions.lock().expect("mock lock");
-        let current = lock
-            .get(&permission)
-            .copied()
-            .unwrap_or(PermissionStatus::PromptRequired);
-        let new_status = match current {
-            PermissionStatus::Denied => PermissionStatus::Denied,
-            PermissionStatus::NotSupported => PermissionStatus::NotSupported,
-            _ => PermissionStatus::Granted,
-        };
-        lock.insert(permission, new_status);
-        Ok(new_status)
     }
 }
 
@@ -909,7 +846,6 @@ mod tests {
         assert!(limited.as_brightness().is_none());
         assert!(limited.as_reboot().is_none());
         assert!(limited.as_telemetry().is_none());
-        assert!(limited.as_hardware_permission().is_none());
 
         assert!(matches!(
             block_on(BrightnessControl::set_brightness(
@@ -929,42 +865,5 @@ mod tests {
             block_on(limited.telemetry()).expect_err("telemetry is not advertised"),
             TvError::Unsupported(Capability::Telemetry)
         ));
-        assert!(matches!(
-            block_on(limited.request_screen_access())
-                .expect_err("hardware permission is not advertised"),
-            TvError::Unsupported(Capability::HardwarePermission)
-        ));
-    }
-
-    #[test]
-    fn hardware_permission_consent_flow() {
-        let mock = mock();
-        assert!(mock.as_hardware_permission().is_some());
-
-        // Default state is PromptRequired
-        let initial = block_on(mock.check_screen_access()).unwrap();
-        assert_eq!(initial, PermissionStatus::PromptRequired);
-        assert!(!initial.is_granted());
-
-        // Request screen access triggers consent flow and returns Granted
-        let granted = block_on(mock.request_screen_access()).unwrap();
-        assert_eq!(granted, PermissionStatus::Granted);
-        assert!(granted.is_granted());
-        assert_eq!(
-            mock.actions(),
-            vec![Action::RequestPermission(PermissionType::ScreenCapture)]
-        );
-
-        // Subsequent check returns Granted
-        assert_eq!(
-            block_on(mock.check_screen_access()).unwrap(),
-            PermissionStatus::Granted
-        );
-
-        // Denied permission remains Denied
-        mock.set_permission_status(PermissionType::AudioCapture, PermissionStatus::Denied);
-        let denied = block_on(mock.request_permission(PermissionType::AudioCapture)).unwrap();
-        assert_eq!(denied, PermissionStatus::Denied);
-        assert!(!denied.is_granted());
     }
 }

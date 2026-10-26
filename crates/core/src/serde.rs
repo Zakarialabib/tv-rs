@@ -146,7 +146,6 @@ mod tests {
     use crate::capability::{Capability, Input, Key};
     use crate::descriptor::PowerState;
     use crate::error::Remedy;
-    use crate::permission::{PermissionStatus, PermissionType};
     use crate::state::Confidence;
 
     #[test]
@@ -199,7 +198,6 @@ mod tests {
             Capability::PanelLock,
             Capability::Orientation,
             Capability::NoSignalStatus,
-            Capability::HardwarePermission,
         ];
         for capability in all {
             assert_eq!(
@@ -244,14 +242,6 @@ mod tests {
         assert_eq!(
             to_string(&Confidence::High).expect("serialises"),
             "\"high\""
-        );
-        assert_eq!(
-            to_string(&PermissionType::ScreenCapture).expect("serialises"),
-            "\"screen_capture\""
-        );
-        assert_eq!(
-            to_string(&PermissionStatus::Granted).expect("serialises"),
-            "\"granted\""
         );
     }
 
