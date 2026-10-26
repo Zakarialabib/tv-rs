@@ -20,7 +20,7 @@ doc = false
 [dependencies]
 tv-rs = { path = "../tv-rs" }
 tv-rs-core = { path = "../core" }
-tv-rs-agent = { path = "../agent" }
+tv-rs-agent = { path = "../agent", features = ["mqtt"] }
 clap.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
