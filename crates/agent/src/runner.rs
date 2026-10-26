@@ -124,7 +124,8 @@ impl Reconciler {
             self.ladder.release(&id);
         }
 
-        self.record(
+        record(
+            self.audit.as_ref(),
             device_id,
             "in_rotation",
             "release_from_quarantine",
@@ -140,7 +141,7 @@ impl Reconciler {
     pub async fn tick(&mut self) -> Vec<Outcome> {
         let mut outcomes = Vec::with_capacity(self.fleet.len());
 
-        for handle in self.fleet.clone() {
+        for handle in &self.fleet {
             let id = handle.id();
             let key = id.as_str().to_string();
 
@@ -154,7 +155,15 @@ impl Reconciler {
                 continue;
             }
 
-            let outcome = self.reconcile_one(handle.as_ref()).await;
+            let outcome = reconcile_one(
+                self.provider.as_ref(),
+                &self.policy,
+                self.audit.as_ref(),
+                &mut self.ladder,
+                handle.as_ref(),
+            )
+            .await;
+
             if outcome.result == "quarantined" && !self.quarantined.contains(&outcome.device) {
                 self.quarantined.push(outcome.device.clone());
             }
@@ -180,215 +189,232 @@ impl Reconciler {
             }
         }
     }
+}
 
-    /// Reads and assesses telemetry when both the policy and the device support it.
-    ///
-    /// A telemetry read failure is deliberately ignored: diagnostics must not turn a
-    /// healthy screen into a failed reconciliation. The normal power probe still
-    /// runs and will surface a genuinely unreachable device.
-    async fn telemetry_assessment(
-        &self,
-        handle: &dyn DeviceHandle,
-    ) -> Option<(Telemetry, TelemetryVerdict)> {
-        let policy = self.policy.telemetry.as_ref()?;
-        let provider = handle.as_telemetry()?;
-        match provider.telemetry().await {
-            Ok(telemetry) => {
-                let verdict = assess_telemetry(&telemetry, policy);
-                Some((telemetry, verdict))
-            }
-            Err(_) => None,
+/// Reads and assesses telemetry when both the policy and the device support it.
+///
+/// A telemetry read failure is deliberately ignored: diagnostics must not turn a
+/// healthy screen into a failed reconciliation. The normal power probe still
+/// runs and will surface a genuinely unreachable device.
+async fn telemetry_assessment(
+    policy: &ReconcilePolicy,
+    handle: &dyn DeviceHandle,
+) -> Option<(Telemetry, TelemetryVerdict)> {
+    let telemetry_policy = policy.telemetry.as_ref()?;
+    let provider = handle.as_telemetry()?;
+    match provider.telemetry().await {
+        Ok(telemetry) => {
+            let verdict = assess_telemetry(&telemetry, telemetry_policy);
+            Some((telemetry, verdict))
         }
+        Err(_) => None,
     }
+}
 
-    /// Applies the ladder's step for this verdict, when the device can take one.
-    ///
-    /// Returns the step that was attempted, so the caller can record what the agent
-    /// actually did rather than what it intended. A failed remedy is not a failed
-    /// reconciliation: the device is deferred or quarantined either way, and the
-    /// reason stays the telemetry verdict's.
-    async fn apply_remedy(
-        &self,
-        handle: &dyn DeviceHandle,
-        telemetry: &Telemetry,
-        verdict: TelemetryVerdict,
-    ) -> Option<(RemedyStep, Result<(), tv_rs_core::TvError>)> {
-        let policy = self.policy.telemetry.as_ref()?;
-        let step = plan_remedy(
-            telemetry,
-            verdict,
-            handle.capabilities(),
-            policy,
-            &self.policy.remedy,
-        )?;
-        let outcome = match step {
-            RemedyStep::DimBacklight { to } => match handle.as_brightness() {
-                Some(brightness) => brightness.set_brightness(to, CommandId::new()).await,
-                None => Err(tv_rs_core::TvError::Unsupported(Capability::Brightness)),
-            },
-            RemedyStep::RestartPlayback => match handle.as_key() {
-                Some(keys) => {
-                    keys.key_press(tv_rs_core::Key::Play, CommandId::new())
-                        .await
-                }
-                None => Err(tv_rs_core::TvError::Unsupported(Capability::Key)),
-            },
-            RemedyStep::RebootPanel => match handle.as_reboot() {
-                Some(reboot) => reboot.reboot(CommandId::new()).await,
-                None => Err(tv_rs_core::TvError::Unsupported(Capability::Reboot)),
-            },
-        };
-        Some((step, outcome))
-    }
-
-    async fn reconcile_one(&mut self, handle: &dyn DeviceHandle) -> Outcome {
-        let id = handle.id();
-        let key = id.as_str().to_string();
-        let descriptor = handle.descriptor();
-
-        let desired = match self.provider.desired_state(&descriptor).await {
-            Ok(Some(desired)) => desired,
-            Ok(None) => {
-                return Outcome {
-                    device: key,
-                    action: None,
-                    result: "skipped",
-                    error: None,
-                }
+/// Applies the ladder's step for this verdict, when the device can take one.
+///
+/// Returns the step that was attempted, so the caller can record what the agent
+/// actually did rather than what it intended. A failed remedy is not a failed
+/// reconciliation: the device is deferred or quarantined either way, and the
+/// reason stays the telemetry verdict's.
+async fn apply_remedy(
+    policy: &ReconcilePolicy,
+    handle: &dyn DeviceHandle,
+    telemetry: &Telemetry,
+    verdict: TelemetryVerdict,
+) -> Option<(RemedyStep, Result<(), tv_rs_core::TvError>)> {
+    let telemetry_policy = policy.telemetry.as_ref()?;
+    let step = plan_remedy(
+        telemetry,
+        verdict,
+        handle.capabilities(),
+        telemetry_policy,
+        &policy.remedy,
+    )?;
+    let outcome = match step {
+        RemedyStep::DimBacklight { to } => match handle.as_brightness() {
+            Some(brightness) => brightness.set_brightness(to, CommandId::new()).await,
+            None => Err(tv_rs_core::TvError::Unsupported(Capability::Brightness)),
+        },
+        RemedyStep::RestartPlayback => match handle.as_key() {
+            Some(keys) => {
+                keys.key_press(tv_rs_core::Key::Play, CommandId::new())
+                    .await
             }
-            Err(error) => {
-                self.record(&key, "unknown", "provider", "failed", "unknown")
-                    .await;
+            None => Err(tv_rs_core::TvError::Unsupported(Capability::Key)),
+        },
+        RemedyStep::RebootPanel => match handle.as_reboot() {
+            Some(reboot) => reboot.reboot(CommandId::new()).await,
+            None => Err(tv_rs_core::TvError::Unsupported(Capability::Reboot)),
+        },
+    };
+    Some((step, outcome))
+}
+
+async fn reconcile_one(
+    provider: &dyn DesiredStateProvider,
+    policy: &ReconcilePolicy,
+    audit: Option<&AuditLog>,
+    ladder: &mut HealerLadder,
+    handle: &dyn DeviceHandle,
+) -> Outcome {
+    let id = handle.id();
+    let key = id.as_str().to_string();
+    let descriptor = handle.descriptor();
+
+    let desired = match provider.desired_state(&descriptor).await {
+        Ok(Some(desired)) => desired,
+        Ok(None) => {
+            return Outcome {
+                device: key,
+                action: None,
+                result: "skipped",
+                error: None,
+            }
+        }
+        Err(error) => {
+            record(audit, &key, "unknown", "provider", "failed", "unknown").await;
+            return Outcome {
+                device: key,
+                action: None,
+                result: "failed",
+                error: Some(error.to_string()),
+            };
+        }
+    };
+
+    if let Some((telemetry, verdict)) = telemetry_assessment(policy, handle).await {
+        match verdict {
+            TelemetryVerdict::Healthy => {}
+            TelemetryVerdict::Wait(reason) => {
+                // Rung 1: a hot panel is dimmed before it is given up on. The
+                // device is still deferred either way — the remedy buys it a
+                // chance, it does not prove the panel recovered.
+                let remedy = apply_remedy(policy, handle, &telemetry, verdict).await;
+                let (action, error) = describe_remedy("telemetry_wait", reason, remedy);
+                record(
+                    audit,
+                    &key,
+                    &describe(&desired),
+                    action,
+                    "deferred",
+                    "unknown",
+                )
+                .await;
                 return Outcome {
                     device: key,
                     action: None,
-                    result: "failed",
-                    error: Some(error.to_string()),
+                    result: "deferred",
+                    error: Some(error),
                 };
             }
-        };
-
-        if let Some((telemetry, verdict)) = self.telemetry_assessment(handle).await {
-            match verdict {
-                TelemetryVerdict::Healthy => {}
-                TelemetryVerdict::Wait(reason) => {
-                    // Rung 1: a hot panel is dimmed before it is given up on. The
-                    // device is still deferred either way — the remedy buys it a
-                    // chance, it does not prove the panel recovered.
-                    let remedy = self.apply_remedy(handle, &telemetry, verdict).await;
-                    let (action, error) = describe_remedy("telemetry_wait", reason, remedy);
-                    self.record(&key, &describe(&desired), action, "deferred", "unknown")
-                        .await;
-                    return Outcome {
-                        device: key,
-                        action: None,
-                        result: "deferred",
-                        error: Some(error),
-                    };
-                }
-                TelemetryVerdict::Quarantine(reason) => {
-                    // Rung 3, and the only one this path takes: a wedged panel often
-                    // answers after a restart, and a panel that stays critical is
-                    // quarantined regardless of whether the reboot helped.
-                    let remedy = self.apply_remedy(handle, &telemetry, verdict).await;
-                    let (action, error) = describe_remedy("telemetry_quarantine", reason, remedy);
-                    self.record(&key, &describe(&desired), action, "quarantined", "unknown")
-                        .await;
-                    return Outcome {
-                        device: key,
-                        action: None,
-                        result: "quarantined",
-                        error: Some(error),
-                    };
-                }
-            }
-        }
-
-        let observed = observe(handle).await;
-        let decision = decide(&desired, &observed, handle.capabilities());
-
-        match self.act(handle, &decision).await {
-            Ok(()) => {
-                self.ladder.on_success(&id);
-                self.record(
+            TelemetryVerdict::Quarantine(reason) => {
+                // Rung 3, and the only one this path takes: a wedged panel often
+                // answers after a restart, and a panel that stays critical is
+                // quarantined regardless of whether the reboot helped.
+                let remedy = apply_remedy(policy, handle, &telemetry, verdict).await;
+                let (action, error) = describe_remedy("telemetry_quarantine", reason, remedy);
+                record(
+                    audit,
                     &key,
                     &describe(&desired),
-                    &format!("{decision:?}"),
-                    "ok",
-                    observed.power.confidence.as_str(),
+                    action,
+                    "quarantined",
+                    "unknown",
                 )
                 .await;
-                Outcome {
+                return Outcome {
                     device: key,
-                    action: Some(decision),
-                    result: "ok",
-                    error: None,
-                }
-            }
-            Err(error) => {
-                let action = self.ladder.on_failure(&id, &error);
-                let quarantined = action == HealerAction::Quarantine;
-                self.record(
-                    &key,
-                    &describe(&desired),
-                    &format!("{decision:?}"),
-                    if quarantined { "quarantined" } else { "failed" },
-                    observed.power.confidence.as_str(),
-                )
-                .await;
-                Outcome {
-                    device: key,
-                    action: Some(decision),
-                    result: if quarantined { "quarantined" } else { "failed" },
-                    error: Some(error.to_string()),
-                }
+                    action: None,
+                    result: "quarantined",
+                    error: Some(error),
+                };
             }
         }
     }
 
-    /// Performs the decision. `Nothing` and `ProbePower` are not failures: the first
-    /// is the goal, the second means the belief was stale, which the next pass fixes.
-    async fn act(
-        &self,
-        handle: &dyn DeviceHandle,
-        decision: &Decision,
-    ) -> Result<(), tv_rs_core::TvError> {
-        match decision {
-            Decision::Nothing | Decision::ProbePower => Ok(()),
-            Decision::Wake => match handle.as_power() {
-                Some(power) => power.wake().await,
-                None => Err(tv_rs_core::TvError::Unsupported(Capability::Wake)),
-            },
-            Decision::Sleep => match handle.as_power() {
-                Some(power) => power.sleep().await,
-                None => Err(tv_rs_core::TvError::Unsupported(Capability::PowerState)),
-            },
-            Decision::Launch(app) => match handle.as_app() {
-                Some(launcher) => {
-                    launcher
-                        .launch(app.clone(), tv_rs_core::CommandId::new())
-                        .await
-                }
-                None => Err(tv_rs_core::TvError::Unsupported(Capability::AppLaunch)),
-            },
-            Decision::Quarantine(reason) => Err(tv_rs_core::TvError::protocol(*reason)),
+    let observed = observe(handle).await;
+    let decision = decide(&desired, &observed, handle.capabilities());
+
+    match act(handle, &decision).await {
+        Ok(()) => {
+            ladder.on_success(&id);
+            record(
+                audit,
+                &key,
+                &describe(&desired),
+                &format!("{decision:?}"),
+                "ok",
+                observed.power.confidence.as_str(),
+            )
+            .await;
+            Outcome {
+                device: key,
+                action: Some(decision),
+                result: "ok",
+                error: None,
+            }
+        }
+        Err(error) => {
+            let action = ladder.on_failure(&id, &error);
+            let quarantined = action == HealerAction::Quarantine;
+            record(
+                audit,
+                &key,
+                &describe(&desired),
+                &format!("{decision:?}"),
+                if quarantined { "quarantined" } else { "failed" },
+                observed.power.confidence.as_str(),
+            )
+            .await;
+            Outcome {
+                device: key,
+                action: Some(decision),
+                result: if quarantined { "quarantined" } else { "failed" },
+                error: Some(error.to_string()),
+            }
         }
     }
+}
 
-    async fn record(
-        &self,
-        device: &str,
-        desired: &str,
-        action: &str,
-        result: &str,
-        confidence: &str,
-    ) {
-        if let Some(log) = &self.audit {
-            let entry = AuditEntry::now(device, desired, action, result, confidence);
-            // A failed audit write must not stop convergence: the log is for the
-            // human afterwards, the screens are for now.
-            let _ = log.record(&entry).await;
-        }
+/// Performs the decision. `Nothing` and `ProbePower` are not failures: the first
+/// is the goal, the second means the belief was stale, which the next pass fixes.
+async fn act(handle: &dyn DeviceHandle, decision: &Decision) -> Result<(), tv_rs_core::TvError> {
+    match decision {
+        Decision::Nothing | Decision::ProbePower => Ok(()),
+        Decision::Wake => match handle.as_power() {
+            Some(power) => power.wake().await,
+            None => Err(tv_rs_core::TvError::Unsupported(Capability::Wake)),
+        },
+        Decision::Sleep => match handle.as_power() {
+            Some(power) => power.sleep().await,
+            None => Err(tv_rs_core::TvError::Unsupported(Capability::PowerState)),
+        },
+        Decision::Launch(app) => match handle.as_app() {
+            Some(launcher) => {
+                launcher
+                    .launch(app.clone(), tv_rs_core::CommandId::new())
+                    .await
+            }
+            None => Err(tv_rs_core::TvError::Unsupported(Capability::AppLaunch)),
+        },
+        Decision::Quarantine(reason) => Err(tv_rs_core::TvError::protocol(*reason)),
+    }
+}
+
+async fn record(
+    audit: Option<&AuditLog>,
+    device: &str,
+    desired: &str,
+    action: &str,
+    result: &str,
+    confidence: &str,
+) {
+    if let Some(log) = audit {
+        let entry = AuditEntry::now(device, desired, action, result, confidence);
+        // A failed audit write must not stop convergence: the log is for the
+        // human afterwards, the screens are for now.
+        let _ = log.record(&entry).await;
     }
 }
 
@@ -835,6 +861,38 @@ mod tests {
 
         tokio::fs::remove_dir_all(dir).await.unwrap();
         tokio::fs::remove_dir_all(audit_dir).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn benchmark_tick_performance() {
+        let mut fleet: Vec<Arc<dyn DeviceHandle>> = Vec::with_capacity(1000);
+        let mut json = String::from("{");
+        for i in 0..1000 {
+            let id = format!("tv-{i}");
+            if i > 0 {
+                json.push(',');
+            }
+            json.push_str(&format!(r#""{id}":{{"power":"on"}}"#));
+            fleet.push(Arc::new(MockBackend::new(descriptor(&id))));
+        }
+        json.push('}');
+
+        let (provider, dir) = provider_for(&json).await;
+        let mut reconciler = Reconciler::new(fleet, provider);
+
+        let start = std::time::Instant::now();
+        let iterations = 10;
+        for _ in 0..iterations {
+            let outcomes = reconciler.tick().await;
+            assert_eq!(outcomes.len(), 1000);
+        }
+        let elapsed = start.elapsed();
+        println!(
+            "Elapsed for {iterations} ticks of 1000 devices: {:?}",
+            elapsed
+        );
+
+        tokio::fs::remove_dir_all(dir).await.unwrap();
     }
 
     #[tokio::test]
