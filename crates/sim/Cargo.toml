@@ -1,0 +1,24 @@
+[package]
+name = "tv-rs-sim"
+description = "Hardware mock server for tv-rs supporting Samsung MDC (TCP 1515) and Philips SICP (TCP 5000) for hardware-free CI testing."
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["tv", "mock", "simulator", "mdc", "sicp"]
+categories = ["development-tools", "network-programming"]
+
+[dependencies]
+tokio.workspace = true
+tv-rs-mdc.workspace = true
+tv-rs-sicp.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+tv-rs-core.workspace = true
+
+[lints]
+workspace = true

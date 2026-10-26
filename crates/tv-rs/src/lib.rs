@@ -50,7 +50,8 @@ mod handle;
 mod types;
 
 pub use client::{
-    discover, discover_stream, discover_with, identify_vendor, mdc_handle, probe, TvClient,
+    discover, discover_stream, discover_with, identify_vendor, mdc_handle, probe, sicp_handle,
+    TvClient,
 };
 pub use error::{Result, TvError};
 pub use types::{DiscoveredTv, TvVendor};
@@ -67,12 +68,14 @@ pub mod map;
 /// SSDP discovery and UPnP descriptor parsing: [`discovery::SsdpScanner`] (mDNS is planned).
 pub use tv_rs_core as core;
 pub use tv_rs_discovery as discovery;
-/// Roku OS ECP REST client: [`roku::RokuClient`].
+/// Samsung MDC commercial display protocol client: [`mdc::MdcClient`].
 pub use tv_rs_mdc as mdc;
 /// Wake-on-LAN and power-state probing: [`power::WolSender`].
 pub use tv_rs_power as power;
 pub use tv_rs_power::PowerState;
 pub use tv_rs_roku as roku;
+/// Philips SICP commercial display protocol client: [`sicp::SicpClient`].
+pub use tv_rs_sicp as sicp;
 /// Samsung Tizen remote channel and DIAL: [`tizen::TizenClient`].
 pub use tv_rs_tizen as tizen;
 /// TLS policy and pinning, shared by every vendor channel: [`transport::TlsPolicy`].

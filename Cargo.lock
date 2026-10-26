@@ -2232,6 +2232,7 @@ dependencies = [
  "tv-rs-mdc",
  "tv-rs-power",
  "tv-rs-roku",
+ "tv-rs-sicp",
  "tv-rs-tizen",
  "tv-rs-transport",
  "tv-rs-webos",
@@ -2377,6 +2378,28 @@ dependencies = [
  "tokio",
  "tv-rs-transport",
  "wiremock",
+]
+
+[[package]]
+name = "tv-rs-sicp"
+version = "0.4.0"
+dependencies = [
+ "async-trait",
+ "thiserror",
+ "tokio",
+ "tokio-serial",
+ "tv-rs-core",
+]
+
+[[package]]
+name = "tv-rs-sim"
+version = "0.4.0"
+dependencies = [
+ "tokio",
+ "tracing",
+ "tv-rs-core",
+ "tv-rs-mdc",
+ "tv-rs-sicp",
 ]
 
 [[package]]
