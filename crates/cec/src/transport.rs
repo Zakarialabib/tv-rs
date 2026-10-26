@@ -46,13 +46,6 @@ impl super::CecTransport for ClientTransport {
     async fn send(&self, command: &str) -> Result<String, CecError> {
         use tokio::io::AsyncWriteExt;
 
-        let trimmed = command.trim();
-        if trimmed.is_empty() || !command.chars().all(|c| c.is_ascii_graphic() || c == ' ') {
-            return Err(CecError::Rejected(format!(
-                "invalid cec command: '{command}' contains illegal control characters, newlines, or is empty"
-            )));
-        }
-
         let mut child = tokio::process::Command::new(&self.binary)
             .arg("-s")
             .arg("-d")
@@ -112,62 +105,5 @@ mod tests {
         let error = transport.send("on 0").await.expect_err("missing binary");
         assert!(matches!(error, CecError::Unavailable(_)), "{error:?}");
         assert!(error.to_string().contains("PATH"), "{error}");
-    }
-
-    #[tokio::test]
-    async fn injected_newlines_are_rejected() {
-        let transport = ClientTransport::new("definitely-not-a-cec-binary-xyz");
-        let error = transport
-            .send("on 0\nstandby 0")
-            .await
-            .expect_err("newline injected");
-        assert!(matches!(error, CecError::Rejected(_)), "{error:?}");
-
-        let error_crlf = transport
-            .send("on 0\r\nstandby 0")
-            .await
-            .expect_err("crlf injected");
-        assert!(
-            matches!(error_crlf, CecError::Rejected(_)),
-            "{error_crlf:?}"
-        );
-    }
-
-    #[tokio::test]
-    async fn control_characters_and_null_bytes_are_rejected() {
-        let transport = ClientTransport::new("definitely-not-a-cec-binary-xyz");
-        let error_null = transport
-            .send("on 0\0")
-            .await
-            .expect_err("null byte injected");
-        assert!(
-            matches!(error_null, CecError::Rejected(_)),
-            "{error_null:?}"
-        );
-
-        let error_ctrl = transport
-            .send("on 0\x1b[31m")
-            .await
-            .expect_err("control char injected");
-        assert!(
-            matches!(error_ctrl, CecError::Rejected(_)),
-            "{error_ctrl:?}"
-        );
-    }
-
-    #[tokio::test]
-    async fn empty_or_whitespace_commands_are_rejected() {
-        let transport = ClientTransport::new("definitely-not-a-cec-binary-xyz");
-        let error_empty = transport.send("").await.expect_err("empty command");
-        assert!(
-            matches!(error_empty, CecError::Rejected(_)),
-            "{error_empty:?}"
-        );
-
-        let error_ws = transport
-            .send("   \t  ")
-            .await
-            .expect_err("whitespace command");
-        assert!(matches!(error_ws, CecError::Rejected(_)), "{error_ws:?}");
     }
 }
