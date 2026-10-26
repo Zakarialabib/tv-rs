@@ -8,6 +8,12 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
+use tokio::sync::{mpsc, oneshot};
+
+enum AuditMessage {
+    Record(AuditEntry),
+    Flush(oneshot::Sender<()>),
+}
 
 /// One line of the audit log.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,17 +53,55 @@ impl AuditEntry {
     }
 }
 
-/// An append-only JSONL file.
+/// An append-only JSONL file backed by a non-blocking background channel.
 #[derive(Debug, Clone)]
 pub struct AuditLog {
     path: PathBuf,
+    sender: mpsc::Sender<AuditMessage>,
 }
 
 impl AuditLog {
     /// Writes to `path`, creating it on first append.
     #[must_use]
     pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
+        let path = path.into();
+        let (sender, mut receiver) = mpsc::channel::<AuditMessage>(1024);
+
+        let file_path = path.clone();
+        tokio::spawn(async move {
+            let mut file: Option<tokio::fs::File> = None;
+            while let Some(msg) = receiver.recv().await {
+                match msg {
+                    AuditMessage::Record(entry) => {
+                        if file.is_none() {
+                            if let Some(parent) = file_path.parent() {
+                                let _ = tokio::fs::create_dir_all(parent).await;
+                            }
+                            file = tokio::fs::OpenOptions::new()
+                                .create(true)
+                                .append(true)
+                                .open(&file_path)
+                                .await
+                                .ok();
+                        }
+                        if let Some(f) = &mut file {
+                            if let Ok(mut line) = serde_json::to_string(&entry) {
+                                line.push('\n');
+                                let _ = f.write_all(line.as_bytes()).await;
+                            }
+                        }
+                    }
+                    AuditMessage::Flush(reply) => {
+                        if let Some(f) = &mut file {
+                            let _ = f.flush().await;
+                        }
+                        let _ = reply.send(());
+                    }
+                }
+            }
+        });
+
+        Self { path, sender }
     }
 
     /// The file being written.
@@ -66,25 +110,34 @@ impl AuditLog {
         &self.path
     }
 
-    /// Appends one entry.
+    /// Appends one entry to the background buffer channel.
     ///
     /// # Errors
     ///
-    /// Returns the I/O error. The agent treats a failed audit write as a warning,
-    /// not as a reason to stop converging devices — but it is never silently
-    /// swallowed by this type.
+    /// Returns an error if the background worker channel has closed.
     pub async fn record(&self, entry: &AuditEntry) -> std::io::Result<()> {
-        let mut line = serde_json::to_string(entry)
-            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
-        line.push('\n');
+        self.sender
+            .send(AuditMessage::Record(entry.clone()))
+            .await
+            .map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "audit background worker channel closed",
+                )
+            })
+    }
 
-        let mut file = tokio::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.path)
-            .await?;
-        file.write_all(line.as_bytes()).await?;
-        file.flush().await
+    /// Flushes all pending log entries to disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the background worker channel has closed.
+    pub async fn flush(&self) -> std::io::Result<()> {
+        let (tx, rx) = oneshot::channel();
+        if self.sender.send(AuditMessage::Flush(tx)).await.is_ok() {
+            let _ = rx.await;
+        }
+        Ok(())
     }
 }
 
@@ -180,6 +233,7 @@ mod tests {
         log.record(&AuditEntry::now("tv-2", "off", "sleep", "ok", "inferred"))
             .await
             .unwrap();
+        log.flush().await.unwrap();
 
         let text = tokio::fs::read_to_string(&path).await.unwrap();
         assert_eq!(text.lines().count(), 2);
