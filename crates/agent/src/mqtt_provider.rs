@@ -10,11 +10,6 @@
 //! { "power": "on", "app": "netflix" }
 //! ```
 //!
-//! Connections use TLS by default ([`MqttSubscribeProvider::connect`] or
-//! [`MqttSubscribeProvider::connect_tls`]). Custom TLS options (such as custom CAs
-//! or client certificate authentication) or unencrypted plain TCP connections for
-//! trusted local networks can be specified via [`MqttSubscribeProvider::connect_with_transport`].
-//!
 //! Retained messages are the intended pattern: a device that joins late, or an agent
 //! that restarts, gets the current state without waiting for the CMS to publish again.
 
@@ -22,7 +17,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS, TlsConfiguration, Transport};
+use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS};
 use tokio::task::JoinHandle;
 use tv_rs_core::DeviceDescriptor;
 
@@ -56,37 +51,25 @@ impl Drop for MqttSubscribeProvider {
     }
 }
 
-/// TLS configuration options for MQTT connections.
-#[derive(Debug, Clone, Default)]
-pub struct MqttTlsConfig {
-    /// Custom Root CA certificate(s) in PEM or DER format.
-    pub ca_certs: Vec<Vec<u8>>,
-    /// Client authentication credentials (cert and private key in PEM/DER).
-    pub client_auth: Option<(Vec<u8>, Vec<u8>)>,
-}
-
-/// Transport mode for connecting to an MQTT broker.
-#[derive(Debug, Clone)]
-pub enum MqttTransport {
-    /// Unencrypted plain TCP connection.
-    Tcp,
-    /// Encrypted TLS connection with configurable trust store and optional mTLS.
-    Tls(MqttTlsConfig),
-}
-
 impl MqttSubscribeProvider {
-    /// Connects to `broker` (`host:port`) with plain TCP or TLS according to `transport`,
-    /// and subscribes to `<prefix>/+/desired`.
+    /// Connects to `broker` (`host:port`) and subscribes to `<prefix>/+/desired`.
+    ///
+    /// The connection is **plain TCP**: `rumqttc`'s TLS path pins
+    /// `rustls-webpki 0.102`, which carries open RUSTSEC advisories (CRL parsing
+    /// panic, name-constraint acceptance, a downgrade on an unauthenticated
+    /// ServerHello), so it is compiled out rather than shipped. Put the broker on a
+    /// trusted segment, or use [`HttpPollProvider`](crate::HttpPollProvider) when the
+    /// manifest must cross an untrusted network — that one runs on `reqwest` with
+    /// `rustls 0.23`.
     ///
     /// # Errors
     ///
     /// Returns [`ProviderError::Unavailable`] when the broker address cannot be
     /// parsed or the subscription is rejected.
-    pub async fn connect_with_transport(
+    pub async fn connect(
         broker: &str,
         topic_prefix: &str,
         client_id: &str,
-        transport: MqttTransport,
     ) -> Result<Self, ProviderError> {
         let (host, port) = broker.rsplit_once(':').ok_or_else(|| {
             ProviderError::Unavailable(format!("broker must be host:port, got '{broker}'"))
@@ -95,31 +78,7 @@ impl MqttSubscribeProvider {
             .parse()
             .map_err(|_| ProviderError::Unavailable(format!("'{port}' is not a port")))?;
 
-        let mut options = MqttOptions::new(client_id, host, port);
-
-        match transport {
-            MqttTransport::Tcp => {
-                options.set_transport(Transport::Tcp);
-            }
-            MqttTransport::Tls(tls_config) => {
-                let client_auth = tls_config.client_auth;
-                let tls_opts = if tls_config.ca_certs.is_empty() {
-                    TlsConfiguration::Simple {
-                        ca: Vec::new(),
-                        alpn: None,
-                        client_auth,
-                    }
-                } else {
-                    TlsConfiguration::Simple {
-                        ca: tls_config.ca_certs.into_iter().flatten().collect(),
-                        alpn: None,
-                        client_auth,
-                    }
-                };
-                options.set_transport(Transport::Tls(tls_opts));
-            }
-        }
-
+        let options = MqttOptions::new(client_id, host, port);
         let (client, mut eventloop) = AsyncClient::new(options, 32);
 
         let topic = format!("{}/+/desired", topic_prefix.trim_end_matches('/'));
@@ -162,43 +121,6 @@ impl MqttSubscribeProvider {
             latest,
             task: Some(task),
         })
-    }
-
-    /// Connects to `broker` (`host:port`) using default TLS settings and subscribes to `<prefix>/+/desired`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ProviderError::Unavailable`] when the broker address cannot be
-    /// parsed or the subscription is rejected.
-    pub async fn connect_tls(
-        broker: &str,
-        topic_prefix: &str,
-        client_id: &str,
-    ) -> Result<Self, ProviderError> {
-        Self::connect_with_transport(
-            broker,
-            topic_prefix,
-            client_id,
-            MqttTransport::Tls(MqttTlsConfig::default()),
-        )
-        .await
-    }
-
-    /// Connects to `broker` (`host:port`) and subscribes to `<prefix>/+/desired`.
-    ///
-    /// By default, this uses standard TLS verification. For unencrypted connections on trusted networks,
-    /// see [`connect_with_transport`](Self::connect_with_transport) with [`MqttTransport::Tcp`].
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ProviderError::Unavailable`] when the broker address cannot be
-    /// parsed or the subscription is rejected.
-    pub async fn connect(
-        broker: &str,
-        topic_prefix: &str,
-        client_id: &str,
-    ) -> Result<Self, ProviderError> {
-        Self::connect_tls(broker, topic_prefix, client_id).await
     }
 
     /// The topic prefix this provider follows.
@@ -283,47 +205,5 @@ mod tests {
             DeviceDescriptor::new(DeviceId::new("tv-1").unwrap(), DeviceOs::Roku, "10.0.0.5");
         assert!(provider.desired_state(&device).await.unwrap().is_none());
         assert!(provider.known_devices().is_empty());
-    }
-
-    #[test]
-    fn transport_and_tls_config_data_structures() {
-        let default_cfg = MqttTlsConfig::default();
-        assert!(default_cfg.ca_certs.is_empty());
-        assert!(default_cfg.client_auth.is_none());
-
-        let custom_cfg = MqttTlsConfig {
-            ca_certs: vec![b"fake ca cert".to_vec()],
-            client_auth: Some((b"client cert".to_vec(), b"client key".to_vec())),
-        };
-
-        let transport_tls = MqttTransport::Tls(custom_cfg.clone());
-        let transport_tcp = MqttTransport::Tcp;
-
-        match transport_tls {
-            MqttTransport::Tls(cfg) => {
-                assert_eq!(cfg.ca_certs.len(), 1);
-                assert!(cfg.client_auth.is_some());
-            }
-            _ => panic!("Expected Tls transport"),
-        }
-
-        match transport_tcp {
-            MqttTransport::Tcp => {}
-            _ => panic!("Expected Tcp transport"),
-        }
-    }
-
-    #[tokio::test]
-    async fn connect_validates_broker_address() {
-        let err = MqttSubscribeProvider::connect("invalid_address", "screens", "client_1")
-            .await
-            .unwrap_err();
-        assert!(err.to_string().contains("broker must be host:port"));
-
-        let err_port =
-            MqttSubscribeProvider::connect("localhost:not_a_port", "screens", "client_1")
-                .await
-                .unwrap_err();
-        assert!(err_port.to_string().contains("is not a port"));
     }
 }

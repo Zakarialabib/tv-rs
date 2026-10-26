@@ -16,7 +16,7 @@ default = []
 http = ["dep:reqwest"]
 
 # Subscribe to per-device desired state over MQTT.
-mqtt = ["dep:rumqttc", "rumqttc/use-rustls"]
+mqtt = ["dep:rumqttc"]
 
 [dependencies]
 tv-rs-core.workspace = true
