@@ -181,15 +181,19 @@ impl fmt::Display for CecCommand {
 
 fn parse_physical_address(s: &str) -> Result<u16, CecError> {
     let clean = s.replace([':', '.'], "");
-    let hex_str = clean.strip_prefix("0x").or_else(|| clean.strip_prefix("0X")).unwrap_or(&clean);
-    u16::from_str_radix(hex_str, 16).map_err(|_| {
-        CecError::Rejected(format!("invalid physical address format: '{s}'"))
-    })
+    let hex_str = clean
+        .strip_prefix("0x")
+        .or_else(|| clean.strip_prefix("0X"))
+        .unwrap_or(&clean);
+    u16::from_str_radix(hex_str, 16)
+        .map_err(|_| CecError::Rejected(format!("invalid physical address format: '{s}'")))
 }
 
 fn parse_active_source_frame(hex_part: &str) -> Option<u16> {
     let clean = hex_part.replace([':', ' '], "");
-    if clean.len() == 8 && clean.get(0..4).map(|s| s.to_ascii_uppercase()) == Some("0F82".to_string()) {
+    if clean.len() == 8
+        && clean.get(0..4).map(|s| s.to_ascii_uppercase()) == Some("0F82".to_string())
+    {
         u16::from_str_radix(&clean[4..8], 16).ok()
     } else {
         None
@@ -203,7 +207,9 @@ fn is_valid_hex_frame(s: &str) -> bool {
     }
     let hex_part = clean.strip_prefix("tx ").unwrap_or(clean);
     let stripped = hex_part.replace([':', ' '], "");
-    !stripped.is_empty() && stripped.len().is_multiple_of(2) && stripped.chars().all(|c| c.is_ascii_hexdigit())
+    !stripped.is_empty()
+        && stripped.len().is_multiple_of(2)
+        && stripped.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 impl TryFrom<&str> for CecCommand {
@@ -228,7 +234,9 @@ impl TryFrom<&str> for CecCommand {
                     let addr = CecAddress::try_from(parts[1])?;
                     Ok(CecCommand::PowerOn(addr))
                 } else {
-                    Err(CecError::Rejected(format!("invalid 'on' command format: '{trimmed}'")))
+                    Err(CecError::Rejected(format!(
+                        "invalid 'on' command format: '{trimmed}'"
+                    )))
                 }
             }
             "standby" | "st" => {
@@ -236,7 +244,9 @@ impl TryFrom<&str> for CecCommand {
                     let addr = CecAddress::try_from(parts[1])?;
                     Ok(CecCommand::Standby(addr))
                 } else {
-                    Err(CecError::Rejected(format!("invalid 'standby' command format: '{trimmed}'")))
+                    Err(CecError::Rejected(format!(
+                        "invalid 'standby' command format: '{trimmed}'"
+                    )))
                 }
             }
             "as" | "active_source" => {
@@ -246,7 +256,9 @@ impl TryFrom<&str> for CecCommand {
                     let phys = parse_physical_address(parts[1])?;
                     Ok(CecCommand::SetActiveSource(phys))
                 } else {
-                    Err(CecError::Rejected(format!("invalid active source command format: '{trimmed}'")))
+                    Err(CecError::Rejected(format!(
+                        "invalid active source command format: '{trimmed}'"
+                    )))
                 }
             }
             "tx" => {
@@ -257,7 +269,9 @@ impl TryFrom<&str> for CecCommand {
                     } else if is_valid_hex_frame(&hex_part) {
                         Ok(CecCommand::CustomHexFrame(trimmed.to_string()))
                     } else {
-                        Err(CecError::Rejected(format!("invalid hex frame payload in 'tx': '{trimmed}'")))
+                        Err(CecError::Rejected(format!(
+                            "invalid hex frame payload in 'tx': '{trimmed}'"
+                        )))
                     }
                 } else {
                     Err(CecError::Rejected("missing payload after 'tx'".to_string()))
@@ -362,7 +376,8 @@ impl<T: CecTransport> CecClient<T> {
     /// for "input 1, port 0". Sending this is what makes a panel switch to the
     /// player's input without a remote.
     pub async fn set_active_source(&self, physical: u16) -> Result<String, CecError> {
-        self.send_command(CecCommand::SetActiveSource(physical)).await
+        self.send_command(CecCommand::SetActiveSource(physical))
+            .await
     }
 }
 
@@ -473,10 +488,22 @@ mod tests {
 
         assert_eq!(CecAddress::try_from("0").unwrap(), CecAddress::Tv);
         assert_eq!(CecAddress::try_from("tv").unwrap(), CecAddress::Tv);
-        assert_eq!(CecAddress::try_from("playback1").unwrap(), CecAddress::Playback1);
-        assert_eq!(CecAddress::try_from("playback_2").unwrap(), CecAddress::Playback2);
-        assert_eq!(CecAddress::try_from("audio").unwrap(), CecAddress::AudioSystem);
-        assert_eq!(CecAddress::try_from("broadcast").unwrap(), CecAddress::Broadcast);
+        assert_eq!(
+            CecAddress::try_from("playback1").unwrap(),
+            CecAddress::Playback1
+        );
+        assert_eq!(
+            CecAddress::try_from("playback_2").unwrap(),
+            CecAddress::Playback2
+        );
+        assert_eq!(
+            CecAddress::try_from("audio").unwrap(),
+            CecAddress::AudioSystem
+        );
+        assert_eq!(
+            CecAddress::try_from("broadcast").unwrap(),
+            CecAddress::Broadcast
+        );
         assert!(CecAddress::try_from("invalid_addr").is_err());
     }
 
@@ -499,7 +526,10 @@ mod tests {
         assert_eq!(cmd_as_frame.to_string(), "tx 0F:82:20:00");
 
         let cmd_custom = CecCommand::try_from("tx 10:44:41").unwrap();
-        assert_eq!(cmd_custom, CecCommand::CustomHexFrame("tx 10:44:41".to_string()));
+        assert_eq!(
+            cmd_custom,
+            CecCommand::CustomHexFrame("tx 10:44:41".to_string())
+        );
         assert_eq!(cmd_custom.to_string(), "tx 10:44:41");
 
         let cmd_raw = CecCommand::try_from("volup").unwrap();
@@ -523,7 +553,10 @@ mod tests {
         let recorder = recorder(None);
         let client = CecClient::new(Plumbing(recorder.clone()));
 
-        client.send_command(CecCommand::PowerOn(CecAddress::Tv)).await.unwrap();
+        client
+            .send_command(CecCommand::PowerOn(CecAddress::Tv))
+            .await
+            .unwrap();
         client.send("standby 0").await.unwrap();
 
         let sent = recorder.sent.lock().unwrap().clone();

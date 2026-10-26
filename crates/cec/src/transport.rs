@@ -218,13 +218,21 @@ impl super::CecTransport for PersistentClientTransport {
 
         let proc = lock.as_mut().unwrap();
 
-        if let Err(err) = proc.stdin.write_all(format!("{command}\n").as_bytes()).await {
+        if let Err(err) = proc
+            .stdin
+            .write_all(format!("{command}\n").as_bytes())
+            .await
+        {
             *lock = None;
-            return Err(CecError::Io(format!("failed to write command to cec-client stdin: {err}")));
+            return Err(CecError::Io(format!(
+                "failed to write command to cec-client stdin: {err}"
+            )));
         }
         if let Err(err) = proc.stdin.flush().await {
             *lock = None;
-            return Err(CecError::Io(format!("failed to flush cec-client stdin: {err}")));
+            return Err(CecError::Io(format!(
+                "failed to flush cec-client stdin: {err}"
+            )));
         }
 
         let mut output = String::new();
@@ -242,7 +250,9 @@ impl super::CecTransport for PersistentClientTransport {
                 }
                 Ok(Err(err)) => {
                     *lock = None;
-                    return Err(CecError::Io(format!("failed to read from cec-client stdout: {err}")));
+                    return Err(CecError::Io(format!(
+                        "failed to read from cec-client stdout: {err}"
+                    )));
                 }
                 Err(_) => {
                     break;
@@ -337,13 +347,17 @@ mod tests {
     #[tokio::test]
     async fn persistent_transport_rejects_invalid_commands() {
         let transport = PersistentClientTransport::new("definitely-not-a-cec-binary-xyz");
-        let error_newline = transport.send("on 0\nstandby 0").await.expect_err("newline");
+        let error_newline = transport
+            .send("on 0\nstandby 0")
+            .await
+            .expect_err("newline");
         assert!(matches!(error_newline, CecError::Rejected(_)));
 
         let error_empty = transport.send("").await.expect_err("empty");
         assert!(matches!(error_empty, CecError::Rejected(_)));
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn persistent_transport_reuses_process_session() {
         use std::io::Write;
