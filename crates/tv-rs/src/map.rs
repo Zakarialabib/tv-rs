@@ -128,6 +128,26 @@ pub fn discovery(error: &tv_rs_discovery::DiscoveryError) -> TvError {
     }
 }
 
+/// Maps a SICP error.
+pub fn sicp(error: &tv_rs_sicp::SicpError, _capability: Capability) -> TvError {
+    use tv_rs_sicp::SicpError;
+
+    match error {
+        SicpError::Io(io) => TvError::Transport(TransportError::from_io(io)),
+        SicpError::Timeout => TvError::Transport(TransportError::Timeout),
+        SicpError::Protocol(detail) => TvError::Protocol(ProtocolError::Malformed(detail.clone())),
+        SicpError::Nak { command, code } => TvError::Protocol(ProtocolError::Unexpected(format!(
+            "display returned NAK 0x{code:02X} for command 0x{command:02X}"
+        ))),
+        SicpError::FrameTooLong(_)
+        | SicpError::InvalidValue { .. }
+        | SicpError::BroadcastRequiresSendOnly
+        | SicpError::InvalidDisplayId(_) => {
+            TvError::Protocol(ProtocolError::Malformed(error.to_string()))
+        }
+    }
+}
+
 /// Maps a power error.
 pub fn power(error: &tv_rs_power::PowerError) -> TvError {
     use tv_rs_power::PowerError;
@@ -239,6 +259,16 @@ mod tests {
                 roku(
                     &tv_rs_roku::RokuError::NotFound("no app".into()),
                     Capability::AppLaunch,
+                ),
+                Remedy::BackOff,
+            ),
+            (
+                sicp(
+                    &tv_rs_sicp::SicpError::Nak {
+                        command: 0x18,
+                        code: 0x01,
+                    },
+                    Capability::PowerState,
                 ),
                 Remedy::BackOff,
             ),

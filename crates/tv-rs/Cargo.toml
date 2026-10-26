@@ -24,6 +24,7 @@ tv-rs-roku.workspace = true
 # caller that already knows (an operator adding a panel by address and display
 # id) can name its types and use its `DeviceHandle`.
 tv-rs-mdc.workspace = true
+tv-rs-sicp.workspace = true
 
 async-trait.workspace = true
 serde.workspace = true

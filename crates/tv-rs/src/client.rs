@@ -16,6 +16,7 @@ use tv_rs_discovery::{SsdpDeviceDescriptor, SsdpMsearchResponse, SsdpScanner};
 use tv_rs_mdc::{MdcClient, MdcDevice};
 use tv_rs_power::PowerState;
 use tv_rs_roku::{RokuClient, RokuPowerMode};
+use tv_rs_sicp::{SicpClient, SicpDevice};
 use tv_rs_tizen::{DynConnectionPool, LiveChannelFactory, TizenClient, TizenRemoteKey};
 use tv_rs_transport::TlsPolicy;
 use tv_rs_webos::{DynSessionPool, LiveSessionFactory, WebosClient};
@@ -633,6 +634,29 @@ pub fn mdc_handle(address: impl Into<String>) -> Result<Box<dyn DeviceHandle>> {
     )))
 }
 
+/// Builds a handle for a commercial panel driven by Philips SICP.
+///
+/// Like MDC, SICP is a commercial display protocol and is not classified from discovery.
+///
+/// # Errors
+///
+/// Returns [`TvError::Protocol`] when `address` is empty.
+pub fn sicp_handle(address: impl Into<String>) -> Result<Box<dyn DeviceHandle>> {
+    let address = address.into();
+    if address.trim().is_empty() {
+        return Err(TvError::protocol("sicp address must not be empty"));
+    }
+    let descriptor = DeviceDescriptor::new(
+        DeviceId::new(format!("sicp:{address}"))?,
+        DeviceOs::PhilipsSicp,
+        address.clone(),
+    );
+    Ok(Box::new(SicpDevice::new(
+        SicpClient::new(address),
+        descriptor,
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -656,6 +680,16 @@ mod tests {
     #[test]
     fn an_empty_address_is_refused() {
         assert!(mdc_handle("   ").is_err());
+        assert!(sicp_handle("   ").is_err());
+    }
+
+    #[test]
+    fn a_sicp_handle_is_the_same_erased_handle_the_fleet_uses() {
+        let handle = sicp_handle("192.168.1.50").expect("a non-empty address");
+        assert_eq!(handle.descriptor().os, DeviceOs::PhilipsSicp);
+        assert_eq!(handle.descriptor().address, "192.168.1.50");
+        assert!(handle.capabilities().contains(Capability::PowerState));
+        assert!(!handle.capabilities().contains(Capability::Key));
     }
 
     #[cfg(feature = "quirks")]
