@@ -330,4 +330,26 @@ mod tests {
         assert!(extract_socket_path(&json!({ "socketPath": "/resources/abc" })).is_err());
         assert!(extract_socket_path(&json!({ "socketPath": "tcp://tv:9999" })).is_err());
     }
+
+    #[test]
+    fn pointer_move_encodes_boundary_coordinates() {
+        assert_eq!(
+            PointerFrame::Move {
+                dx: i32::MIN,
+                dy: i32::MAX,
+                down: false
+            }
+            .encode(),
+            format!("type:move\ndx:{}\ndy:{}\ndown:0\n\n", i32::MIN, i32::MAX)
+        );
+        assert_eq!(
+            PointerFrame::Move {
+                dx: 0,
+                dy: 0,
+                down: true
+            }
+            .encode(),
+            "type:move\ndx:0\ndy:0\ndown:1\n\n"
+        );
+    }
 }
