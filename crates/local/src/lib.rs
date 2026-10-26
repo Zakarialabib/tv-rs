@@ -41,8 +41,12 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod ddc;
+pub mod drm;
 pub mod edid;
 
+pub use ddc::{DdcError, DdcMonitor, VcpValue};
+pub use drm::{probe_drm_connectors, DrmDisplayMode, RotationState};
 pub use edid::{parse_edid, DetailedTiming, Edid, EdidError};
 
 /// Physical connector class. `Unknown` is a first-class value: it means the

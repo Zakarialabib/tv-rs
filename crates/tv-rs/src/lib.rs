@@ -47,12 +47,14 @@
 mod client;
 mod error;
 mod handle;
+pub mod subscription;
 mod types;
 
 pub use client::{
     discover, discover_stream, discover_with, identify_vendor, mdc_handle, probe, TvClient,
 };
 pub use error::{Result, TvError};
+pub use subscription::{FacadeEvent, SubscriptionHandle};
 pub use types::{DiscoveredTv, TvVendor};
 
 /// The one home of vendor-error → [`TvError`] mapping.
@@ -67,6 +69,8 @@ pub mod map;
 /// SSDP discovery and UPnP descriptor parsing: [`discovery::SsdpScanner`] (mDNS is planned).
 pub use tv_rs_core as core;
 pub use tv_rs_discovery as discovery;
+/// DLNA UPnP MediaRenderer eventing and SOAP control: [`dlna::Subscription`].
+pub use tv_rs_dlna as dlna;
 /// Roku OS ECP REST client: [`roku::RokuClient`].
 pub use tv_rs_mdc as mdc;
 /// Wake-on-LAN and power-state probing: [`power::WolSender`].

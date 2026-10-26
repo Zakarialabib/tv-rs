@@ -13,6 +13,7 @@ repository.workspace = true
 # Facade re-exports the protocol crates; it holds no protocol logic of its own.
 tv-rs-core.workspace = true
 tv-rs-discovery.workspace = true
+tv-rs-dlna.workspace = true
 tv-rs-power.workspace = true
 tv-rs-transport.workspace = true
 tv-rs-tizen.workspace = true
@@ -32,6 +33,7 @@ tokio.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
+wiremock.workspace = true
 
 [features]
 # Hardware-in-the-loop tests. Off by default so `cargo test` never touches a

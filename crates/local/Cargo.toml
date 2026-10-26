@@ -12,7 +12,11 @@ categories = ["hardware-support", "api-bindings"]
 
 [dependencies]
 serde.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 wmi = "0.14"

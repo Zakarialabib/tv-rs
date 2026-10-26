@@ -128,6 +128,38 @@ pub fn discovery(error: &tv_rs_discovery::DiscoveryError) -> TvError {
     }
 }
 
+/// Maps a DLNA error.
+pub fn dlna(error: &tv_rs_dlna::DlnaError) -> TvError {
+    use tv_rs_dlna::DlnaError;
+
+    match error {
+        DlnaError::DeviceNotFound(detail) => {
+            TvError::Transport(TransportError::Unreachable(detail.clone()))
+        }
+        DlnaError::Network(io) => TvError::Transport(TransportError::from_io(io)),
+        DlnaError::Http(err) => TvError::Transport(TransportError::Unreachable(err.to_string())),
+        DlnaError::Xml(detail) | DlnaError::ParseError(detail) => {
+            TvError::Protocol(ProtocolError::Malformed(detail.clone()))
+        }
+        DlnaError::ServiceNotFound(service) => TvError::Protocol(ProtocolError::Unexpected(
+            format!("DLNA service not found: {service}"),
+        )),
+        DlnaError::AvTransportFault(fault) => {
+            TvError::Protocol(ProtocolError::Unexpected(fault.clone()))
+        }
+        DlnaError::SoapError(detail) => {
+            TvError::Protocol(ProtocolError::Unexpected(detail.clone()))
+        }
+        DlnaError::IncompatibleDevice(detail) => {
+            TvError::Protocol(ProtocolError::Unexpected(detail.clone()))
+        }
+        DlnaError::MulticastBlocked => TvError::Transport(TransportError::Blocked {
+            reason: error.to_string(),
+        }),
+        DlnaError::NoDevicesFound => TvError::Transport(TransportError::Timeout),
+    }
+}
+
 /// Maps a power error.
 pub fn power(error: &tv_rs_power::PowerError) -> TvError {
     use tv_rs_power::PowerError;

@@ -2229,12 +2229,14 @@ dependencies = [
  "tokio",
  "tv-rs-core",
  "tv-rs-discovery",
+ "tv-rs-dlna",
  "tv-rs-mdc",
  "tv-rs-power",
  "tv-rs-roku",
  "tv-rs-tizen",
  "tv-rs-transport",
  "tv-rs-webos",
+ "wiremock",
 ]
 
 [[package]]
@@ -2325,7 +2327,9 @@ dependencies = [
 name = "tv-rs-local"
 version = "0.4.0"
 dependencies = [
+ "libc",
  "serde",
+ "thiserror",
  "tokio",
  "windows-sys 0.59.0",
  "wmi",
@@ -2377,6 +2381,25 @@ dependencies = [
  "tokio",
  "tv-rs-transport",
  "wiremock",
+]
+
+[[package]]
+name = "tv-rs-sim"
+version = "0.4.0"
+dependencies = [
+ "futures-util",
+ "rustls",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "tv-rs-mdc",
+ "tv-rs-power",
+ "tv-rs-tizen",
+ "tv-rs-transport",
+ "tv-rs-webos",
 ]
 
 [[package]]

@@ -1,0 +1,25 @@
+[package]
+name = "tv-rs-sim"
+description = "Hardware-free protocol simulators for Samsung MDC, LG webOS SSAP, and Samsung Tizen TLS."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tv-rs-mdc.workspace = true
+tv-rs-transport.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+rustls.workspace = true
+
+[dev-dependencies]
+tv-rs-power.workspace = true
+tv-rs-tizen.workspace = true
+tv-rs-webos.workspace = true
