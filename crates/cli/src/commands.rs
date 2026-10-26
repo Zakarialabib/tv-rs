@@ -232,7 +232,7 @@ async fn run_ensure(args: EnsureArgs) -> Result<(), CliError> {
     use std::sync::Arc;
 
     use tv_rs::core::DeviceHandle;
-    use tv_rs_agent::{AuditLog, Reconciler, StaticFileProvider};
+    use tv_rs_agent::{AuditLog, DesiredStateProvider, Reconciler, StaticFileProvider};
 
     let found = discover_all(args.timeout).await?;
     if found.is_empty() {
@@ -253,7 +253,43 @@ async fn run_ensure(args: EnsureArgs) -> Result<(), CliError> {
         return Ok(());
     }
 
-    let provider = Arc::new(StaticFileProvider::new(&args.config));
+    let provider: Arc<dyn DesiredStateProvider> = if let Some(broker) = &args.mqtt_broker {
+        use tv_rs_agent::{MqttSubscribeProvider, MqttTlsConfig, MqttTransport};
+
+        let transport = if args.mqtt_allow_insecure {
+            MqttTransport::Tcp
+        } else {
+            let mut tls_config = MqttTlsConfig::new();
+            if let Some(ca) = &args.mqtt_ca_cert {
+                tls_config = tls_config.with_ca_cert(ca);
+            }
+            if let Some(cert) = &args.mqtt_client_cert {
+                tls_config = tls_config.with_client_cert(cert);
+            }
+            if let Some(key) = &args.mqtt_client_key {
+                tls_config = tls_config.with_client_key(key);
+            }
+            MqttTransport::Tls(tls_config)
+        };
+
+        let mqtt_provider = MqttSubscribeProvider::connect_with_transport(
+            broker,
+            &args.mqtt_prefix,
+            "tv-rs-cli",
+            transport,
+        )
+        .await
+        .map_err(|e| CliError::Agent(e.to_string()))?;
+
+        Arc::new(mqtt_provider)
+    } else if let Some(config_path) = args.config.as_deref() {
+        Arc::new(StaticFileProvider::new(config_path))
+    } else {
+        return Err(CliError::Agent(
+            "Either --config or --mqtt-broker must be specified".to_string(),
+        ));
+    };
+
     let mut reconciler = Reconciler::new(fleet, provider);
     if let Some(path) = &args.audit {
         reconciler = reconciler.with_audit(AuditLog::new(path));

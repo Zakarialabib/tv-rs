@@ -57,14 +57,32 @@ pub struct StatusArgs {
 #[derive(Debug, Args)]
 pub struct EnsureArgs {
     /// JSON file mapping device id to desired state.
-    #[arg(long)]
-    pub config: String,
+    #[arg(long, required_unless_present = "mqtt_broker")]
+    pub config: Option<String>,
     /// Seconds to wait for SSDP replies; omit to use the scanner's own default.
     #[arg(long)]
     pub timeout: Option<u64>,
     /// Append every action to this JSONL file.
     #[arg(long)]
     pub audit: Option<String>,
+    /// MQTT broker host:port.
+    #[arg(long = "mqtt-broker", env = "MQTT_BROKER")]
+    pub mqtt_broker: Option<String>,
+    /// MQTT topic prefix.
+    #[arg(long = "mqtt-prefix", env = "MQTT_PREFIX", default_value = "screens")]
+    pub mqtt_prefix: String,
+    /// Path to custom CA certificate for MQTT TLS.
+    #[arg(long = "mqtt-ca-cert", env = "MQTT_CA_CERT")]
+    pub mqtt_ca_cert: Option<String>,
+    /// Path to client certificate for MQTT mTLS.
+    #[arg(long = "mqtt-client-cert", env = "MQTT_CLIENT_CERT")]
+    pub mqtt_client_cert: Option<String>,
+    /// Path to client key for MQTT mTLS.
+    #[arg(long = "mqtt-client-key", env = "MQTT_CLIENT_KEY")]
+    pub mqtt_client_key: Option<String>,
+    /// Allow plain TCP for MQTT connection.
+    #[arg(long = "mqtt-allow-insecure", env = "MQTT_ALLOW_INSECURE")]
+    pub mqtt_allow_insecure: bool,
 }
 
 /// Arguments for `discover`.

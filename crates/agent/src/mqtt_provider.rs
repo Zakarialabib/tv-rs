@@ -14,14 +14,70 @@
 //! that restarts, gets the current state without waiting for the CMS to publish again.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS};
+use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS, Transport};
 use tokio::task::JoinHandle;
 use tv_rs_core::DeviceDescriptor;
 
 use crate::desired::{DesiredState, DesiredStateProvider, ProviderError};
+
+/// TLS configuration parameters for MQTT connection.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MqttTlsConfig {
+    /// Path to custom CA certificate file.
+    pub ca_cert: Option<PathBuf>,
+    /// Path to client certificate file (for mTLS).
+    pub client_cert: Option<PathBuf>,
+    /// Path to client key file (for mTLS).
+    pub client_key: Option<PathBuf>,
+}
+
+impl MqttTlsConfig {
+    /// Create a new `MqttTlsConfig` with default options.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the custom CA certificate path.
+    #[must_use]
+    pub fn with_ca_cert(mut self, path: impl Into<PathBuf>) -> Self {
+        self.ca_cert = Some(path.into());
+        self
+    }
+
+    /// Set the client certificate path for mTLS.
+    #[must_use]
+    pub fn with_client_cert(mut self, path: impl Into<PathBuf>) -> Self {
+        self.client_cert = Some(path.into());
+        self
+    }
+
+    /// Set the client key path for mTLS.
+    #[must_use]
+    pub fn with_client_key(mut self, path: impl Into<PathBuf>) -> Self {
+        self.client_key = Some(path.into());
+        self
+    }
+}
+
+/// Transport mode for the MQTT connection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MqttTransport {
+    /// TLS connection (default).
+    Tls(MqttTlsConfig),
+    /// Plain TCP connection (for trusted local segments).
+    Tcp,
+}
+
+impl Default for MqttTransport {
+    fn default() -> Self {
+        Self::Tls(MqttTlsConfig::default())
+    }
+}
 
 /// Desired state fed by an MQTT subscription.
 pub struct MqttSubscribeProvider {
@@ -52,15 +108,7 @@ impl Drop for MqttSubscribeProvider {
 }
 
 impl MqttSubscribeProvider {
-    /// Connects to `broker` (`host:port`) and subscribes to `<prefix>/+/desired`.
-    ///
-    /// The connection is **plain TCP**: `rumqttc`'s TLS path pins
-    /// `rustls-webpki 0.102`, which carries open RUSTSEC advisories (CRL parsing
-    /// panic, name-constraint acceptance, a downgrade on an unauthenticated
-    /// ServerHello), so it is compiled out rather than shipped. Put the broker on a
-    /// trusted segment, or use [`HttpPollProvider`](crate::HttpPollProvider) when the
-    /// manifest must cross an untrusted network — that one runs on `reqwest` with
-    /// `rustls 0.23`.
+    /// Connects to `broker` (`host:port`) using default TLS settings and subscribes to `<prefix>/+/desired`.
     ///
     /// # Errors
     ///
@@ -71,6 +119,22 @@ impl MqttSubscribeProvider {
         topic_prefix: &str,
         client_id: &str,
     ) -> Result<Self, ProviderError> {
+        Self::connect_with_transport(broker, topic_prefix, client_id, MqttTransport::default())
+            .await
+    }
+
+    /// Connects to `broker` (`host:port`) using the specified `transport` and subscribes to `<prefix>/+/desired`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProviderError::Unavailable`] when the broker address cannot be
+    /// parsed, transport certificates cannot be loaded, or the subscription is rejected.
+    pub async fn connect_with_transport(
+        broker: &str,
+        topic_prefix: &str,
+        client_id: &str,
+        transport: MqttTransport,
+    ) -> Result<Self, ProviderError> {
         let (host, port) = broker.rsplit_once(':').ok_or_else(|| {
             ProviderError::Unavailable(format!("broker must be host:port, got '{broker}'"))
         })?;
@@ -78,7 +142,52 @@ impl MqttSubscribeProvider {
             .parse()
             .map_err(|_| ProviderError::Unavailable(format!("'{port}' is not a port")))?;
 
-        let options = MqttOptions::new(client_id, host, port);
+        let mut options = MqttOptions::new(client_id, host, port);
+
+        match transport {
+            MqttTransport::Tcp => {
+                options.set_transport(Transport::tcp());
+            }
+            MqttTransport::Tls(tls_config) => {
+                let ca = if let Some(ca_path) = &tls_config.ca_cert {
+                    std::fs::read(ca_path).map_err(|e| {
+                        ProviderError::Unavailable(format!(
+                            "failed to read CA cert at '{}': {e}",
+                            ca_path.display()
+                        ))
+                    })?
+                } else {
+                    Vec::new()
+                };
+
+                let client_auth = match (tls_config.client_cert, tls_config.client_key) {
+                    (Some(cert_path), Some(key_path)) => {
+                        let cert_bytes = std::fs::read(&cert_path).map_err(|e| {
+                            ProviderError::Unavailable(format!(
+                                "failed to read client cert at '{}': {e}",
+                                cert_path.display()
+                            ))
+                        })?;
+                        let key_bytes = std::fs::read(&key_path).map_err(|e| {
+                            ProviderError::Unavailable(format!(
+                                "failed to read client key at '{}': {e}",
+                                key_path.display()
+                            ))
+                        })?;
+                        Some((cert_bytes, key_bytes))
+                    }
+                    (None, None) => None,
+                    _ => {
+                        return Err(ProviderError::Unavailable(
+                            "both client cert and client key must be provided for mTLS".to_string(),
+                        ));
+                    }
+                };
+
+                options.set_transport(Transport::tls(ca, client_auth, None));
+            }
+        }
+
         let (client, mut eventloop) = AsyncClient::new(options, 32);
 
         let topic = format!("{}/+/desired", topic_prefix.trim_end_matches('/'));
@@ -205,5 +314,68 @@ mod tests {
             DeviceDescriptor::new(DeviceId::new("tv-1").unwrap(), DeviceOs::Roku, "10.0.0.5");
         assert!(provider.desired_state(&device).await.unwrap().is_none());
         assert!(provider.known_devices().is_empty());
+    }
+
+    #[test]
+    fn mqtt_tls_config_builder() {
+        let config = MqttTlsConfig::new()
+            .with_ca_cert("/path/to/ca.pem")
+            .with_client_cert("/path/to/client.pem")
+            .with_client_key("/path/to/client.key");
+
+        assert_eq!(config.ca_cert, Some(PathBuf::from("/path/to/ca.pem")));
+        assert_eq!(
+            config.client_cert,
+            Some(PathBuf::from("/path/to/client.pem"))
+        );
+        assert_eq!(
+            config.client_key,
+            Some(PathBuf::from("/path/to/client.key"))
+        );
+    }
+
+    #[tokio::test]
+    async fn connect_rejects_invalid_broker_format() {
+        let err = MqttSubscribeProvider::connect("invalid_broker", "screens", "client")
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("broker must be host:port"));
+
+        let err2 = MqttSubscribeProvider::connect("host:not_a_port", "screens", "client")
+            .await
+            .unwrap_err();
+        assert!(err2.to_string().contains("is not a port"));
+    }
+
+    #[tokio::test]
+    async fn connect_with_transport_validates_mtls_arguments() {
+        let config = MqttTlsConfig::new().with_client_cert("/path/to/cert.pem");
+        let err = MqttSubscribeProvider::connect_with_transport(
+            "localhost:1883",
+            "screens",
+            "client",
+            MqttTransport::Tls(config),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("both client cert and client key must be provided for mTLS"));
+    }
+
+    #[tokio::test]
+    async fn connect_with_transport_handles_missing_files() {
+        let config = MqttTlsConfig::new().with_ca_cert("/nonexistent/ca.pem");
+        let err = MqttSubscribeProvider::connect_with_transport(
+            "localhost:1883",
+            "screens",
+            "client",
+            MqttTransport::Tls(config),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(err.to_string().contains("failed to read CA cert"));
     }
 }

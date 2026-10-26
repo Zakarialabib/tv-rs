@@ -68,7 +68,7 @@ toml = "0.8"
 uuid = { version = "1", features = ["v4"] }
 anyhow = "1"
 tracing = "0.1"
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 
 # --- media server ---
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "query"] }

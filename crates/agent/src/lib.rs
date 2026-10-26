@@ -53,7 +53,7 @@ pub use healer::{HealerAction, HealerLadder};
 #[cfg(feature = "http")]
 pub use http_provider::HttpPollProvider;
 #[cfg(feature = "mqtt")]
-pub use mqtt_provider::MqttSubscribeProvider;
+pub use mqtt_provider::{MqttSubscribeProvider, MqttTlsConfig, MqttTransport};
 pub use reconciler::{decide, Decision};
 pub use remedy::{plan_remedy, symptom, RemedyPolicy, RemedyStep, Symptom};
 pub use runner::{Outcome, ReconcilePolicy, Reconciler};
