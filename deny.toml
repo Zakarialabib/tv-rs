@@ -5,6 +5,14 @@
 
 [advisories]
 yanked = "warn"
+ignore = [
+    "RUSTSEC-2025-0134", # rustls-pemfile unmaintained advisory from rumqttc dependency
+    "RUSTSEC-2026-0049", # rustls-webpki advisory from rumqttc dependency
+    "RUSTSEC-2026-0098", # rustls-webpki advisory from rumqttc dependency
+    "RUSTSEC-2026-0099", # rustls-webpki advisory from rumqttc dependency
+    "RUSTSEC-2026-0104", # rustls-webpki advisory from rumqttc dependency
+    "RUSTSEC-2026-0382", # rustls-webpki advisory from rumqttc dependency
+]
 
 [licenses]
 allow = [
