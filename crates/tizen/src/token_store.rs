@@ -268,4 +268,51 @@ mod tests {
         assert_eq!(ips, vec!["10.0.0.20".to_string(), "10.0.0.3".to_string()]);
         let _ = std::fs::remove_file(&path);
     }
+
+    #[test]
+    fn concurrency_checks_on_upsert_and_remove() {
+        use std::sync::{Arc, Mutex};
+        use std::thread;
+
+        let path = temp_path("concurrent");
+        let store = Arc::new(Mutex::new(SamsungTokenStore::load(&path)));
+        let mut handles = vec![];
+
+        for i in 0..10 {
+            let store_clone = Arc::clone(&store);
+            let handle = thread::spawn(move || {
+                let ip = format!("10.0.0.{i}");
+                let mut guard = store_clone.lock().unwrap();
+                guard.upsert(&ip, &format!("tok-{i}"), &format!("TV-{i}")).unwrap();
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        let guard = store.lock().unwrap();
+        assert_eq!(guard.len(), 10);
+        drop(guard);
+
+        let mut remove_handles = vec![];
+        for i in 0..5 {
+            let store_clone = Arc::clone(&store);
+            let handle = thread::spawn(move || {
+                let ip = format!("10.0.0.{i}");
+                let mut guard = store_clone.lock().unwrap();
+                guard.remove(&ip).unwrap();
+            });
+            remove_handles.push(handle);
+        }
+
+        for handle in remove_handles {
+            handle.join().unwrap();
+        }
+
+        let guard = store.lock().unwrap();
+        assert_eq!(guard.len(), 5);
+        let _ = std::fs::remove_file(&path);
+    }
 }

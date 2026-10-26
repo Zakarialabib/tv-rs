@@ -611,4 +611,40 @@ mod tests {
             .expect_err("é is refused");
         assert!(matches!(error, RokuError::Unsupported(_)), "{error:?}");
     }
+
+    #[test]
+    fn parse_apps_handles_malformed_xml_and_unexpected_nodes() {
+        assert!(parse_apps("not xml").is_err());
+        assert!(parse_apps("<apps><app>No ID</app></apps>").map(|apps| apps[0].id.is_empty()).unwrap_or(false));
+        let xml = r#"<apps>
+            <!-- comment -->
+            <other-node>test</other-node>
+            <app id="100">App Name</app>
+        </apps>"#;
+        let apps = parse_apps(xml).expect("parsed with unexpected child nodes");
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0].id, "100");
+        assert_eq!(apps[0].name, "App Name");
+    }
+
+    #[test]
+    fn parse_active_app_handles_malformed_xml_and_unexpected_nodes() {
+        assert!(parse_active_app("not xml").is_err());
+        let err = parse_active_app("<wrong-root></wrong-root>").expect_err("wrong root tag");
+        assert!(matches!(err, RokuError::Xml(_)));
+
+        // Missing app tag inside <active-app> returns default empty active app, not error
+        let active = parse_active_app("<active-app></active-app>").expect("missing app element");
+        assert_eq!(active.app_id, None);
+        assert_eq!(active.app_name, "");
+
+        // Extra unexpected tags inside active-app
+        let xml = r#"<active-app>
+            <extra-node>val</extra-node>
+            <app id="50">App 50</app>
+        </active-app>"#;
+        let active = parse_active_app(xml).expect("valid parse");
+        assert_eq!(active.app_id.as_deref(), Some("50"));
+        assert_eq!(active.app_name, "App 50");
+    }
 }

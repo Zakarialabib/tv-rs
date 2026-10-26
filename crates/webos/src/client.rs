@@ -778,4 +778,25 @@ mod tests {
         assert!(!rendered.contains("140cce79"), "{rendered}");
         assert!(rendered.contains("<redacted>"), "{rendered}");
     }
+
+    #[test]
+    fn parse_ssap_response_handles_malformed_json_and_unexpected_shapes() {
+        assert!(parse_ssap_response("not json").is_err());
+        assert!(parse_ssap_response("").is_err());
+        assert!(parse_ssap_response("{ unclosed: ").is_err());
+
+        // Invalid data types for typed fields cause a JSON error
+        assert!(parse_ssap_response(r#"{"id":123,"type":"response"}"#).is_err());
+
+        let resp_empty = parse_ssap_response("{}").expect("empty object deserializes to default SsapResponse");
+        assert_eq!(resp_empty.id, None);
+        assert_eq!(resp_empty.kind, None);
+    }
+
+    #[test]
+    fn parse_register_response_handles_malformed_json() {
+        assert!(parse_register_response("not json").is_err());
+        assert!(parse_register_response("").is_err());
+        assert!(parse_register_response(r#"{"payload": "string instead of struct"}"#).is_err());
+    }
 }
