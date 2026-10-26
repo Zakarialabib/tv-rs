@@ -376,17 +376,25 @@ mod tests {
     #[test]
     fn msearch_parse_handles_malformed_and_non_msearch_inputs() {
         // Non-M-SEARCH HTTP requests
-        assert!(parse_msearch_st("GET /description.xml HTTP/1.1\r\nST: ssdp:all\r\n\r\n").is_none());
+        assert!(
+            parse_msearch_st("GET /description.xml HTTP/1.1\r\nST: ssdp:all\r\n\r\n").is_none()
+        );
         assert!(parse_msearch_st("POST /event HTTP/1.1\r\nST: ssdp:all\r\n\r\n").is_none());
 
         // Missing ST header
-        assert!(parse_msearch_st("M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\n\r\n").is_none());
+        assert!(
+            parse_msearch_st("M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\n\r\n").is_none()
+        );
 
         // Whitespace only ST header value
         assert!(parse_msearch_st("M-SEARCH * HTTP/1.1\r\nST:    \r\n").is_none());
 
         // Malformed lines without colons
-        assert!(parse_msearch_st("M-SEARCH * HTTP/1.1\r\nINVALID_HEADER_LINE\r\nST: ssdp:all\r\n").as_deref() == Some("ssdp:all"));
+        assert!(
+            parse_msearch_st("M-SEARCH * HTTP/1.1\r\nINVALID_HEADER_LINE\r\nST: ssdp:all\r\n")
+                .as_deref()
+                == Some("ssdp:all")
+        );
 
         // Case variation and extra whitespace trimming in header key and value
         assert_eq!(
