@@ -1,16 +1,13 @@
-//! `tv-rs-discovery` — SSDP discovery and UPnP descriptor parsing.
+//! `tv-rs-discovery` — SSDP/mDNS discovery, UPnP descriptor parsing, and signage pairing.
 //!
-//! mDNS/Bonjour is *planned*, not implemented: [`DiscoveryMethod`] names it so the
-//! enum does not need a breaking change later, but only SSDP runs today.
+//! This crate locates televisions and digital signage players on the local network before any
+//! control traffic is sent. It implements SSDP `M-SEARCH` over UDP multicast (port 1900), UPnP
+//! descriptor parsing, mDNS/Bonjour service discovery (`MdnsScanner`/`MdnsAdvertiser`), and dynamic
+//! QR code session token generation/validation for digital signage pairing (`SignagePairingSession`).
 //!
-//! This crate locates televisions on the local network before any control
-//! traffic is sent. Phase 1 implements SSDP `M-SEARCH` over UDP multicast
-//! (port 1900) and parsing of the resulting UPnP device descriptor XML.
-//!
-//! **Discovery needs no authentication.** SSDP is an unauthenticated LAN
-//! multicast protocol: any device on the local subnet can be discovered and its
-//! descriptor fetched over plain HTTP. mDNS/Bonjour and ARP are represented by
-//! [`DiscoveryMethod`] but not implemented yet.
+//! **Discovery needs no authentication.** SSDP and mDNS are unauthenticated LAN
+//! multicast protocols: any device on the local subnet can be discovered and its
+//! descriptor fetched over plain HTTP.
 //!
 //! # Example
 //!
@@ -32,12 +29,21 @@
 #![forbid(unsafe_code)]
 pub mod client;
 pub mod error;
+pub mod mdns;
+pub mod pairing;
 pub mod payload;
 pub mod protocol;
 pub mod types;
 
 pub use client::{build_msearch, parse_device_descriptor, parse_msearch_response, SsdpScanner};
 pub use error::{DiscoveryError, Result};
+pub use mdns::{
+    MdnsAdvertiser, MdnsScanner, MdnsServiceRecord, MDNS_SERVICE_TYPE_SIGNAGE, MDNS_SERVICE_TYPE_TV,
+};
+pub use pairing::{
+    validate_handshake, SignageHandshakeRequest, SignageHandshakeResponse, SignagePairingPayload,
+    SignagePairingSession, DEFAULT_SESSION_TTL_SECS, SIGNAGE_PAIRING_URI_SCHEME,
+};
 pub use payload::{SsdpDeviceDescriptor, SsdpMsearchResponse};
 pub use protocol::SsdpDiscovery;
 pub use types::{
