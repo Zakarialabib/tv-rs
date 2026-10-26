@@ -37,8 +37,8 @@ use async_trait::async_trait;
 use tv_rs_core::ProtocolError;
 use tv_rs_core::{
     AppLaunch, AppRef, Capability, CapabilitySet, CommandId, DeviceDescriptor, DeviceHandle,
-    DeviceId, DeviceOs, Input, InputSelect, Key, KeyInput, PowerControl, PowerState, TextInput,
-    TvError, VolumeControl,
+    DeviceId, DeviceOs, Input, InputSelect, Key, KeyInput, PowerControl, PowerState,
+    ScreenCastProvider, TextInput, TvError, VolumeControl,
 };
 use tv_rs_power::MacAddress;
 use tv_rs_roku::RokuKey;
@@ -244,6 +244,27 @@ impl DeviceHandle for TvClient {
         self.core_capabilities()
             .contains(Capability::Volume)
             .then_some(self as &dyn VolumeControl)
+    }
+
+    fn as_screen_cast(&self) -> Option<&dyn ScreenCastProvider> {
+        self.core_capabilities()
+            .contains(Capability::ScreenCast)
+            .then_some(self as &dyn ScreenCastProvider)
+    }
+}
+
+#[async_trait]
+impl ScreenCastProvider for TvClient {
+    async fn start_cast(
+        &self,
+        _target_url: Option<&str>,
+        _cmd: tv_rs_core::CommandId,
+    ) -> Result<(), TvError> {
+        Err(TvError::Unsupported(Capability::ScreenCast))
+    }
+
+    async fn stop_cast(&self, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
+        Err(TvError::Unsupported(Capability::ScreenCast))
     }
 }
 
@@ -1059,6 +1080,14 @@ mod tests {
                 matches!(webos_key(key), Err(TvError::Unsupported(Capability::Key))),
                 "{key:?} should have no pointer frame"
             );
+        }
+    }
+
+    #[test]
+    fn screen_cast_is_unsupported_by_default_on_tv_clients() {
+        for client in [tizen(), webos(), roku()] {
+            assert!(!client.capabilities().contains(Capability::ScreenCast));
+            assert!(client.as_screen_cast().is_none());
         }
     }
 

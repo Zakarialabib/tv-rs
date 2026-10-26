@@ -5,7 +5,6 @@
 //! ways real televisions fail, and it records the physical actions it performed so
 //! tests can assert what actually happened rather than what was returned.
 
-use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -14,14 +13,14 @@ use async_trait::async_trait;
 use crate::capability::{
     AppLaunch, AppRef, BrightnessControl, Capability, CapabilitySet, DeviceHandle, Input,
     InputSelect, Key, KeyInput, Orientation, OrientationControl, PanelHealth, PanelHealthProvider,
-    PanelLockControl, PowerControl, Probe, Rebootable, TextInput, VolumeControl,
+    PanelLockControl, PowerControl, Probe, Rebootable, ScreenCastProvider, TextInput,
+    VolumeControl,
 };
 #[cfg(feature = "supporting")]
 use crate::capability::{FrameFormat, PanelHours, PanelHoursProvider, ScreenCapturer, ScreenFrame};
 use crate::command::CommandId;
 use crate::descriptor::{DeviceDescriptor, DeviceId, PowerState};
 use crate::error::{AuthError, ProtocolError, StateError, TransportError, TvError};
-use crate::permission::{HardwarePermission, PermissionStatus, PermissionType};
 use crate::telemetry::{Telemetry, TelemetryProvider};
 
 /// A failure the mock should produce for the next mutating command.
@@ -74,8 +73,10 @@ pub enum Action {
     SetPanelLock(bool),
     /// The content orientation was set.
     SetOrientation(Orientation),
-    /// Permission request was made.
-    RequestPermission(PermissionType),
+    /// Screen cast started.
+    StartCast(Option<String>),
+    /// Screen cast stopped.
+    StopCast,
 }
 
 /// A television that exists only in tests.
@@ -96,7 +97,6 @@ pub struct MockBackend {
     panel_lock: Mutex<Option<bool>>,
     orientation: Mutex<Option<Orientation>>,
     panel_health: Mutex<PanelHealth>,
-    permissions: Mutex<HashMap<PermissionType, PermissionStatus>>,
     #[cfg(feature = "supporting")]
     panel_hours: Mutex<PanelHours>,
     #[cfg(feature = "supporting")]
@@ -122,7 +122,7 @@ impl MockBackend {
             Capability::PanelLock,
             Capability::Orientation,
             Capability::NoSignalStatus,
-            Capability::HardwarePermission,
+            Capability::ScreenCast,
             #[cfg(feature = "supporting")]
             Capability::LampOrPanelHours,
             #[cfg(feature = "supporting")]
@@ -151,7 +151,6 @@ impl MockBackend {
                 temperature_celsius: Some(38),
                 lamp_error: false,
             }),
-            permissions: Mutex::new(HashMap::new()),
             #[cfg(feature = "supporting")]
             panel_hours: Mutex::new(PanelHours {
                 panel_hours: 12_345,
@@ -212,14 +211,6 @@ impl MockBackend {
     /// Makes the next mutating command fail with `failure`.
     pub fn fail_next(&self, failure: Failure) {
         *self.next_failure.lock().expect("mock lock") = Some(failure);
-    }
-
-    /// Sets the permission status for a given permission type.
-    pub fn set_permission_status(&self, permission: PermissionType, status: PermissionStatus) {
-        self.permissions
-            .lock()
-            .expect("mock lock")
-            .insert(permission, status);
     }
 
     /// Makes the next telemetry read fail with `failure`.
@@ -382,6 +373,12 @@ impl DeviceHandle for MockBackend {
             .then_some(self as &dyn PanelHealthProvider)
     }
 
+    fn as_screen_cast(&self) -> Option<&dyn ScreenCastProvider> {
+        self.capabilities
+            .contains(Capability::ScreenCast)
+            .then_some(self as &dyn ScreenCastProvider)
+    }
+
     #[cfg(feature = "supporting")]
     fn as_panel_hours(&self) -> Option<&dyn PanelHoursProvider> {
         self.capabilities
@@ -398,12 +395,6 @@ impl DeviceHandle for MockBackend {
 
     fn as_probe(&self) -> Option<&dyn Probe> {
         Some(self)
-    }
-
-    fn as_hardware_permission(&self) -> Option<&dyn HardwarePermission> {
-        self.capabilities
-            .contains(Capability::HardwarePermission)
-            .then_some(self as &dyn HardwarePermission)
     }
 
     fn as_telemetry(&self) -> Option<&dyn TelemetryProvider> {
@@ -630,44 +621,19 @@ impl PanelHealthProvider for MockBackend {
 }
 
 #[async_trait]
-impl HardwarePermission for MockBackend {
-    async fn check_permission(
-        &self,
-        permission: PermissionType,
-    ) -> Result<PermissionStatus, TvError> {
-        if !self.capabilities.contains(Capability::HardwarePermission) {
-            return Err(self.unsupported(Capability::HardwarePermission));
+impl ScreenCastProvider for MockBackend {
+    async fn start_cast(&self, target_url: Option<&str>, _cmd: CommandId) -> Result<(), TvError> {
+        if !self.capabilities.contains(Capability::ScreenCast) {
+            return Err(self.unsupported(Capability::ScreenCast));
         }
-        let status = self
-            .permissions
-            .lock()
-            .expect("mock lock")
-            .get(&permission)
-            .copied()
-            .unwrap_or(PermissionStatus::PromptRequired);
-        Ok(status)
+        self.perform(Action::StartCast(target_url.map(|s| s.to_string())))
     }
 
-    async fn request_permission(
-        &self,
-        permission: PermissionType,
-    ) -> Result<PermissionStatus, TvError> {
-        if !self.capabilities.contains(Capability::HardwarePermission) {
-            return Err(self.unsupported(Capability::HardwarePermission));
+    async fn stop_cast(&self, _cmd: CommandId) -> Result<(), TvError> {
+        if !self.capabilities.contains(Capability::ScreenCast) {
+            return Err(self.unsupported(Capability::ScreenCast));
         }
-        self.perform(Action::RequestPermission(permission))?;
-        let mut lock = self.permissions.lock().expect("mock lock");
-        let current = lock
-            .get(&permission)
-            .copied()
-            .unwrap_or(PermissionStatus::PromptRequired);
-        let new_status = match current {
-            PermissionStatus::Denied => PermissionStatus::Denied,
-            PermissionStatus::NotSupported => PermissionStatus::NotSupported,
-            _ => PermissionStatus::Granted,
-        };
-        lock.insert(permission, new_status);
-        Ok(new_status)
+        self.perform(Action::StopCast)
     }
 }
 
@@ -903,13 +869,45 @@ mod tests {
     }
 
     #[test]
+    fn screen_cast_actions_are_recorded_and_unsupported_when_not_advertised() {
+        let mock = mock();
+        assert!(mock.as_screen_cast().is_some());
+        block_on(ScreenCastProvider::start_cast(
+            &mock,
+            Some("rtsp://10.0.0.1:554/live"),
+            CommandId::new(),
+        ))
+        .unwrap();
+        block_on(ScreenCastProvider::stop_cast(&mock, CommandId::new())).unwrap();
+        assert_eq!(
+            mock.actions(),
+            vec![
+                Action::StartCast(Some("rtsp://10.0.0.1:554/live".to_string())),
+                Action::StopCast
+            ]
+        );
+
+        let limited = MockBackend::new(descriptor())
+            .with_capabilities(CapabilitySet::of(Capability::PowerState));
+        assert!(limited.as_screen_cast().is_none());
+        assert!(matches!(
+            block_on(ScreenCastProvider::start_cast(
+                &limited,
+                None,
+                CommandId::new()
+            ))
+            .expect_err("screen cast is not advertised"),
+            TvError::Unsupported(Capability::ScreenCast)
+        ));
+    }
+
+    #[test]
     fn new_capabilities_are_unsupported_when_not_advertised() {
         let limited = MockBackend::new(descriptor())
             .with_capabilities(CapabilitySet::of(Capability::PowerState));
         assert!(limited.as_brightness().is_none());
         assert!(limited.as_reboot().is_none());
         assert!(limited.as_telemetry().is_none());
-        assert!(limited.as_hardware_permission().is_none());
 
         assert!(matches!(
             block_on(BrightnessControl::set_brightness(
@@ -929,42 +927,5 @@ mod tests {
             block_on(limited.telemetry()).expect_err("telemetry is not advertised"),
             TvError::Unsupported(Capability::Telemetry)
         ));
-        assert!(matches!(
-            block_on(limited.request_screen_access())
-                .expect_err("hardware permission is not advertised"),
-            TvError::Unsupported(Capability::HardwarePermission)
-        ));
-    }
-
-    #[test]
-    fn hardware_permission_consent_flow() {
-        let mock = mock();
-        assert!(mock.as_hardware_permission().is_some());
-
-        // Default state is PromptRequired
-        let initial = block_on(mock.check_screen_access()).unwrap();
-        assert_eq!(initial, PermissionStatus::PromptRequired);
-        assert!(!initial.is_granted());
-
-        // Request screen access triggers consent flow and returns Granted
-        let granted = block_on(mock.request_screen_access()).unwrap();
-        assert_eq!(granted, PermissionStatus::Granted);
-        assert!(granted.is_granted());
-        assert_eq!(
-            mock.actions(),
-            vec![Action::RequestPermission(PermissionType::ScreenCapture)]
-        );
-
-        // Subsequent check returns Granted
-        assert_eq!(
-            block_on(mock.check_screen_access()).unwrap(),
-            PermissionStatus::Granted
-        );
-
-        // Denied permission remains Denied
-        mock.set_permission_status(PermissionType::AudioCapture, PermissionStatus::Denied);
-        let denied = block_on(mock.request_permission(PermissionType::AudioCapture)).unwrap();
-        assert_eq!(denied, PermissionStatus::Denied);
-        assert!(!denied.is_granted());
     }
 }

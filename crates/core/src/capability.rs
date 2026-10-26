@@ -8,7 +8,6 @@ use async_trait::async_trait;
 use crate::command::CommandId;
 use crate::descriptor::{DeviceDescriptor, DeviceId, PowerState};
 use crate::error::TvError;
-use crate::permission::HardwarePermission;
 use crate::telemetry::TelemetryProvider;
 
 /// One thing a device can be asked to do.
@@ -64,11 +63,10 @@ pub enum Capability {
     /// can start an application it cannot enumerate (Tizen's remote channel is
     /// exactly that), so "can I launch" and "can I list what is installed" are
     /// independent facts, and the fleet grid renders a blank column on the wrong
-    /// one. Declared last so the `CapabilitySet` bit layout of every capability
-    /// before it is unchanged.
+    /// one.
     AppList,
-    /// Request and check OS hardware access permissions.
-    HardwarePermission,
+    /// Screen casting or screen receiving preview / mirroring stream capability.
+    ScreenCast,
 }
 
 impl Capability {
@@ -95,7 +93,7 @@ impl Capability {
             Self::ScreenCapture => "screen_capture",
             Self::TextInput => "text_input",
             Self::AppList => "app_list",
-            Self::HardwarePermission => "hardware_permission",
+            Self::ScreenCast => "screen_cast",
         }
     }
 }
@@ -176,7 +174,7 @@ const ALL_CAPABILITIES: &[Capability] = &[
     Capability::ScreenCapture,
     Capability::AppList,
     Capability::TextInput,
-    Capability::HardwarePermission,
+    Capability::ScreenCast,
 ];
 
 const fn capability_index(capability: Capability) -> u16 {
@@ -200,7 +198,7 @@ const fn capability_index(capability: Capability) -> u16 {
         Capability::ScreenCapture => 14,
         Capability::AppList => 15,
         Capability::TextInput => 16,
-        Capability::HardwarePermission => 17,
+        Capability::ScreenCast => 17,
     }
 }
 
@@ -666,6 +664,20 @@ pub trait ScreenCapturer: Send + Sync {
     async fn capture(&self) -> Result<Option<ScreenFrame>, TvError>;
 }
 
+/// Screen casting and preview / mirroring control trait.
+#[async_trait]
+pub trait ScreenCastProvider: Send + Sync {
+    /// Starts screen casting / preview stream for the target or from the device.
+    async fn start_cast(&self, _target_url: Option<&str>, _cmd: CommandId) -> Result<(), TvError> {
+        Err(TvError::Unsupported(Capability::ScreenCast))
+    }
+
+    /// Stops active screen casting session.
+    async fn stop_cast(&self, _cmd: CommandId) -> Result<(), TvError> {
+        Err(TvError::Unsupported(Capability::ScreenCast))
+    }
+}
+
 /// An erased television.
 ///
 /// The fleet reason this trait exists: `Vec<Arc<dyn DeviceHandle>>` compiles, and a
@@ -749,13 +761,13 @@ pub trait DeviceHandle: Send + Sync {
         None
     }
 
-    /// Control-plane latency measurement, or `None`.
-    fn as_probe(&self) -> Option<&dyn Probe> {
+    /// Screen cast / receiver control, or `None`.
+    fn as_screen_cast(&self) -> Option<&dyn ScreenCastProvider> {
         None
     }
 
-    /// Hardware permission control, or `None`.
-    fn as_hardware_permission(&self) -> Option<&dyn HardwarePermission> {
+    /// Control-plane latency measurement, or `None`.
+    fn as_probe(&self) -> Option<&dyn Probe> {
         None
     }
 
