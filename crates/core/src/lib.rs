@@ -54,7 +54,8 @@ pub mod serde;
 pub use capability::{
     AppLaunch, AppRef, BrightnessControl, Capability, CapabilitySet, DeviceHandle, Input,
     InputSelect, Key, KeyInput, Orientation, OrientationControl, PanelHealth, PanelHealthProvider,
-    PanelHours, PanelLockControl, PowerControl, Probe, Rebootable, TextInput, VolumeControl,
+    PanelHours, PanelLockControl, PowerControl, Probe, Rebootable, ScreenCastProvider, TextInput,
+    VolumeControl,
 };
 #[cfg(feature = "supporting")]
 pub use capability::{FrameFormat, PanelHoursProvider, ScreenCapturer, ScreenFrame};
