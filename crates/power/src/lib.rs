@@ -28,10 +28,14 @@ pub mod payload;
 pub mod protocol;
 pub mod types;
 
-pub use client::{build_magic_packet, poll_power_state, wake_on_lan, WolSender};
+pub use client::{
+    build_magic_packet, poll_power_state, probe_power_state_with_confidence, wake_on_lan, WolSender,
+};
 pub use error::{PowerError, Result};
 pub use payload::MagicPacket;
 pub use protocol::PowerControl;
 pub use types::{
-    MacAddress, PowerState, MAC_ADDRESS_LEN, MAGIC_PACKET_LEN, WOL_BROADCAST_ADDR, WOL_UDP_PORT,
+    ConfidenceScore, EnergyMeterReading, EvaluatedPowerState, MacAddress, PowerEvaluator,
+    PowerProfile, PowerSignalSource, PowerState, MAC_ADDRESS_LEN, MAGIC_PACKET_LEN,
+    WOL_BROADCAST_ADDR, WOL_UDP_PORT,
 };
