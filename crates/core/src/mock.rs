@@ -179,21 +179,6 @@ impl MockBackend {
         self
     }
 
-    /// Supplies the initial brightness level.
-    #[must_use]
-    pub fn with_brightness(mut self, level: u8) -> Self {
-        self.brightness = Mutex::new(Some(level));
-        self
-    }
-
-    /// Supplies the panel hours snapshot returned by [`PanelHoursProvider::panel_hours`].
-    #[cfg(feature = "supporting")]
-    #[must_use]
-    pub fn with_panel_hours(mut self, panel_hours: PanelHours) -> Self {
-        self.panel_hours = Mutex::new(panel_hours);
-        self
-    }
-
     /// Supplies the telemetry snapshot the mock returns.
     #[must_use]
     pub fn with_telemetry(mut self, telemetry: Telemetry) -> Self {
@@ -942,52 +927,5 @@ mod tests {
             block_on(limited.telemetry()).expect_err("telemetry is not advertised"),
             TvError::Unsupported(Capability::Telemetry)
         ));
-    }
-
-    #[test]
-    fn simulates_local_projector_returning_panel_and_lamp_hours_and_setting_brightness() {
-        use crate::descriptor::{DeviceOs, LinkKind};
-
-        let descriptor = DeviceDescriptor::new(
-            DeviceId::new("local-proj-1").unwrap(),
-            DeviceOs::HostMonitor,
-            "/dev/ttyUSB0",
-        )
-        .with_name("Main Conference Projector")
-        .with_model("ProProjector-4K")
-        .with_link_kind(LinkKind::Serial);
-
-        let mock = MockBackend::new(descriptor).with_brightness(75);
-
-        #[cfg(feature = "supporting")]
-        let mock = mock.with_panel_hours(PanelHours {
-            panel_hours: 2400,
-            lamp_hours: Some(1150),
-        });
-
-        assert_eq!(mock.descriptor().os, DeviceOs::HostMonitor);
-        assert_eq!(mock.descriptor().link_kind, Some(LinkKind::Serial));
-
-        // Verify BrightnessControl
-        let brightness_ctrl = mock.as_brightness().expect("brightness supported");
-        let initial_brightness = block_on(brightness_ctrl.brightness()).unwrap();
-        assert_eq!(initial_brightness, Some(75));
-
-        let cmd = CommandId::new();
-        block_on(brightness_ctrl.set_brightness(90, cmd)).expect("set brightness succeeds");
-        let updated_brightness = block_on(brightness_ctrl.brightness()).unwrap();
-        assert_eq!(updated_brightness, Some(90));
-        assert_eq!(mock.actions(), vec![Action::SetBrightness(90)]);
-
-        // Verify PanelHoursProvider if supporting feature is enabled
-        #[cfg(feature = "supporting")]
-        {
-            let hours_provider = mock.as_panel_hours().expect("panel hours supported");
-            let hours = block_on(hours_provider.panel_hours())
-                .unwrap()
-                .expect("hours available");
-            assert_eq!(hours.panel_hours, 2400);
-            assert_eq!(hours.lamp_hours, Some(1150));
-        }
     }
 }

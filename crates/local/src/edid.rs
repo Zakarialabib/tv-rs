@@ -26,7 +26,6 @@
 //! assert!(matches!(parse_edid(&[0u8; 16]), Err(EdidError::TooShort(16))));
 //! ```
 
-use super::{evaluate, Attachment, ProbeInfo, TV_THRESHOLD};
 use serde::{Deserialize, Serialize};
 
 /// The fixed eight-byte EDID header (E-EDID §3.3).
@@ -183,60 +182,6 @@ impl Edid {
     #[must_use]
     pub fn pnp_id(&self) -> String {
         format!("{}{:04X}", self.manufacturer_id, self.product_code)
-    }
-
-    /// Returns the native panel resolution in pixels `(width, height)` if preferred timing is available.
-    #[must_use]
-    pub fn preferred_resolution(&self) -> Option<(u32, u32)> {
-        self.preferred_timing
-            .map(|t| (u32::from(t.h_active), u32::from(t.v_active)))
-    }
-
-    /// Converts this parsed EDID into a [`ProbeInfo`] structure.
-    #[must_use]
-    pub fn to_probe_info(&self, system_name: Option<String>, attachment: Attachment) -> ProbeInfo {
-        let (width, height) = self.preferred_resolution().unwrap_or((0, 0));
-        let refresh_rate = self
-            .preferred_timing
-            .and_then(|t| t.refresh_hz().map(|r| r.round() as u32));
-        let physical_width_cm = self.physical_width_cm.map(f64::from);
-        let physical_height_cm = self.physical_height_cm.map(f64::from);
-        let diagonal = self.diagonal_inches().map(|d| d as f32);
-        let vendor = Some(self.manufacturer_id.clone());
-        let model = Some(self.model());
-        let serial = self.serial();
-
-        let (tv_confidence, mut evidence) = evaluate(
-            attachment,
-            width,
-            height,
-            refresh_rate,
-            vendor.as_deref(),
-            model.as_deref(),
-            diagonal,
-        );
-
-        if serial.is_some() {
-            evidence.push("EDID serial present".to_string());
-        }
-
-        ProbeInfo {
-            system_name,
-            width,
-            height,
-            vendor,
-            model,
-            serial,
-            attachment,
-            refresh_rate,
-            bits_per_pixel: None,
-            physical_width_cm,
-            physical_height_cm,
-            brightness: None,
-            tv_confidence,
-            is_tv: attachment.tv_eligible() && tv_confidence >= TV_THRESHOLD,
-            evidence,
-        }
     }
 }
 
@@ -436,66 +381,5 @@ mod tests {
         let edid = parse_edid(&bytes).expect("parses");
         assert_eq!(edid.display_name, None);
         assert_eq!(edid.model(), "0001");
-    }
-
-    #[test]
-    fn edid_to_probe_info_conversion() {
-        let bytes = fixture("samsung-c49rg9x-sam0f99.hex");
-        let edid = parse_edid(&bytes).expect("parses");
-        let info = edid.to_probe_info(Some("HDMI-1".to_string()), Attachment::Hdmi);
-        assert_eq!(info.system_name.as_deref(), Some("HDMI-1"));
-        assert_eq!(info.vendor.as_deref(), Some("SAM"));
-        assert_eq!(info.model.as_deref(), Some("C49RG9x"));
-        assert_eq!(info.serial.as_deref(), Some("HNKNC00549"));
-        assert_eq!(info.width, 3840);
-        assert_eq!(info.height, 1080);
-        assert_eq!(info.physical_width_cm, Some(119.0));
-        assert_eq!(info.physical_height_cm, Some(34.0));
-    }
-
-    #[test]
-    fn dell_vendor_edid_parsing_and_identification() {
-        let mut b = vec![0u8; 128];
-        b[..8].copy_from_slice(&EDID_HEADER);
-        // Manufacturer ID 'DEL': D=4, E=5, L=12 => (4<<10) | (5<<5) | 12 = 4268 = 0x10AC
-        b[8..10].copy_from_slice(&0x10ACu16.to_be_bytes());
-        b[10..12].copy_from_slice(&0x413Cu16.to_le_bytes()); // Product code 0x413C
-        b[12..16].copy_from_slice(&12345678u32.to_le_bytes()); // Serial
-        b[16] = 20; // Week
-        b[17] = 30; // Year 2020
-        b[18] = 1;
-        b[19] = 4; // EDID 1.4
-        b[20] = 0x80; // Digital
-        b[21] = 60; // 60 cm width
-        b[22] = 34; // 34 cm height
-
-        // Preferred timing DTD in b[54..72] for 2560x1440
-        b[54..56].copy_from_slice(&2415u16.to_le_bytes());
-        b[56] = 0x00; // H active low 8
-        b[57] = 0xE0; // H blank low 8
-        b[58] = 0xA1; // H active hi 4 (0x0A) | H blank hi 4 (0x01)
-        b[59] = 0xA0; // V active low 8
-        b[60] = 0x26; // V blank low 8
-        b[61] = 0x50; // V active hi 4 (0x05) | V blank hi 4 (0x00)
-
-        let sum = b[..127]
-            .iter()
-            .fold(0u8, |acc, byte| acc.wrapping_add(*byte));
-        b[127] = (0u8).wrapping_sub(sum);
-
-        let edid = parse_edid(&b).expect("valid dell edid");
-        assert!(edid.checksum_valid);
-        assert_eq!(edid.manufacturer_id, "DEL");
-        assert_eq!(edid.serial(), Some("12345678".to_string()));
-        assert_eq!(edid.physical_width_cm, Some(60));
-        assert_eq!(edid.physical_height_cm, Some(34));
-
-        let info = edid.to_probe_info(Some("DP-1".to_string()), Attachment::DisplayPort);
-        assert_eq!(info.vendor.as_deref(), Some("DEL"));
-        assert_eq!(info.serial.as_deref(), Some("12345678"));
-        assert_eq!(info.width, 2560);
-        assert_eq!(info.height, 1440);
-        assert_eq!(info.physical_width_cm, Some(60.0));
-        assert_eq!(info.physical_height_cm, Some(34.0));
     }
 }

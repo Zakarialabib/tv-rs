@@ -26,6 +26,7 @@ tv-rs-roku.workspace = true
 tv-rs-cec.workspace = true
 tv-rs-ir.workspace = true
 tv-rs-mdc.workspace = true
+tv-rs-serial.workspace = true
 tv-rs-sicp.workspace = true
 tv-rs-spatial-audio.workspace = true
 

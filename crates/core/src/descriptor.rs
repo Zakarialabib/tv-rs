@@ -58,8 +58,6 @@ impl fmt::Display for DeviceId {
 /// fact. [`DeviceOs::Unknown`] is a legitimate answer and must not be guessed into
 /// one of the others.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum DeviceOs {
     /// Samsung's Tizen remote-channel firmware.
     Tizen,
@@ -74,8 +72,6 @@ pub enum DeviceOs {
     SamsungMdc,
     /// Philips commercial firmware driven by SICP over TCP or RS-232.
     PhilipsSicp,
-    /// Host OS driven attached monitor or display (DDC/CI, local serial).
-    HostMonitor,
     /// Discovered, not identified.
     #[default]
     Unknown,
@@ -91,7 +87,6 @@ impl DeviceOs {
             Self::Roku => "roku",
             Self::SamsungMdc => "samsung_mdc",
             Self::PhilipsSicp => "philips_sicp",
-            Self::HostMonitor => "host_monitor",
             Self::Unknown => "unknown",
         }
     }
@@ -103,44 +98,11 @@ impl fmt::Display for DeviceOs {
     }
 }
 
-/// Physical or logical connection type over which a device is controlled.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
-pub enum LinkKind {
-    /// Serial connection (RS-232 / RS-422 / RS-485).
-    Serial,
-    /// Direct Display Control / Command Interface (DDC/CI).
-    DdcCi,
-    /// Locally attached display or monitor control box interface.
-    #[default]
-    Local,
-}
-
-impl LinkKind {
-    /// A short, stable label for logs and UI.
-    #[must_use]
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Serial => "serial",
-            Self::DdcCi => "ddc_ci",
-            Self::Local => "local",
-        }
-    }
-}
-
-impl fmt::Display for LinkKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
 /// Everything known about a device before a single command is sent.
 ///
 /// Every optional field is optional because discovery genuinely does not always
 /// answer: a Roku player reports no panel, a Samsung set may omit firmware.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeviceDescriptor {
     /// Stable identifier.
     pub id: DeviceId,
@@ -156,8 +118,6 @@ pub struct DeviceDescriptor {
     pub firmware: Option<String>,
     /// MAC address, when advertised — required for Wake-on-LAN.
     pub mac: Option<String>,
-    /// Connection link kind (serial, DDC/CI, local, etc.), when specified.
-    pub link_kind: Option<LinkKind>,
 }
 
 impl DeviceDescriptor {
@@ -172,7 +132,6 @@ impl DeviceDescriptor {
             model: None,
             firmware: None,
             mac: None,
-            link_kind: None,
         }
     }
 
@@ -201,13 +160,6 @@ impl DeviceDescriptor {
     #[must_use]
     pub fn with_mac(mut self, mac: impl Into<String>) -> Self {
         self.mac = Some(mac.into());
-        self
-    }
-
-    /// Sets the connection link kind.
-    #[must_use]
-    pub fn with_link_kind(mut self, link_kind: LinkKind) -> Self {
-        self.link_kind = Some(link_kind);
         self
     }
 
@@ -270,22 +222,6 @@ mod tests {
     fn unknown_is_the_default_platform() {
         assert_eq!(DeviceOs::default(), DeviceOs::Unknown);
         assert_eq!(DeviceOs::Unknown.as_str(), "unknown");
-        assert_eq!(DeviceOs::HostMonitor.as_str(), "host_monitor");
-        assert_eq!(DeviceOs::HostMonitor.to_string(), "host_monitor");
-    }
-
-    #[test]
-    fn link_kind_labels_and_defaults() {
-        assert_eq!(LinkKind::default(), LinkKind::Local);
-        assert_eq!(LinkKind::Serial.as_str(), "serial");
-        assert_eq!(LinkKind::DdcCi.as_str(), "ddc_ci");
-        assert_eq!(LinkKind::Local.as_str(), "local");
-        assert_eq!(LinkKind::DdcCi.to_string(), "ddc_ci");
-
-        let id = DeviceId::new("local-mon").unwrap();
-        let descriptor = DeviceDescriptor::new(id, DeviceOs::HostMonitor, "ddc:0")
-            .with_link_kind(LinkKind::DdcCi);
-        assert_eq!(descriptor.link_kind, Some(LinkKind::DdcCi));
     }
 
     #[test]
