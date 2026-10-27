@@ -35,6 +35,7 @@ tv-rs-transport = { path = "crates/transport", version = "0.4.0" }
 # Media server (206 + HLS). Published last: nothing in the workspace depends on it.
 tv-rs-media = { path = "crates/media", version = "0.4.0" }
 tv-rs-vision = { path = "crates/vision", version = "0.4.0" }
+tv-rs-rules = { path = "crates/rules", version = "0.4.0" }
 
 # --- runtime / async ---
 tokio = { version = "1", features = ["net", "time", "io-util", "fs", "macros", "rt-multi-thread", "sync"] }

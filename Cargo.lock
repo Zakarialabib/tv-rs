@@ -2926,6 +2926,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tv-rs-rules"
+version = "0.4.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "tv-rs-core",
+ "tv-rs-vision",
+]
+
+[[package]]
 name = "tv-rs-sicp"
 version = "0.4.0"
 dependencies = [
