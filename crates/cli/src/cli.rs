@@ -43,6 +43,23 @@ pub enum Command {
     Status(StatusArgs),
     /// Converge a fleet towards a desired-state file.
     Ensure(EnsureArgs),
+    /// Universal IR Remote brand detection scanner using feedback loops.
+    #[command(name = "ir-scan")]
+    IrScan(IrScanArgs),
+}
+
+/// Arguments for `ir-scan`.
+#[derive(Debug, Args)]
+pub struct IrScanArgs {
+    /// Target IP address for TCP power probe feedback verification.
+    #[arg(long)]
+    pub ip: Option<String>,
+    /// Save matched IR profile to a TOML file path.
+    #[arg(long)]
+    pub output: Option<String>,
+    /// Dry run mode using mock emitter.
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 /// Arguments for `status`.
