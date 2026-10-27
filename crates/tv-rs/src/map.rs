@@ -128,23 +128,35 @@ pub fn discovery(error: &tv_rs_discovery::DiscoveryError) -> TvError {
     }
 }
 
-/// Maps a SICP error.
-pub fn sicp(error: &tv_rs_sicp::SicpError, _capability: Capability) -> TvError {
-    use tv_rs_sicp::SicpError;
+/// Maps a DLNA error.
+pub fn dlna(error: &tv_rs_dlna::DlnaError) -> TvError {
+    use tv_rs_dlna::DlnaError;
 
     match error {
-        SicpError::Io(io) => TvError::Transport(TransportError::from_io(io)),
-        SicpError::Timeout => TvError::Transport(TransportError::Timeout),
-        SicpError::Protocol(detail) => TvError::Protocol(ProtocolError::Malformed(detail.clone())),
-        SicpError::Nak { command, code } => TvError::Protocol(ProtocolError::Unexpected(format!(
-            "display returned NAK 0x{code:02X} for command 0x{command:02X}"
-        ))),
-        SicpError::FrameTooLong(_)
-        | SicpError::InvalidValue { .. }
-        | SicpError::BroadcastRequiresSendOnly
-        | SicpError::InvalidDisplayId(_) => {
-            TvError::Protocol(ProtocolError::Malformed(error.to_string()))
+        DlnaError::DeviceNotFound(detail) => {
+            TvError::Transport(TransportError::Unreachable(detail.clone()))
         }
+        DlnaError::Network(io) => TvError::Transport(TransportError::from_io(io)),
+        DlnaError::Http(err) => TvError::Transport(TransportError::Unreachable(err.to_string())),
+        DlnaError::Xml(detail) | DlnaError::ParseError(detail) => {
+            TvError::Protocol(ProtocolError::Malformed(detail.clone()))
+        }
+        DlnaError::ServiceNotFound(service) => TvError::Protocol(ProtocolError::Unexpected(
+            format!("DLNA service not found: {service}"),
+        )),
+        DlnaError::AvTransportFault(fault) => {
+            TvError::Protocol(ProtocolError::Unexpected(fault.clone()))
+        }
+        DlnaError::SoapError(detail) => {
+            TvError::Protocol(ProtocolError::Unexpected(detail.clone()))
+        }
+        DlnaError::IncompatibleDevice(detail) => {
+            TvError::Protocol(ProtocolError::Unexpected(detail.clone()))
+        }
+        DlnaError::MulticastBlocked => TvError::Transport(TransportError::Blocked {
+            reason: error.to_string(),
+        }),
+        DlnaError::NoDevicesFound => TvError::Transport(TransportError::Timeout),
     }
 }
 
@@ -259,16 +271,6 @@ mod tests {
                 roku(
                     &tv_rs_roku::RokuError::NotFound("no app".into()),
                     Capability::AppLaunch,
-                ),
-                Remedy::BackOff,
-            ),
-            (
-                sicp(
-                    &tv_rs_sicp::SicpError::Nak {
-                        command: 0x18,
-                        code: 0x01,
-                    },
-                    Capability::PowerState,
                 ),
                 Remedy::BackOff,
             ),

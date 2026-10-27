@@ -41,9 +41,13 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod ddc;
+pub mod drm;
 pub mod edid;
 pub mod topology;
 
+pub use ddc::{DdcError, DdcMonitor, VcpValue};
+pub use drm::{probe_drm_connectors, DrmDisplayMode, RotationState};
 pub use edid::{parse_edid, DetailedTiming, Edid, EdidError};
 pub use topology::{DisplayTopology, GridPosition, MappedDisplay, Zone, ZoneType};
 

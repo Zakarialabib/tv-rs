@@ -18,6 +18,7 @@ tv-rs-roku = { path = "crates/roku", version = "0.4.0" }
 tv-rs-mdc = { path = "crates/mdc", version = "0.4.0" }
 tv-rs-sicp = { path = "crates/sicp", version = "0.4.0" }
 tv-rs-sim = { path = "crates/sim", version = "0.4.0" }
+tv-rs-dlna = { path = "crates/dlna", version = "0.4.0" }
 tv-rs-tizen = { path = "crates/tizen", version = "0.4.0" }
 tv-rs-webos = { path = "crates/webos", version = "0.4.0" }
 tv-rs-bluetooth = { path = "crates/bluetooth", version = "0.4.0" }
