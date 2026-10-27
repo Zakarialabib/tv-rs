@@ -6,7 +6,6 @@
 use crate::client::TvClient;
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
-use tv_rs_core::DeviceId;
 use tv_rs_discovery::{SsdpDeviceDescriptor, SsdpMsearchResponse};
 use tv_rs_roku::ROKU_ECP_PORT;
 use tv_rs_tizen::TIZEN_WS_PORT;
@@ -139,49 +138,6 @@ impl DiscoveredTv {
             .unwrap_or(self.ip.as_str())
     }
 
-    /// The strongest stable identity available for this device.
-    ///
-    /// Identity is what a fleet dashboard keys on, so the precedence favours
-    /// *uniqueness* over meaning:
-    ///
-    /// 1. **`usn`** — the SSDP USN embeds the device's UDN (a per-device UUID):
-    ///    globally unique, survives reboots and DHCP changes, and present after
-    ///    any scan that reached the descriptor.
-    /// 2. **`serial_number`** — unique when the vendor is honest; some ship a
-    ///    model-wide default, which is why it does not outrank the UDN.
-    /// 3. **`mac`** — hardware truth, but only a direct probe ever supplies one
-    ///    (an SSDP reply carries no hardware address).
-    /// 4. **`ip`** — last resort: stable only for a static-IP install, and the
-    ///    only answer a [`DiscoveredTv::probed`] result can give.
-    ///
-    /// The key is therefore *path-dependent by design*: the same television
-    /// answers with its USN after a scan and with its address after a bare
-    /// probe, because the probe never asked for a descriptor. Callers that need
-    /// one identity across both paths should scan, not probe.
-    ///
-    /// This is deliberately **not** [`DeviceHandle::id`](tv_rs_core::DeviceHandle::id):
-    /// that trait method lives on a connected client and keys by host, while
-    /// this method exists for inventory — before any connection is made.
-    #[must_use]
-    pub fn stable_key(&self) -> String {
-        self.usn
-            .as_deref()
-            .or(self.serial_number.as_deref())
-            .or(self.mac.as_deref())
-            .unwrap_or(self.ip.as_str())
-            .to_string()
-    }
-
-    /// This device as a [`DeviceId`], for callers that want the core type.
-    ///
-    /// Falls back to [`DeviceId::anonymous`] only if the derived key is empty
-    /// after trimming — which [`Self::stable_key`] cannot produce (every
-    /// fallback arm ends in `ip`, and discovery never returns an empty source).
-    #[must_use]
-    pub fn device_id(&self) -> DeviceId {
-        DeviceId::new(self.stable_key()).unwrap_or_else(|_| DeviceId::anonymous())
-    }
-
     /// Build the default control client for this device.
     ///
     /// Returns [`TvError::UnsupportedDevice`](crate::TvError::UnsupportedDevice)
@@ -235,48 +191,5 @@ mod tests {
         assert_eq!(TvVendor::Lg.as_str(), "lg");
         assert_eq!(TvVendor::Roku.as_str(), "roku");
         assert_eq!(TvVendor::Unknown.as_str(), "unknown");
-    }
-
-    /// The precedence the fleet dashboard keys on: uniqueness beats meaning,
-    /// and a bare probe degrades to its address rather than to nothing.
-    #[test]
-    fn stable_key_prefers_usn_then_serial_then_mac_then_ip() {
-        let mut tv = device(TvVendor::Samsung);
-        assert_eq!(
-            tv.stable_key(),
-            "192.168.1.10",
-            "a probed result has only its address"
-        );
-
-        tv.mac = Some("AA:BB:CC:DD:EE:FF".into());
-        assert_eq!(tv.stable_key(), "AA:BB:CC:DD:EE:FF");
-
-        tv.serial_number = Some("SN-1234".into());
-        assert_eq!(tv.stable_key(), "SN-1234");
-
-        tv.usn = Some("uuid:7de5f0a1-0000-4000-8000-000000000001::urn:upnp:rootdevice".into());
-        assert_eq!(
-            tv.stable_key(),
-            "uuid:7de5f0a1-0000-4000-8000-000000000001::urn:upnp:rootdevice",
-            "the USN carries the UDN, which outranks a vendor serial"
-        );
-        assert_eq!(
-            tv.device_id().as_str(),
-            tv.stable_key(),
-            "device_id is stable_key in the core type"
-        );
-    }
-
-    /// Two same-model panels with a vendor-default serial must not collide:
-    /// the USN wins precisely because serials can be model-wide.
-    #[test]
-    fn same_model_panels_with_default_serials_do_not_collide() {
-        let mut a = device(TvVendor::Samsung);
-        let mut b = device(TvVendor::Samsung);
-        a.serial_number = Some("unknown".into());
-        b.serial_number = Some("unknown".into());
-        a.usn = Some("uuid:aaaa::urn:upnp:rootdevice".into());
-        b.usn = Some("uuid:bbbb::urn:upnp:rootdevice".into());
-        assert_ne!(a.stable_key(), b.stable_key());
     }
 }
