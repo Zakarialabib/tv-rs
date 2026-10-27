@@ -2385,6 +2385,7 @@ dependencies = [
  "tv-rs-power",
  "tv-rs-roku",
  "tv-rs-sicp",
+ "tv-rs-spatial-audio",
  "tv-rs-tizen",
  "tv-rs-transport",
  "tv-rs-webos",
@@ -2571,6 +2572,18 @@ dependencies = [
  "tv-rs-core",
  "tv-rs-mdc",
  "tv-rs-sicp",
+]
+
+[[package]]
+name = "tv-rs-spatial-audio"
+version = "0.4.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tv-rs-core",
 ]
 
 [[package]]
