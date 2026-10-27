@@ -20,14 +20,14 @@
 //! Pure request builders and response parsers live here, free of HTTP — the
 //! network calls are thin wrappers in [`crate::gena_client`].
 
-/// Decodes a text event and resolves XML entities.
+/// Resolves XML entities in a text event.
 ///
-/// `quick-xml` 0.41 split the old `unescape()` into decoding (bytes -> str) and
-/// entity resolution (`escape::unescape`). Malformed entities fall back to the empty
-/// string, which is what the previous single-call version did.
+/// `quick-xml` 0.42 stores text events as already-decoded `str` with entity
+/// references left as-is, so only entity resolution (`escape::unescape`) remains
+/// here. Malformed entities fall back to the empty string, which is what the
+/// previous single-call version did.
 fn text_of(t: &quick_xml::events::BytesText<'_>) -> String {
-    let decoded = t.decode().unwrap_or_default();
-    quick_xml::escape::unescape(&decoded)
+    quick_xml::escape::unescape(t.as_ref())
         .map(|unescaped| unescaped.into_owned())
         .unwrap_or_default()
 }
@@ -281,9 +281,10 @@ pub fn extract_event_sub_url(description_xml: &str, base_url: &str) -> Result<St
 }
 
 /// Strip a namespace prefix from an element name.
-fn local_name(qname: &[u8]) -> String {
-    let s = String::from_utf8_lossy(qname);
-    s.rsplit(':').next().unwrap_or(&s).to_string()
+///
+/// `quick-xml` 0.42 hands out names as `&str` (`QName` wraps `str`, not bytes).
+fn local_name(qname: &str) -> String {
+    qname.rsplit(':').next().unwrap_or(qname).to_string()
 }
 
 /// Resolve a possibly-relative URL against the description document's URL.

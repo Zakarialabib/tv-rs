@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`tv-rs-vision`**: the computer-vision / edge-AI event engine — RTSP stream
+  ingestion, pluggable inference engines behind `VisionEngine` (with a mock
+  engine so CI never needs hardware), spatial zone analytics, and structured
+  JSON vision events (`VisionEvent`) for display deployments.
+
 - **Fleet identity on discovery**: `DiscoveredTv::stable_key()` and
   `DiscoveredTv::device_id()` — the strongest stable identity available before
   any connection is made, with a documented precedence of USN (the UDN) →
