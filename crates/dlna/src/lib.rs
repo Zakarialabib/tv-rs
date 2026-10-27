@@ -60,9 +60,13 @@ pub mod gena_registry;
 pub mod metadata;
 /// transport state models (`Renderer`).
 pub mod models;
+/// Media path selection and optimal delivery routing.
+pub mod path;
 /// SOAP control for two UPnP services: AVTransport (casting/playback) and
 /// RenderingControl (volume/mute).
 pub mod soap;
+/// Synchronized media delivery and playlist awareness.
+pub mod sync;
 
 pub use advertise::{
     advertise, alive_datagrams, byebye_datagrams, parse_msearch_st, search_response,
@@ -82,11 +86,13 @@ pub use gena_registry::{
 };
 pub use metadata::build_didl_lite;
 pub use models::Renderer;
+pub use path::{MediaPath, MediaPathSelector, MediaPathType, SelectionCriteria};
 pub use soap::{
     cast, extract_service_control_url, get_mute, get_volume, pause, seek, set_mute, set_volume,
     stop, AvTransport, RenderingControl, SoapAvTransport, SoapRenderingControl,
     AV_TRANSPORT_ACTION, RENDERING_CONTROL_ACTION,
 };
+pub use sync::{MultiRendererSync, Playlist, PlaylistItem, SyncClock};
 
 #[cfg(test)]
 mod gena_registry_tests;

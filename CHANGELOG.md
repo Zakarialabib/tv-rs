@@ -6,7 +6,51 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **`tv-rs-vision`**: the computer-vision / edge-AI event engine — RTSP stream
+  ingestion, pluggable inference engines behind `VisionEngine` (with a mock
+  engine so CI never needs hardware), spatial zone analytics, and structured
+  JSON vision events (`VisionEvent`) for display deployments.
+
+- **Fleet identity on discovery**: `DiscoveredTv::stable_key()` and
+  `DiscoveredTv::device_id()` — the strongest stable identity available before
+  any connection is made, with a documented precedence of USN (the UDN) →
+  serial → MAC → IP. Uniqueness beats meaning: two same-model panels with a
+  vendor-default serial cannot collide. Keyed by discovery path on purpose
+  (a bare probe never asked for a descriptor).
+
+- **`CommandId` idempotency in the facade**: every cmd-carrying mutation on
+  `TvClient` (`key_press`, `launch`, `launch_with_payload`, `type_text`,
+  `select_input`, `set_volume`, `set_mute`, `start_cast`, `stop_cast`) routes
+  through a bounded, process-wide registry keyed by (host, `CommandId`). Two
+  deliveries of the same id have the effect of one within the 30 s window the
+  core contract describes; only successes are recorded, so a failed attempt
+  stays retryable; capacity is capped with purge-on-access and oldest-record
+  eviction. Concurrent in-flight duplicates are deliberately not coalesced
+  (holding the lock across `.await` would break `Send` for every async-trait
+  method) — documented in the module docs.
+
+### Changed
+
+- **Session-reuse docs told the truth**: `power_off` no longer claims it "opens
+  (and drops) one per call" — it has always routed through the handle's pool
+  (one channel/session per TV, reopen-once on a failed send, webOS idle shed).
+  `power_state`'s TCP probe is documented as intentionally fresh-connect (a
+  connect test _is_ a fresh connect), and `launch_app` / `open_url` now state
+  each vendor's session behaviour. Proven by regression tests: a counting
+  Tizen channel factory (plain `cargo test`) and the webOS `testkit` double
+  both assert one open across repeated calls.
+
+- **`DeviceHandle::id()` comment corrected**: it is host-keyed
+  unconditionally — `TvClient` never retains a UDN — and the comment now points
+  at `DiscoveredTv::stable_key()` for fleet/inventory identity. Behaviour
+  unchanged.
+
+### Fixed
+
+- `tv-rs-discovery`: `clippy::collapsible_match` in the mDNS parser (the
+  strict workspace gate is now clean).
 
 ## [0.4.0] - 2026-10-25
 
@@ -32,7 +76,7 @@ Nothing yet.
   without exposing volume. `extract_av_transport_control_url` became
   `extract_service_control_url(xml, base, service_urn)` — one XML walk serving both
   services — and a missing service is `DlnaError::ServiceNotFound(urn)`, which names
-  *which* service is absent so "no volume" and "cannot cast" are not the same failure.
+  _which_ service is absent so "no volume" and "cannot cast" are not the same failure.
 
 - **Tizen reads one application's status** — `TizenClient::app_status(app_id)` over
   `GET /api/v2/applications/{app_id}` (no pairing, no token), verified against four
@@ -89,8 +133,8 @@ Nothing yet.
   permission, and until the user grants it the platform refuses the call — `EPERM`
   from a blocked socket, which the NDK reports as
   `ANDROID_NETWORK_BLOCKED_REASON_LNP`. Every socket error used to be stringified
-  into `TransportError::Unreachable`, which routes to *Retry*, so the UI offered
-  *Wake* forever for a television that was awake and merely unreachable by this app.
+  into `TransportError::Unreachable`, which routes to _Retry_, so the UI offered
+  _Wake_ forever for a television that was awake and merely unreachable by this app.
   Core gains `TransportError::Blocked { reason }` with a `from_io()` classifier —
   the `EPERM` check compiles only on `target_os = "android"`, so desktop
   classification is unchanged — and `Remedy::RequestPermission`, because the UI must
@@ -177,7 +221,7 @@ Nothing yet.
 - **Samsung panels report their hardware address (companion gap G4, the Samsung half)**:
   `TizenClient::device_info()` reads `GET http://<ip>:8001/api/v2/`, which needs **no
   pairing and no token** — so a facade can learn the address a Wake-on-LAN packet needs
-  *before* the remote channel is ever opened, which is the point: a set that is asleep
+  _before_ the remote channel is ever opened, which is the point: a set that is asleep
   cannot be paired with, and waking it is exactly what needs the address.
   `TvClient::learn_mac()` answers on Tizen now, alongside Roku, and webOS is the only
   vendor left refusing. `DeviceInfo` exposes `wifi_mac`, `network_type` and `model_name`,
@@ -215,7 +259,7 @@ Nothing yet.
   as a confusing resolution failure instead.
 
 - **`platform-verifier`: the operating system's root store for `tv-rs-transport`**
-  (companion gap G7). `rustls-native-certs` reads a *system* store, which Android (a
+  (companion gap G7). `rustls-native-certs` reads a _system_ store, which Android (a
   keystore) and iOS (its own roots) do not expose — so a mobile build with
   `TlsPolicy::Strict` had no roots to verify against. The new `platform-verifier`
   feature asks the operating system instead, through `rustls-platform-verifier` pinned
@@ -240,7 +284,7 @@ Nothing yet.
   wrong one — the multicast was dropped, which on Android means the app has not
   been granted local-network access. The scanner now counts the datagrams it
   receives and, when that count is zero, returns `DiscoveryError::SilentProbe`. The
-  message names *both* explanations (nothing listening, or the local network
+  message names _both_ explanations (nothing listening, or the local network
   unreachable) because neither is knowable from here, and the facade maps it to
   `TransportError::Blocked`, reusing A5's "grant access" remedy and `hint()` rather
   than inventing a third bucket. An empty list still means the network answered and
@@ -267,6 +311,7 @@ Nothing yet.
 - Every capability's serde output is now asserted equal to its `as_str()` label,
   so the derive and the label cannot drift. Two redundant `#[must_use]`s on
   functions returning `Result` are gone.
+
 ## [0.3.0] - 2026-10-24
 
 ### Added
@@ -280,7 +325,7 @@ Nothing yet.
 
 - **Public EDID parser and active-display EDID enumeration in `tv-rs-local`
   (SignageMaster handoff E3b)**: `tv_rs_local::parse_edid(&[u8]) -> Result<Edid,
-  EdidError>` reads the base block per VESA E-EDID 1.4 §3 — PNP manufacturer id,
+EdidError>` reads the base block per VESA E-EDID 1.4 §3 — PNP manufacturer id,
   product code, serial (numeric and descriptor), week/year, version, digital input,
   size in cm, the product-name descriptor and the preferred `DetailedTiming` (pixel
   clock, active/blank, image mm, `refresh_hz()`), extension count and a reported (not
@@ -296,7 +341,7 @@ Nothing yet.
   re-export of `tv_rs_core::TvError` — the facade's parallel enum is deleted, not
   deprecated. Core gains `TvError::UnsupportedDevice { address, reason }` (a device
   answered and matched no signature) and `TvError::UnsupportedOperation { vendor,
-  operation }` (the vendor has no such protocol message), both routing to
+operation }` (the vendor has no such protocol message), both routing to
   `Remedy::Disable`, and a `hint()` method that returns a user-facing sentence where
   the error alone cannot. webOS `RegistrationFailed` now carries `presented_key`:
   a **declined prompt** maps to `Auth(PairingRequired)`, a **revoked stored key** to
@@ -308,7 +353,7 @@ Nothing yet.
   `PowerState`, `TvError`, `Remedy`, `ObservedState` — with the wire contract that
   goes to the companion: `Key::Digit(n)` → `"digit_n"`, `ObservedField` →
   `{"verified_at_ms": u64, "age_ms": u64, "confidence": "high"|"inferred"|"unknown",
-  "value": T}`. No extra dependency in the default build, and the companion can
+"value": T}`. No extra dependency in the default build, and the companion can
   hand the core types straight to its `types.ts` instead of maintaining a DTO fork.
 
 - **`tv_rs::map` — the one home of vendor-error mapping**: three exhaustive
@@ -342,7 +387,7 @@ Nothing yet.
   a volume change or a foreground read reuses one connection per TV instead of paying
   TCP + TLS + handshake on every call — the cost the facade was paying while
   `TizenConnectionPool` sat unused. Each pool is shared behind an `Arc`, so cloning a
-  handle clones the *connection*, not the right to open another one; `TvClient::close_all()`
+  handle clones the _connection_, not the right to open another one; `TvClient::close_all()`
   releases them for mobile backgrounding; and the factories are erased
   (`DynConnectionPool` / `DynSessionPool`) so a caller can inject its own. webOS still
   refuses key presses: SSAP has no key endpoint, and the pointer socket that does is a
