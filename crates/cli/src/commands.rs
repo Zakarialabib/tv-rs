@@ -18,7 +18,7 @@ use tv_rs_core::Capability;
 
 use crate::cli::{
     parse_roku_key, parse_tizen_key, roku_key_names, tizen_key_names, Cli, Command, DiscoverArgs,
-    EnsureArgs, KeyArgs, LaunchArgs, PowerOffArgs, StatusArgs, Vendor, WakeArgs,
+    EnsureArgs, IrScanArgs, KeyArgs, LaunchArgs, PowerOffArgs, StatusArgs, Vendor, WakeArgs,
 };
 use crate::error::CliError;
 use crate::render;
@@ -33,6 +33,7 @@ pub async fn execute(cli: Cli) -> Result<(), CliError> {
         Command::Launch(args) => run_launch(args).await,
         Command::Status(args) => run_status(args).await,
         Command::Ensure(args) => run_ensure(args).await,
+        Command::IrScan(args) => run_ir_scan(args).await,
     }
 }
 
@@ -307,6 +308,55 @@ async fn run_ensure(args: EnsureArgs) -> Result<(), CliError> {
             "{failed} device(s) failed; see the table above"
         )));
     }
+    Ok(())
+}
+
+/// `tv-rs ir-scan [--ip <IP>] [--output <FILE>] [--dry-run]`
+async fn run_ir_scan(args: IrScanArgs) -> Result<(), CliError> {
+    use std::sync::Arc;
+    use tv_rs::ir::{MockFeedback, MockIrEmitter, TcpProbeFeedback, UniversalScanner};
+
+    let emitter = Arc::new(MockIrEmitter::new());
+    let scanner = UniversalScanner::new(emitter);
+
+    let matched = if let Some(ip) = &args.ip {
+        let feedback = TcpProbeFeedback::new(ip);
+        scanner
+            .scan(&feedback)
+            .await
+            .map_err(|e| CliError::Unsupported {
+                message: format!("ir scan failed: {e}"),
+            })?
+    } else {
+        let feedback = MockFeedback::new(vec![true]);
+        scanner
+            .scan(&feedback)
+            .await
+            .map_err(|e| CliError::Unsupported {
+                message: format!("ir scan failed: {e}"),
+            })?
+    };
+
+    match matched {
+        Some(profile) => {
+            println!(
+                "Detected IR Profile: {} (brand: {}, protocol: {}, carrier: {}kHz, address: {:#06x})",
+                profile.name, profile.brand, profile.protocol, profile.carrier_khz, profile.address
+            );
+            if let Some(path) = &args.output {
+                profile
+                    .save_to_file(path)
+                    .map_err(|e| CliError::Unsupported {
+                        message: format!("failed to save profile: {e}"),
+                    })?;
+                println!("Saved detected IR profile to {path}");
+            }
+        }
+        None => {
+            println!("No matching IR profile detected during scan sweep.");
+        }
+    }
+
     Ok(())
 }
 
