@@ -37,14 +37,15 @@ use async_trait::async_trait;
 use tv_rs_core::ProtocolError;
 use tv_rs_core::{
     AppLaunch, AppRef, Capability, CapabilitySet, CommandId, DeviceDescriptor, DeviceHandle,
-    DeviceId, DeviceOs, Input, InputSelect, Key, KeyInput, PowerControl, PowerState, TextInput,
-    TvError, VolumeControl,
+    DeviceId, DeviceOs, Input, InputSelect, Key, KeyInput, PowerControl, PowerState,
+    ScreenCastProvider, TextInput, TvError, VolumeControl,
 };
 use tv_rs_power::MacAddress;
 use tv_rs_roku::RokuKey;
 use tv_rs_tizen::TizenRemoteKey;
 
 use crate::client::TvClient;
+use crate::dedupe;
 use crate::map;
 use crate::types::TvVendor;
 
@@ -192,8 +193,13 @@ impl TvClient {
 
 impl DeviceHandle for TvClient {
     fn id(&self) -> DeviceId {
-        // Discovery normally supplies a UDN; a client built from an address alone
-        // gets the host, which is still a stable key for a static-IP install.
+        // Host-keyed, unconditionally: `TvClient` never retains a UDN — a
+        // handle built from discovery and one built from a bare address derive
+        // the same thing here, the host of `address()`. Discovery-time identity
+        // (USN → serial → MAC precedence, for fleet and inventory) lives on the
+        // record itself, as `DiscoveredTv::stable_key` (crate::types); this id
+        // is the connection-scope key — stable exactly as long as the address
+        // is (a static-IP install, or a DHCP lease that holds).
         DeviceId::new(host_of(self.address())).unwrap_or_else(|_| DeviceId::anonymous())
     }
 
@@ -245,6 +251,38 @@ impl DeviceHandle for TvClient {
             .contains(Capability::Volume)
             .then_some(self as &dyn VolumeControl)
     }
+
+    fn as_screen_cast(&self) -> Option<&dyn ScreenCastProvider> {
+        self.core_capabilities()
+            .contains(Capability::ScreenCast)
+            .then_some(self as &dyn ScreenCastProvider)
+    }
+}
+
+#[async_trait]
+impl ScreenCastProvider for TvClient {
+    async fn start_cast(
+        &self,
+        _target_url: Option<&str>,
+        cmd: tv_rs_core::CommandId,
+    ) -> Result<(), TvError> {
+        // Wrapped even though cast refuses today: every cmd-carrying mutation
+        // goes through the one registry, so a cast that ever reaches the wire
+        // is covered without anyone remembering to add the wrapper then.
+        dedupe::global()
+            .call(host_of(self.address()), cmd, async {
+                Err(TvError::Unsupported(Capability::ScreenCast))
+            })
+            .await
+    }
+
+    async fn stop_cast(&self, cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
+        dedupe::global()
+            .call(host_of(self.address()), cmd, async {
+                Err(TvError::Unsupported(Capability::ScreenCast))
+            })
+            .await
+    }
 }
 
 #[async_trait]
@@ -287,38 +325,46 @@ impl PowerControl for TvClient {
 
 #[async_trait]
 impl KeyInput for TvClient {
-    async fn key_press(&self, key: Key, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
-        match self {
-            Self::Tizen { client, pool, .. } => {
-                let key = tizen_key(key)?;
-                pool.send_key(client, key)
-                    .await
-                    .map_err(|error| map::tizen(&error, Capability::Key))
-            }
-            // webOS has no remote-key endpoint: SSAP drives the pointer-input
-            // socket instead, which is not implemented yet (plan item B1). A
-            // refusal is the honest answer — pressing nothing is not a key.
-            Self::Webos { client, pool, .. } => {
-                let name = webos_key(key)?;
-                pool.send_key(client, name)
-                    .await
-                    .map_err(|error| map::webos(&error, Capability::Key))
-            }
-            Self::Roku { client, .. } => {
-                let key = roku_key(key)?;
-                client
-                    .send_keypress(key)
-                    .await
-                    .map_err(|error| map::roku(&error, Capability::Key))
-            }
-        }
+    async fn key_press(&self, key: Key, cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
+        dedupe::global()
+            .call(host_of(self.address()), cmd, async move {
+                match self {
+                    Self::Tizen { client, pool, .. } => {
+                        let key = tizen_key(key)?;
+                        pool.send_key(client, key)
+                            .await
+                            .map_err(|error| map::tizen(&error, Capability::Key))
+                    }
+                    // webOS has no remote-key endpoint: SSAP drives the pointer-input
+                    // socket instead, which is not implemented yet (plan item B1). A
+                    // refusal is the honest answer — pressing nothing is not a key.
+                    Self::Webos { client, pool, .. } => {
+                        let name = webos_key(key)?;
+                        pool.send_key(client, name)
+                            .await
+                            .map_err(|error| map::webos(&error, Capability::Key))
+                    }
+                    Self::Roku { client, .. } => {
+                        let key = roku_key(key)?;
+                        client
+                            .send_keypress(key)
+                            .await
+                            .map_err(|error| map::roku(&error, Capability::Key))
+                    }
+                }
+            })
+            .await
     }
 }
 
 #[async_trait]
 impl AppLaunch for TvClient {
-    async fn launch(&self, app: AppRef, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
-        TvClient::launch_app(self, &app.id).await
+    async fn launch(&self, app: AppRef, cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
+        dedupe::global()
+            .call(host_of(self.address()), cmd, async move {
+                TvClient::launch_app(self, &app.id).await
+            })
+            .await
     }
 
     async fn foreground(&self) -> Result<Option<AppRef>, TvError> {
@@ -355,14 +401,21 @@ impl AppLaunch for TvClient {
         payload: Option<&str>,
         cmd: tv_rs_core::CommandId,
     ) -> Result<(), TvError> {
-        match (self, payload) {
-            (Self::Tizen { client, .. }, Some(payload)) => client
-                .dial_launch(&app.id, Some(payload))
-                .await
-                .map_err(|error| map::tizen(&error, Capability::AppLaunch)),
-            (_, Some(_)) => Err(TvError::Unsupported(Capability::AppLaunch)),
-            (_, None) => self.launch(app, cmd).await,
-        }
+        // The `None` payload arm funnels into `launch`, which carries its own
+        // registry check for the same id — a harmless second look that keeps
+        // one deduplication story instead of two.
+        dedupe::global()
+            .call(host_of(self.address()), cmd, async move {
+                match (self, payload) {
+                    (Self::Tizen { client, .. }, Some(payload)) => client
+                        .dial_launch(&app.id, Some(payload))
+                        .await
+                        .map_err(|error| map::tizen(&error, Capability::AppLaunch)),
+                    (_, Some(_)) => Err(TvError::Unsupported(Capability::AppLaunch)),
+                    (_, None) => self.launch(app, cmd).await,
+                }
+            })
+            .await
     }
 
     /// Lists installed applications. webOS answers `listApps` and Roku answers
@@ -413,24 +466,28 @@ impl TextInput for TvClient {
     /// source in this workspace, so both keep the trait default, which names
     /// [`Capability::TextInput`] — an unverified protocol operation does not
     /// exist, and a search box that types nothing is worse than one that refuses.
-    async fn type_text(&self, text: &str, _cmd: CommandId) -> Result<(), TvError> {
-        match self {
-            Self::Roku { client, .. } => client
-                .type_text(text)
-                .await
-                .map_err(|error| map::roku(&error, Capability::TextInput)),
-            // webOS types through its IME service, and the text is plain UTF-8.
-            Self::Webos { client, pool, .. } => pool
-                .insert_text(client, text, false)
-                .await
-                .map_err(|error| map::webos(&error, Capability::TextInput)),
-            // Tizen base64s the string into `Cmd`; Roku sends a key per character and
-            // webOS takes plain UTF-8. Three frames, one method.
-            Self::Tizen { client, pool, .. } => pool
-                .send_text(client, text)
-                .await
-                .map_err(|error| map::tizen(&error, Capability::TextInput)),
-        }
+    async fn type_text(&self, text: &str, cmd: CommandId) -> Result<(), TvError> {
+        dedupe::global()
+            .call(host_of(self.address()), cmd, async move {
+                match self {
+                    Self::Roku { client, .. } => client
+                        .type_text(text)
+                        .await
+                        .map_err(|error| map::roku(&error, Capability::TextInput)),
+                    // webOS types through its IME service, and the text is plain UTF-8.
+                    Self::Webos { client, pool, .. } => pool
+                        .insert_text(client, text, false)
+                        .await
+                        .map_err(|error| map::webos(&error, Capability::TextInput)),
+                    // Tizen base64s the string into `Cmd`; Roku sends a key per character and
+                    // webOS takes plain UTF-8. Three frames, one method.
+                    Self::Tizen { client, pool, .. } => pool
+                        .send_text(client, text)
+                        .await
+                        .map_err(|error| map::tizen(&error, Capability::TextInput)),
+                }
+            })
+            .await
     }
 }
 
@@ -446,16 +503,20 @@ impl InputSelect for TvClient {
     }
 
     /// webOS switches with `ssap://tv/switchInput`.
-    async fn select_input(&self, input: Input, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
-        match self {
-            Self::Webos { client, pool, .. } => {
-                let input_id = webos_input(input)?;
-                pool.switch_input(client, &input_id)
-                    .await
-                    .map_err(|error| map::webos(&error, Capability::InputSelect))
-            }
-            _ => Err(TvError::Unsupported(Capability::InputSelect)),
-        }
+    async fn select_input(&self, input: Input, cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
+        dedupe::global()
+            .call(host_of(self.address()), cmd, async move {
+                match self {
+                    Self::Webos { client, pool, .. } => {
+                        let input_id = webos_input(input)?;
+                        pool.switch_input(client, &input_id)
+                            .await
+                            .map_err(|error| map::webos(&error, Capability::InputSelect))
+                    }
+                    _ => Err(TvError::Unsupported(Capability::InputSelect)),
+                }
+            })
+            .await
     }
 }
 
@@ -486,24 +547,32 @@ impl VolumeControl for TvClient {
         }
     }
 
-    async fn set_volume(&self, level: u8, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
-        match self {
-            Self::Webos { client, pool, .. } => pool
-                .set_volume(client, level)
-                .await
-                .map_err(|error| map::webos(&error, Capability::Volume)),
-            _ => Err(TvError::Unsupported(Capability::Volume)),
-        }
+    async fn set_volume(&self, level: u8, cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
+        dedupe::global()
+            .call(host_of(self.address()), cmd, async move {
+                match self {
+                    Self::Webos { client, pool, .. } => pool
+                        .set_volume(client, level)
+                        .await
+                        .map_err(|error| map::webos(&error, Capability::Volume)),
+                    _ => Err(TvError::Unsupported(Capability::Volume)),
+                }
+            })
+            .await
     }
 
-    async fn set_mute(&self, muted: bool, _cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
-        match self {
-            Self::Webos { client, pool, .. } => pool
-                .set_mute(client, muted)
-                .await
-                .map_err(|error| map::webos(&error, Capability::Volume)),
-            _ => Err(TvError::Unsupported(Capability::Volume)),
-        }
+    async fn set_mute(&self, muted: bool, cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
+        dedupe::global()
+            .call(host_of(self.address()), cmd, async move {
+                match self {
+                    Self::Webos { client, pool, .. } => pool
+                        .set_mute(client, muted)
+                        .await
+                        .map_err(|error| map::webos(&error, Capability::Volume)),
+                    _ => Err(TvError::Unsupported(Capability::Volume)),
+                }
+            })
+            .await
     }
 }
 
@@ -987,6 +1056,82 @@ mod tests {
         assert!(!matches!(error, TvError::Unsupported(_)), "{error:?}");
     }
 
+    /// The `CommandId` contract at the facade, end to end: two deliveries of
+    /// one id must have the effect of one, so the second is answered from the
+    /// registry and never reaches the wire. The stub counts what actually
+    /// arrives — with no television in the loop, and nothing new linked in.
+    #[tokio::test]
+    async fn a_replayed_command_id_reaches_the_device_once() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::{TcpListener, TcpStream};
+
+        /// Reads one ECP request head, so the socket can close with a FIN
+        /// instead of a reset while the client is still writing into it.
+        async fn read_head(stream: &mut TcpStream) {
+            let mut head = Vec::new();
+            let mut byte = [0u8; 1];
+            while head.len() < 8 * 1024 {
+                match stream.read(&mut byte).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {
+                        head.push(byte[0]);
+                        if head.ends_with(b"\r\n\r\n") {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("a free port");
+        let address = listener.local_addr().expect("bound");
+        let hits = Arc::new(AtomicUsize::new(0));
+        let done = Arc::new(AtomicBool::new(false));
+
+        let stub_hits = hits.clone();
+        let stub_done = done.clone();
+        let stub = tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else {
+                    break;
+                };
+                if stub_done.load(Ordering::SeqCst) {
+                    break; // the shutdown probe, not a command
+                }
+                stub_hits.fetch_add(1, Ordering::SeqCst);
+                read_head(&mut stream).await;
+                let _ = stream
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                    .await;
+                let _ = stream.shutdown().await;
+            }
+        });
+
+        let client = TvClient::Roku {
+            client: RokuClient::with_base_url(format!("http://{address}")),
+            mac: None,
+        };
+        let cmd = CommandId::new();
+        KeyInput::key_press(&client, Key::Up, cmd)
+            .await
+            .expect("the stub answers");
+        KeyInput::key_press(&client, Key::Up, cmd)
+            .await
+            .expect("the replay is answered without the wire");
+
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            1,
+            "the second delivery of one CommandId must not reach the device"
+        );
+
+        done.store(true, Ordering::SeqCst);
+        let _ = TcpStream::connect(address).await; // wakes the accept loop
+        stub.await.expect("the stub stops cleanly");
+    }
+
     #[tokio::test]
     async fn learn_mac_refuses_only_where_the_vendor_offers_nothing() {
         // Samsung reaches `GET /api/v2/`. The address here is unreachable, so a
@@ -1059,6 +1204,14 @@ mod tests {
                 matches!(webos_key(key), Err(TvError::Unsupported(Capability::Key))),
                 "{key:?} should have no pointer frame"
             );
+        }
+    }
+
+    #[test]
+    fn screen_cast_is_unsupported_by_default_on_tv_clients() {
+        for client in [tizen(), webos(), roku()] {
+            assert!(!client.capabilities().contains(Capability::ScreenCast));
+            assert!(client.as_screen_cast().is_none());
         }
     }
 

@@ -16,13 +16,21 @@ tv-rs-discovery = { path = "crates/discovery", version = "0.4.0" }
 tv-rs-power = { path = "crates/power", version = "0.4.0" }
 tv-rs-roku = { path = "crates/roku", version = "0.4.0" }
 tv-rs-mdc = { path = "crates/mdc", version = "0.4.0" }
+tv-rs-sicp = { path = "crates/sicp", version = "0.4.0" }
+tv-rs-sim = { path = "crates/sim", version = "0.4.0" }
+tv-rs-dlna = { path = "crates/dlna", version = "0.4.0" }
 tv-rs-tizen = { path = "crates/tizen", version = "0.4.0" }
 tv-rs-webos = { path = "crates/webos", version = "0.4.0" }
+tv-rs-bluetooth = { path = "crates/bluetooth", version = "0.4.0" }
+tv-rs-cec = { path = "crates/cec", version = "0.4.0" }
+tv-rs-ir = { path = "crates/ir", version = "0.4.0" }
 # Local display probe: no network, no TV control. Published separately.
 tv-rs-local = { path = "crates/local", version = "0.4.0" }
 tv-rs-dlna = { path = "crates/dlna", version = "0.4.0" }
 # Protocol simulators for testing without hardware.
 tv-rs-sim = { path = "crates/sim", version = "0.4.0" }
+tv-rs-serial = { path = "crates/serial", version = "0.4.0" }
+tv-rs-spatial-audio = { path = "crates/spatial-audio", version = "0.4.0" }
 # Shared transport vocabulary; must be published before tizen/webos.
 #
 # `default-features = false` keeps a TLS stack out of the crates that only need
@@ -31,6 +39,8 @@ tv-rs-sim = { path = "crates/sim", version = "0.4.0" }
 tv-rs-transport = { path = "crates/transport", version = "0.4.0" }
 # Media server (206 + HLS). Published last: nothing in the workspace depends on it.
 tv-rs-media = { path = "crates/media", version = "0.4.0" }
+tv-rs-vision = { path = "crates/vision", version = "0.4.0" }
+tv-rs-rules = { path = "crates/rules", version = "0.4.0" }
 
 # --- runtime / async ---
 tokio = { version = "1", features = ["net", "time", "io-util", "fs", "macros", "rt-multi-thread", "sync"] }
@@ -61,9 +71,11 @@ rustls-native-certs = "0.8"
 # Not marked `optional` here: a workspace dependency cannot be, and optionality
 # is declared by the member crate that wants it (`tv-rs-transport`).
 rustls-platform-verifier = "0.7.1"
-sha2 = "0.10"
+sha2 = "0.11"
 url = "2"
 base64 = "0.23"
+quinn = { version = "0.11", default-features = false, features = ["rustls-ring", "runtime-tokio"] }
+rcgen = "0.14"
 
 # --- errors / logging / cli ---
 thiserror = "2"
