@@ -1,13 +1,28 @@
-//! `tv-rs-discovery` — SSDP/mDNS discovery, UPnP descriptor parsing, and signage pairing.
+//! `tv-rs-discovery` — Universal display discovery, device fingerprinting, and device registry.
 //!
-//! This crate locates televisions and digital signage players on the local network before any
-//! control traffic is sent. It implements SSDP `M-SEARCH` over UDP multicast (port 1900), UPnP
-//! descriptor parsing, mDNS/Bonjour service discovery (`MdnsScanner`/`MdnsAdvertiser`), and dynamic
-//! QR code session token generation/validation for digital signage pairing (`SignagePairingSession`).
+//! This crate provides universal discovery of televisions, commercial panels, streaming boxes,
+//! and digital signage displays across multiple protocols:
+//! - **SSDP / UPnP** (`SsdpScanner`)
+//! - **mDNS / Bonjour** (`MdnsScanner`, `MdnsAdvertiser`)
+//! - **ADB Network Devices** (`AdbScanner`)
+//! - **Bluetooth LE Advertising** (`BluetoothScanner`)
+//! - **Google Cast Devices** (`CastScanner`)
+//! - **Local HTTP Display APIs** (`LocalHttpDisplayScanner`)
+//! - **HDMI-CEC Topology** (`CecTopologyScanner`)
+//! - **Saved Device Registry** (`DeviceRegistry`)
 //!
-//! **Discovery needs no authentication.** SSDP and mDNS are unauthenticated LAN
-//! multicast protocols: any device on the local subnet can be discovered and its
-//! descriptor fetched over plain HTTP.
+//! # Device Fingerprinting
+//! The [`DeviceFingerprint`] combines signatures (MAC pattern, mDNS hostname, SSDP server string,
+//! open ports, HDMI-CEC vendor ID, Bluetooth advertising name, ADB model string) to identify:
+//! - Smart TV brands (Samsung Tizen, LG webOS, Sony Bravia, Roku TV)
+//! - Android TV boxes
+//! - Amlogic platform devices
+//! - Amazon Fire TV devices
+//! - Google Chromecast-like receivers
+//! - Commercial digital signage panels (Samsung MDC, SICP, LG Commercial)
+//!
+//! **Discovery needs no authentication.** SSDP, mDNS, BLE advertising, and network probes are
+//! unauthenticated LAN/multicast protocols used to inventory devices prior to control or pairing.
 //!
 //! # Example
 //!
@@ -27,13 +42,30 @@
 //! ```
 
 #![forbid(unsafe_code)]
+pub mod adb;
+pub mod bluetooth;
+pub mod cast;
+pub mod cec_topology;
 pub mod client;
 pub mod error;
+pub mod fingerprint;
+pub mod http_display;
 pub mod mdns;
 pub mod pairing;
 pub mod payload;
 pub mod protocol;
+pub mod registry;
 pub mod types;
+pub mod universal;
+
+pub use adb::{AdbDevice, AdbScanner};
+pub use bluetooth::{BluetoothAdvertisement, BluetoothScanner};
+pub use cast::{CastDevice, CastScanner, CAST_MDNS_SERVICE_TYPE};
+pub use cec_topology::{vendor_id_to_name, CecDeviceNode, CecTopologyMap, CecTopologyScanner};
+pub use fingerprint::DeviceFingerprint;
+pub use http_display::{HttpDisplay, LocalHttpDisplayScanner, HTTP_DISPLAY_PORTS};
+pub use registry::{DeviceRegistry, SavedDevice};
+pub use universal::{DiscoveredDevice, UniversalScanner};
 
 pub use client::{build_msearch, parse_device_descriptor, parse_msearch_response, SsdpScanner};
 pub use error::{DiscoveryError, Result};
