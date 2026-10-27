@@ -1,7 +1,8 @@
 # tv-rs-local
 
-Local display probing for Rust: connector, EDID identity, mode, physical size and
-TV likelihood for the screen this process is running on.
+Local display probing, topology management, and zone mapping for Rust: connector,
+EDID identity, physical size, TV likelihood, and semantic venue zone mapping
+(entrance, checkout, kitchen, aisle, etc.).
 
 Part of the [`tv-rs`](https://github.com/Zakarialabib/tv-rs) workspace, but usable
 on its own. No Tauri, no database, no TV control, no network.
@@ -50,6 +51,54 @@ assert!(!conservative.is_tv);
 
 From async code, use `probe_displays_async()`: the Windows WMI/COM path is
 blocking and must not run on the runtime thread.
+
+### Display Topology & Zone Mapping
+
+Map screens to physical operational zones so a display is identified semantically
+as **"the entrance display in the restaurant"** rather than just `192.168.1.45` or `HDMI-1`:
+
+```rust
+use tv_rs_local::{DisplayTopology, MappedDisplay, Zone};
+
+let mut topology = DisplayTopology::new();
+
+// Map an entrance display
+topology.map_display(
+    MappedDisplay::new(
+        "entrance_tv",
+        Zone::entrance(),
+        "the entrance display in the restaurant",
+    )
+    .with_ip("192.168.1.45")
+    .with_system_name("HDMI-1"),
+);
+
+// Map a kitchen KDS screen
+topology.map_display(
+    MappedDisplay::new(
+        "kitchen_kds",
+        Zone::kitchen(),
+        "kitchen order display",
+    )
+    .with_ip("192.168.1.46"),
+);
+
+// Map a store aisle display
+topology.map_display(
+    MappedDisplay::new(
+        "aisle3_screen",
+        Zone::aisle("3"),
+        "aisle 3 promotion board",
+    ),
+);
+
+// Retrieve semantic descriptions:
+let labels = topology.semantic_descriptions();
+assert_eq!(
+    labels[0],
+    "the entrance display in the restaurant (192.168.1.45 / HDMI-1)"
+);
+```
 
 ### EDID
 
