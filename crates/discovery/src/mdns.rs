@@ -272,11 +272,13 @@ pub fn parse_mdns_packet(buf: &[u8]) -> Option<MdnsServiceRecord> {
         offset += rd_length;
 
         match rr_type {
-            // A Record
-            1 if rd_length == 4 => {
-                ip = Some(Ipv4Addr::new(rdata[0], rdata[1], rdata[2], rdata[3]));
-                if host_name.is_none() {
-                    host_name = Some(rr_name);
+            1 => {
+                // A Record
+                if rd_length == 4 {
+                    ip = Some(Ipv4Addr::new(rdata[0], rdata[1], rdata[2], rdata[3]));
+                    if host_name.is_none() {
+                        host_name = Some(rr_name);
+                    }
                 }
             }
             12 => {
