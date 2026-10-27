@@ -1,0 +1,27 @@
+[package]
+name = "tv-rs-rules"
+description = "Declarative automation and rule engine for turning events into fleet actions: conditions, priorities, cooldowns, schedules, scenes, and conflict resolution."
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["rules", "automation", "events", "signage", "tv"]
+categories = ["api-bindings"]
+
+[dependencies]
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tv-rs-core.workspace = true
+tv-rs-vision.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros"] }
+
+[lints]
+workspace = true

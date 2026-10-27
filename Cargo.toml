@@ -21,10 +21,12 @@ tv-rs-sim = { path = "crates/sim", version = "0.4.0" }
 tv-rs-dlna = { path = "crates/dlna", version = "0.4.0" }
 tv-rs-tizen = { path = "crates/tizen", version = "0.4.0" }
 tv-rs-webos = { path = "crates/webos", version = "0.4.0" }
+tv-rs-bluetooth = { path = "crates/bluetooth", version = "0.4.0" }
 tv-rs-cec = { path = "crates/cec", version = "0.4.0" }
 tv-rs-ir = { path = "crates/ir", version = "0.4.0" }
 # Local display probe: no network, no TV control. Published separately.
 tv-rs-local = { path = "crates/local", version = "0.4.0" }
+tv-rs-serial = { path = "crates/serial", version = "0.4.0" }
 tv-rs-spatial-audio = { path = "crates/spatial-audio", version = "0.4.0" }
 # Shared transport vocabulary; must be published before tizen/webos.
 #
@@ -35,6 +37,7 @@ tv-rs-transport = { path = "crates/transport", version = "0.4.0" }
 # Media server (206 + HLS). Published last: nothing in the workspace depends on it.
 tv-rs-media = { path = "crates/media", version = "0.4.0" }
 tv-rs-vision = { path = "crates/vision", version = "0.4.0" }
+tv-rs-rules = { path = "crates/rules", version = "0.4.0" }
 
 # --- runtime / async ---
 tokio = { version = "1", features = ["net", "time", "io-util", "fs", "macros", "rt-multi-thread", "sync"] }
@@ -73,7 +76,7 @@ rcgen = "0.14"
 
 # --- errors / logging / cli ---
 thiserror = "2"
-toml = "1.1"
+toml = "0.8"
 uuid = { version = "1", features = ["v4"] }
 anyhow = "1"
 tracing = "0.1"
