@@ -2377,8 +2377,10 @@ dependencies = [
  "serde",
  "thiserror",
  "tokio",
+ "tv-rs-cec",
  "tv-rs-core",
  "tv-rs-discovery",
+ "tv-rs-ir",
  "tv-rs-mdc",
  "tv-rs-power",
  "tv-rs-roku",
@@ -2473,6 +2475,22 @@ dependencies = [
  "thiserror",
  "tokio",
  "wiremock",
+]
+
+[[package]]
+name = "tv-rs-ir"
+version = "0.4.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "serde",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tracing",
+ "tv-rs-cec",
+ "tv-rs-core",
+ "tv-rs-power",
 ]
 
 [[package]]
