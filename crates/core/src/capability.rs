@@ -67,6 +67,8 @@ pub enum Capability {
     AppList,
     /// Screen casting or screen receiving preview / mirroring stream capability.
     ScreenCast,
+    /// Spatial audio routing to Bluetooth A2DP sinks, PulseAudio/PipeWire streams, directional domes, or ceiling speakers.
+    SpatialAudio,
 }
 
 impl Capability {
@@ -94,6 +96,7 @@ impl Capability {
             Self::TextInput => "text_input",
             Self::AppList => "app_list",
             Self::ScreenCast => "screen_cast",
+            Self::SpatialAudio => "spatial_audio",
         }
     }
 }
@@ -175,6 +178,7 @@ const ALL_CAPABILITIES: &[Capability] = &[
     Capability::AppList,
     Capability::TextInput,
     Capability::ScreenCast,
+    Capability::SpatialAudio,
 ];
 
 const fn capability_index(capability: Capability) -> u16 {
@@ -199,6 +203,7 @@ const fn capability_index(capability: Capability) -> u16 {
         Capability::AppList => 15,
         Capability::TextInput => 16,
         Capability::ScreenCast => 17,
+        Capability::SpatialAudio => 18,
     }
 }
 
@@ -678,6 +683,26 @@ pub trait ScreenCastProvider: Send + Sync {
     }
 }
 
+/// Spatial audio routing and sound dome / speaker sink management trait.
+#[async_trait]
+pub trait SpatialAudioProvider: Send + Sync {
+    /// Connects or routes audio to a target audio sink (e.g. Bluetooth A2DP, PulseAudio/PipeWire node).
+    async fn route_audio(&self, _sink_id: &str, _cmd: CommandId) -> Result<(), TvError> {
+        Err(TvError::Unsupported(Capability::SpatialAudio))
+    }
+
+    /// Updates listener position for spatial audio gain/panning adjustment.
+    async fn update_listener_position(
+        &self,
+        _x: f64,
+        _y: f64,
+        _z: f64,
+        _cmd: CommandId,
+    ) -> Result<(), TvError> {
+        Err(TvError::Unsupported(Capability::SpatialAudio))
+    }
+}
+
 /// An erased television.
 ///
 /// The fleet reason this trait exists: `Vec<Arc<dyn DeviceHandle>>` compiles, and a
@@ -763,6 +788,11 @@ pub trait DeviceHandle: Send + Sync {
 
     /// Screen cast / receiver control, or `None`.
     fn as_screen_cast(&self) -> Option<&dyn ScreenCastProvider> {
+        None
+    }
+
+    /// Spatial audio routing and sound dome / speaker sink management, or `None`.
+    fn as_spatial_audio(&self) -> Option<&dyn SpatialAudioProvider> {
         None
     }
 
