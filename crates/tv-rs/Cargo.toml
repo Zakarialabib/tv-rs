@@ -26,10 +26,8 @@ tv-rs-roku.workspace = true
 tv-rs-cec.workspace = true
 tv-rs-ir.workspace = true
 tv-rs-mdc.workspace = true
-tv-rs-serial.workspace = true
 tv-rs-sicp.workspace = true
 tv-rs-spatial-audio.workspace = true
-tv-rs-dlna.workspace = true
 
 async-trait.workspace = true
 serde.workspace = true
@@ -38,6 +36,7 @@ tokio.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
+tv-rs-sim.workspace = true
 
 [features]
 # Hardware-in-the-loop tests. Off by default so `cargo test` never touches a

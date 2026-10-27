@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tv_rs_core::DeviceId;
 use tv_rs_discovery::{SsdpDeviceDescriptor, SsdpMsearchResponse};
 use tv_rs_roku::ROKU_ECP_PORT;
+use tv_rs_sicp::SICP_TCP_PORT;
 use tv_rs_tizen::TIZEN_WS_PORT;
 use tv_rs_webos::WEBOS_WS_PORT;
 
@@ -24,6 +25,8 @@ pub enum TvVendor {
     Lg,
     /// Roku OS: unauthenticated ECP REST (8060).
     Roku,
+    /// Philips SICP: commercial display protocol over TCP (5000).
+    Philips,
     /// The device answered SSDP but matched no known vendor signature.
     Unknown,
 }
@@ -35,6 +38,7 @@ impl TvVendor {
             Self::Samsung => "samsung",
             Self::Lg => "lg",
             Self::Roku => "roku",
+            Self::Philips => "philips",
             Self::Unknown => "unknown",
         }
     }
@@ -45,13 +49,14 @@ impl TvVendor {
     /// and LG also expose TLS variants (`8002` / `3001`) which the protocol
     /// crates select via their own builders. `Unknown` has no control port.
     ///
-    /// `TIZEN_WS_PORT`, `WEBOS_WS_PORT` and `ROKU_ECP_PORT` are re-exported
-    /// from the matching protocol crate rather than duplicated as literals.
+    /// `TIZEN_WS_PORT`, `WEBOS_WS_PORT`, `ROKU_ECP_PORT` and `SICP_TCP_PORT` are
+    /// re-exported from the matching protocol crate rather than duplicated as literals.
     pub fn control_port(&self) -> Option<u16> {
         match self {
             Self::Samsung => Some(TIZEN_WS_PORT),
             Self::Lg => Some(WEBOS_WS_PORT),
             Self::Roku => Some(ROKU_ECP_PORT),
+            Self::Philips => Some(SICP_TCP_PORT),
             Self::Unknown => None,
         }
     }
@@ -214,6 +219,7 @@ mod tests {
         assert_eq!(TvVendor::Samsung.control_port(), Some(8001));
         assert_eq!(TvVendor::Lg.control_port(), Some(3000));
         assert_eq!(TvVendor::Roku.control_port(), Some(8060));
+        assert_eq!(TvVendor::Philips.control_port(), Some(5000));
         assert_eq!(TvVendor::Unknown.control_port(), None);
     }
 
@@ -234,6 +240,7 @@ mod tests {
         assert_eq!(TvVendor::Samsung.as_str(), "samsung");
         assert_eq!(TvVendor::Lg.as_str(), "lg");
         assert_eq!(TvVendor::Roku.as_str(), "roku");
+        assert_eq!(TvVendor::Philips.as_str(), "philips");
         assert_eq!(TvVendor::Unknown.as_str(), "unknown");
     }
 

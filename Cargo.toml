@@ -18,7 +18,6 @@ tv-rs-roku = { path = "crates/roku", version = "0.4.0" }
 tv-rs-mdc = { path = "crates/mdc", version = "0.4.0" }
 tv-rs-sicp = { path = "crates/sicp", version = "0.4.0" }
 tv-rs-sim = { path = "crates/sim", version = "0.4.0" }
-tv-rs-dlna = { path = "crates/dlna", version = "0.4.0" }
 tv-rs-tizen = { path = "crates/tizen", version = "0.4.0" }
 tv-rs-webos = { path = "crates/webos", version = "0.4.0" }
 tv-rs-bluetooth = { path = "crates/bluetooth", version = "0.4.0" }
@@ -26,7 +25,6 @@ tv-rs-cec = { path = "crates/cec", version = "0.4.0" }
 tv-rs-ir = { path = "crates/ir", version = "0.4.0" }
 # Local display probe: no network, no TV control. Published separately.
 tv-rs-local = { path = "crates/local", version = "0.4.0" }
-tv-rs-serial = { path = "crates/serial", version = "0.4.0" }
 tv-rs-spatial-audio = { path = "crates/spatial-audio", version = "0.4.0" }
 # Shared transport vocabulary; must be published before tizen/webos.
 #
@@ -40,7 +38,7 @@ tv-rs-vision = { path = "crates/vision", version = "0.4.0" }
 tv-rs-rules = { path = "crates/rules", version = "0.4.0" }
 
 # --- runtime / async ---
-tokio = { version = "1", features = ["net", "time", "io-util", "fs", "macros", "rt-multi-thread", "sync"] }
+tokio = { version = "1", features = ["net", "time", "io-util", "fs", "macros", "rt-multi-thread", "sync", "signal"] }
 futures = "0.3"
 futures-util = "0.3"
 async-trait = "0.1"

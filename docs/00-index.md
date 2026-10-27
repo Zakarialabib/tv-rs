@@ -136,13 +136,8 @@ Where: [02-playbook §6](02-playbook.md#6-samsung-mdc-commercial-panels),
 [`crates/mdc/README.md`](../crates/mdc/README.md).
 
 **CEC** — the HDMI bus's own remote-control channel: power on, standby and active
-source over the HDMI cable, driven here through a `cec-client` subprocess. Logical Address Topology
-maps addresses 0–15 to domain entities for power, input and audio routing. Where:
+source over the HDMI cable, driven here through a `cec-client` subprocess. Where:
 [02-playbook §7](02-playbook.md#7-hdmi-cec-panels-the-network-cannot-reach).
-
-**PJLink** — standardized Class 1 & Class 2 projector control protocol over TCP 4352 or RS-232:
-ASCII commands (`%1POWR=1`, `%1LAMP?`), MD5 auth, mapped to `PowerControl` and `PanelHoursProvider`.
-Where: [02-playbook §11](02-playbook.md#11-pjlink-protocol-projectors).
 
 **DLNA / AVTransport / GENA** — UPnP MediaRenderer control: SSDP discovery,
 AVTransport SOAP actions (`SetAVTransportURI`, `Play`, `Pause`, `Stop`,

@@ -116,9 +116,6 @@ impl TvError {
                 "This app is not allowed to reach the local network. Grant it network \
                  access in the system prompt or settings, then try again ({reason})."
             )),
-            Self::Transport(TransportError::PortBusy) => Some(
-                "The specified serial port or device is currently in use by another process or task.".to_string(),
-            ),
             Self::Transport(TransportError::Tls(_)) => {
                 Some("The TV presented a different certificate; trust it again.".to_string())
             }
@@ -200,9 +197,6 @@ pub enum TransportError {
         /// Why the platform refused, in the platform's own words.
         reason: String,
     },
-    /// The requested serial port or hardware connection is already in use or locked.
-    #[error("port busy")]
-    PortBusy,
 }
 
 impl TransportError {
@@ -338,7 +332,6 @@ mod tests {
     fn remedy_matches_the_exhaustive_match() {
         let cases = [
             TvError::Transport(TransportError::Timeout),
-            TvError::Transport(TransportError::PortBusy),
             TvError::Transport(TransportError::Blocked {
                 reason: "EPERM".into(),
             }),

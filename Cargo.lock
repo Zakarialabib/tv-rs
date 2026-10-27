@@ -2739,13 +2739,12 @@ dependencies = [
  "tv-rs-cec",
  "tv-rs-core",
  "tv-rs-discovery",
- "tv-rs-dlna",
  "tv-rs-ir",
  "tv-rs-mdc",
  "tv-rs-power",
  "tv-rs-roku",
- "tv-rs-serial",
  "tv-rs-sicp",
+ "tv-rs-sim",
  "tv-rs-spatial-audio",
  "tv-rs-tizen",
  "tv-rs-transport",
@@ -2872,12 +2871,10 @@ dependencies = [
 name = "tv-rs-local"
 version = "0.4.0"
 dependencies = [
- "libc",
  "serde",
- "thiserror",
  "serde_json",
  "tokio",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
  "wmi",
 ]
 
@@ -2944,20 +2941,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tv-rs-serial"
-version = "0.4.0"
-dependencies = [
- "async-trait",
- "futures",
- "serde",
- "thiserror 2.0.21",
- "tokio",
- "tokio-serial",
- "tracing",
- "tv-rs-core",
-]
-
-[[package]]
 name = "tv-rs-sicp"
 version = "0.4.0"
 dependencies = [
@@ -2972,19 +2955,11 @@ dependencies = [
 name = "tv-rs-sim"
 version = "0.4.0"
 dependencies = [
- "futures-util",
- "rustls",
- "serde",
- "serde_json",
- "thiserror",
  "tokio",
- "tokio-tungstenite",
  "tracing",
+ "tv-rs-core",
  "tv-rs-mdc",
- "tv-rs-power",
- "tv-rs-tizen",
- "tv-rs-transport",
- "tv-rs-webos",
+ "tv-rs-sicp",
 ]
 
 [[package]]
@@ -3119,9 +3094,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.28.0"
+version = "1.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cc1186384beb7dd8eedea376413fd654937285ea6c9cfbb928dc3043ea4b606"
+checksum = "4a0e2d11620c50695fe12bbbfde96b3477fe606e7284c22d505c12ce51214514"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",
@@ -3449,15 +3424,6 @@ name = "windows-sys"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
-dependencies = [
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows-sys"
-version = "0.59.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets 0.52.6",
 ]

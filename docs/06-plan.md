@@ -342,28 +342,6 @@ no re-deferral of A5/C1 — the phone-side sender work rides its own plan items.
 row); the playbook's Android TV paragraph reflects the verdict; the matrix
 deferred list is updated the day a crate is decided either way.
 
-## 2.5 Room Control Expansion — PJLink, MDC Serial, and CEC Topology
-
-Goal: Extend control off the local host and into the room via PJLink (Projectors), MDC (Video Walls), and HDMI-CEC Logical Address Topology.
-
-### V1 · PJLink Protocol (`tv-rs-pjlink`)
-Pure Rust TCP (port 4352) and RS-232 codec for Class 1 & Class 2 projectors. Maps projector commands to `tv_rs_core` abstractions (`PowerControl` for `%1POWR=1` power commands, `PanelHoursProvider` / LFD lamp queries for `LAMP?` parsing, and MD5 challenge-response authentication).
-
-- **Concept & Domain Mapping**: The crate (`tv-rs-pjlink`, living in `crates/pjlink`) implements `DeviceHandle` and core capability traits (`PowerControl`, `PanelHoursProvider`, `InputSelect`).
-- **Falsifiable Gate**: Round-trip unit and integration tests against a `MockPjlinkServer` in `tv-rs-sim`. Asserts `%1POWR=1` (Power On execution) and `LAMP?` response parsing into `PanelHoursProvider` lamp runtime hours and status.
-
-### V2 · MDC Serial Expansion (`tv-rs-mdc`)
-Refactor and extend `tv-rs-mdc` to leverage the workspace Serial HAL (`tv-rs-serial` / `tokio-serial`) for RS-232 daisy-chaining across video wall displays using MDC display IDs (`0x00`–`0xFD` individual, `0xFE` broadcast).
-
-- **Concept & Domain Mapping**: Facade (`mdc_serial_handle`) and MDC transport route commands over serial ports, supporting multi-drop display addressing and frame framing over physical or virtual RS-232 connections.
-- **Falsifiable Gate**: The facade routes MDC commands over a mock serial port / `MockMdcServer` to a multi-display video wall fixture asserting correct display ID addressing and checksum validation.
-
-### V3 · CEC Logical Address Topology (`tv-rs-cec`)
-Extend `tv-rs-cec` to map HDMI-CEC logical addresses (0–15: TV, Recording Device, Tuner, Playback Device, Audio System, etc.) to domain entities (`DeviceDescriptor`, `DeviceHandle`, input routing).
-
-- **Concept & Domain Mapping**: Maps logical addresses to domain endpoints for input routing and status queries. Audio commands (`<User Control Pressed>` volume/mute) are explicitly dropped or forwarded based on the target logical address type and capability set.
-- **Falsifiable Gate**: Mock CEC adapter receives `<Give Device Power Status>` (`0x8F`) and replies with the observed domain power state (`<Report Power Status>`), with test assertions verifying audio command forwarding and dropping rules according to domain topology.
-
 ## 3. `tv-rs-sim` — verify the hardware exits without hardware
 
 Every exit above that says "on a real TV" needs something that answers like one. This

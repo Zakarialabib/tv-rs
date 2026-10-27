@@ -1,25 +1,24 @@
 [package]
 name = "tv-rs-sim"
-description = "Hardware-free protocol simulators for Samsung MDC, LG webOS SSAP, and Samsung Tizen TLS."
+description = "Hardware mock server for tv-rs supporting Samsung MDC (TCP 1515) and Philips SICP (TCP 5000) for hardware-free CI testing."
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+keywords = ["tv", "mock", "simulator", "mdc", "sicp"]
+categories = ["development-tools", "network-programming"]
 
 [dependencies]
-tv-rs-mdc.workspace = true
-tv-rs-transport.workspace = true
 tokio.workspace = true
-tokio-tungstenite.workspace = true
-futures-util.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-thiserror.workspace = true
+tv-rs-mdc.workspace = true
+tv-rs-sicp.workspace = true
 tracing.workspace = true
-rustls.workspace = true
 
 [dev-dependencies]
-tv-rs-power.workspace = true
-tv-rs-tizen.workspace = true
-tv-rs-webos.workspace = true
+tokio.workspace = true
+tv-rs-core.workspace = true
+
+[lints]
+workspace = true

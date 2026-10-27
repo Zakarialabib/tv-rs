@@ -141,6 +141,7 @@ impl DeviceFingerprint {
 
         // 2. Commercial / Industrial Display Panel check
         if self.open_ports.contains(&1515) // Samsung MDC TCP port
+            || self.open_ports.contains(&5000) // Philips SICP TCP port
             || ssdp.contains("mdc")
             || ssdp.contains("signage")
             || ssdp.contains("sicp")
@@ -151,7 +152,10 @@ impl DeviceFingerprint {
             || mac.starts_with("00:19:FB")
         // Samsung Commercial OUI
         {
-            let name = if ssdp.contains("sicp") || mdns.contains("sicp") {
+            let name = if self.open_ports.contains(&5000)
+                || ssdp.contains("sicp")
+                || mdns.contains("sicp")
+            {
                 "SICP Commercial Panel".to_string()
             } else if self.open_ports.contains(&1515) || ssdp.contains("mdc") {
                 "Samsung MDC Signage Panel".to_string()

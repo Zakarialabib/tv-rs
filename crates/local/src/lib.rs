@@ -41,13 +41,11 @@
 
 use serde::{Deserialize, Serialize};
 
-pub mod ddc;
-pub mod drm;
+pub mod android;
 pub mod edid;
 pub mod topology;
 
-pub use ddc::{DdcError, DdcMonitor, VcpValue};
-pub use drm::{probe_drm_connectors, DrmDisplayMode, RotationState};
+pub use android::{probe_android_display_manager, DisplayManagerStub};
 pub use edid::{parse_edid, DetailedTiming, Edid, EdidError};
 pub use topology::{DisplayTopology, GridPosition, MappedDisplay, Zone, ZoneType};
 
@@ -184,7 +182,11 @@ pub fn probe_displays() -> Vec<ProbeInfo> {
     {
         linux::probe()
     }
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(target_os = "android")]
+    {
+        android::probe()
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "android")))]
     {
         Vec::new()
     }
@@ -225,7 +227,11 @@ pub fn display_edids() -> Vec<DisplayEdid> {
     {
         linux::display_edids()
     }
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(target_os = "android")]
+    {
+        android::display_edids()
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "android")))]
     {
         Vec::new()
     }
@@ -447,6 +453,10 @@ fn is_tv_brand(vendor: &str) -> bool {
             | "INS"
             | "GRU"
             | "MET"
+            | "DEL"
+            | "SEC"
+            | "NEC"
+            | "PAN"
     )
 }
 
@@ -584,13 +594,19 @@ mod win {
             .collect()
     }
 
-    fn build_info(d: WinDisplay, record: Option<WmiRecord>) -> ProbeInfo {
+    fn build_info(mut d: WinDisplay, record: Option<WmiRecord>) -> ProbeInfo {
         // WMI is the primary source; the registry EDID only fills a missing record.
         let registry = if record.is_none() {
             d.edid.as_ref().and_then(|(_, raw)| parse_edid(raw).ok())
         } else {
             None
         };
+        if (d.width == 0 || d.height == 0) && registry.is_some() {
+            if let Some((w, h)) = registry.as_ref().and_then(|e| e.preferred_resolution()) {
+                d.width = w;
+                d.height = h;
+            }
+        }
         let record = record.or_else(|| registry.as_ref().map(record_from_edid));
         let attachment = record
             .as_ref()
@@ -942,12 +958,26 @@ mod linux {
             }
 
             let modes = fs::read_to_string(entry.path().join("modes")).unwrap_or_default();
-            let (width, height, refresh) = parse_first_mode(&modes);
+            let (mut width, mut height, refresh) = parse_first_mode(&modes);
             let edid = fs::read(entry.path().join("edid")).ok();
-            let (vendor, model, serial, width_cm, height_cm) = edid
-                .as_deref()
-                .map(edid_facts)
-                .unwrap_or((None, None, None, None, None));
+            let parsed_edid = edid.as_deref().and_then(|b| parse_edid(b).ok());
+            let (vendor, model, serial, width_cm, height_cm) = if let Some(ref edid) = parsed_edid {
+                if width == 0 || height == 0 {
+                    if let Some((w, h)) = edid.preferred_resolution() {
+                        width = w;
+                        height = h;
+                    }
+                }
+                (
+                    Some(edid.manufacturer_id.clone()),
+                    edid.display_name.clone().or_else(|| Some(edid.model())),
+                    edid.serial(),
+                    edid.physical_width_cm.map(f64::from),
+                    edid.physical_height_cm.map(f64::from),
+                )
+            } else {
+                (None, None, None, None, None)
+            };
 
             let attachment = attachment_from_name(connector);
             let diagonal = match (width_cm, height_cm) {
@@ -1000,28 +1030,6 @@ mod linux {
             w.trim().parse().unwrap_or(0),
             h.trim().parse().unwrap_or(0),
             None,
-        )
-    }
-
-    /// Vendor, model, serial and size from an EDID, through the shared parser.
-    type EdidFacts = (
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<f64>,
-        Option<f64>,
-    );
-
-    fn edid_facts(edid: &[u8]) -> EdidFacts {
-        let Ok(edid) = parse_edid(edid) else {
-            return (None, None, None, None, None);
-        };
-        (
-            Some(edid.manufacturer_id.clone()),
-            edid.display_name.clone(),
-            edid.serial(),
-            edid.physical_width_cm.map(f64::from),
-            edid.physical_height_cm.map(f64::from),
         )
     }
 
