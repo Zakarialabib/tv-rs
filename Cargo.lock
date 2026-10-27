@@ -2736,15 +2736,12 @@ dependencies = [
  "serde",
  "thiserror 2.0.21",
  "tokio",
- "tv-rs-cec",
  "tv-rs-core",
  "tv-rs-discovery",
- "tv-rs-ir",
  "tv-rs-mdc",
  "tv-rs-power",
  "tv-rs-roku",
  "tv-rs-sicp",
- "tv-rs-spatial-audio",
  "tv-rs-tizen",
  "tv-rs-transport",
  "tv-rs-webos",
@@ -2851,22 +2848,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tv-rs-ir"
-version = "0.4.0"
-dependencies = [
- "async-trait",
- "reqwest",
- "serde",
- "thiserror",
- "tokio",
- "toml",
- "tracing",
- "tv-rs-cec",
- "tv-rs-core",
- "tv-rs-power",
-]
-
-[[package]]
 name = "tv-rs-local"
 version = "0.4.0"
 dependencies = [
@@ -2944,18 +2925,6 @@ dependencies = [
  "tv-rs-core",
  "tv-rs-mdc",
  "tv-rs-sicp",
-]
-
-[[package]]
-name = "tv-rs-spatial-audio"
-version = "0.4.0"
-dependencies = [
- "async-trait",
- "serde",
- "thiserror",
- "tokio",
- "tracing",
- "tv-rs-core",
 ]
 
 [[package]]
