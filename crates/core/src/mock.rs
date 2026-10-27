@@ -13,7 +13,8 @@ use async_trait::async_trait;
 use crate::capability::{
     AppLaunch, AppRef, BrightnessControl, Capability, CapabilitySet, DeviceHandle, Input,
     InputSelect, Key, KeyInput, Orientation, OrientationControl, PanelHealth, PanelHealthProvider,
-    PanelLockControl, PowerControl, Probe, Rebootable, TextInput, VolumeControl,
+    PanelLockControl, PowerControl, Probe, Rebootable, ScreenCastProvider, TextInput,
+    VolumeControl,
 };
 #[cfg(feature = "supporting")]
 use crate::capability::{FrameFormat, PanelHours, PanelHoursProvider, ScreenCapturer, ScreenFrame};
@@ -72,6 +73,10 @@ pub enum Action {
     SetPanelLock(bool),
     /// The content orientation was set.
     SetOrientation(Orientation),
+    /// Screen cast started.
+    StartCast(Option<String>),
+    /// Screen cast stopped.
+    StopCast,
 }
 
 /// A television that exists only in tests.
@@ -117,6 +122,7 @@ impl MockBackend {
             Capability::PanelLock,
             Capability::Orientation,
             Capability::NoSignalStatus,
+            Capability::ScreenCast,
             #[cfg(feature = "supporting")]
             Capability::LampOrPanelHours,
             #[cfg(feature = "supporting")]
@@ -367,6 +373,12 @@ impl DeviceHandle for MockBackend {
             .then_some(self as &dyn PanelHealthProvider)
     }
 
+    fn as_screen_cast(&self) -> Option<&dyn ScreenCastProvider> {
+        self.capabilities
+            .contains(Capability::ScreenCast)
+            .then_some(self as &dyn ScreenCastProvider)
+    }
+
     #[cfg(feature = "supporting")]
     fn as_panel_hours(&self) -> Option<&dyn PanelHoursProvider> {
         self.capabilities
@@ -608,6 +620,23 @@ impl PanelHealthProvider for MockBackend {
     }
 }
 
+#[async_trait]
+impl ScreenCastProvider for MockBackend {
+    async fn start_cast(&self, target_url: Option<&str>, _cmd: CommandId) -> Result<(), TvError> {
+        if !self.capabilities.contains(Capability::ScreenCast) {
+            return Err(self.unsupported(Capability::ScreenCast));
+        }
+        self.perform(Action::StartCast(target_url.map(|s| s.to_string())))
+    }
+
+    async fn stop_cast(&self, _cmd: CommandId) -> Result<(), TvError> {
+        if !self.capabilities.contains(Capability::ScreenCast) {
+            return Err(self.unsupported(Capability::ScreenCast));
+        }
+        self.perform(Action::StopCast)
+    }
+}
+
 #[cfg(feature = "supporting")]
 #[async_trait]
 impl PanelHoursProvider for MockBackend {
@@ -837,6 +866,39 @@ mod tests {
             "only the next telemetry read fails"
         );
         assert!(mock.actions().is_empty());
+    }
+
+    #[test]
+    fn screen_cast_actions_are_recorded_and_unsupported_when_not_advertised() {
+        let mock = mock();
+        assert!(mock.as_screen_cast().is_some());
+        block_on(ScreenCastProvider::start_cast(
+            &mock,
+            Some("rtsp://10.0.0.1:554/live"),
+            CommandId::new(),
+        ))
+        .unwrap();
+        block_on(ScreenCastProvider::stop_cast(&mock, CommandId::new())).unwrap();
+        assert_eq!(
+            mock.actions(),
+            vec![
+                Action::StartCast(Some("rtsp://10.0.0.1:554/live".to_string())),
+                Action::StopCast
+            ]
+        );
+
+        let limited = MockBackend::new(descriptor())
+            .with_capabilities(CapabilitySet::of(Capability::PowerState));
+        assert!(limited.as_screen_cast().is_none());
+        assert!(matches!(
+            block_on(ScreenCastProvider::start_cast(
+                &limited,
+                None,
+                CommandId::new()
+            ))
+            .expect_err("screen cast is not advertised"),
+            TvError::Unsupported(Capability::ScreenCast)
+        ));
     }
 
     #[test]

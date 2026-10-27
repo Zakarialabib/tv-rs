@@ -390,7 +390,8 @@ impl TvClient {
     /// This is the signage primitive: "put this page on this panel" without
     /// installing an application.
     ///
-    /// * **webOS** — `ssap://system.launcher/open`, the built-in browser.
+    /// * **webOS** — `ssap://system.launcher/open`, the built-in browser, sent
+    ///   through the pooled session like every other webOS command.
     /// * **Tizen** — not implemented: Samsung's URL-launcher service is a B2B
     ///   feature whose API differs from the consumer remote channel, and it has not
     ///   been verified here. Returns [`TvError::UnsupportedOperation`] rather than a
@@ -468,8 +469,12 @@ impl TvClient {
 
     /// Turn the television off.
     ///
-    /// Tizen and webOS require an open session, so this opens (and drops) one
-    /// per call; Roku's ECP endpoint is stateless.
+    /// Tizen and webOS each need an open connection, so the command travels
+    /// through the handle's pool: one remote channel (Tizen) or registered
+    /// session (webOS) per TV, opened on first use and reused by later calls —
+    /// never opened and dropped per call. A dead pooled connection is reopened
+    /// exactly once on a failed send, and webOS sheds a session idle past its
+    /// limit. Roku's ECP endpoint is stateless.
     ///
     /// # Errors
     ///
@@ -498,8 +503,9 @@ impl TvClient {
     /// Ask the TV for its power state.
     ///
     /// Roku answers authoritatively from `/query/device-info`. Tizen and webOS
-    /// have no query that still answers once the panel is off, so the shared TCP
-    /// probe runs against the control port instead: a completed connect means `On`,
+    /// have no query that still answers once the panel is off, so a TCP probe
+    /// against the control port stands in — a new connect on every call: a
+    /// completed connect means `On`,
     /// a refused one means `Standby` (network stack up, apps down), and a timeout
     /// means `Off`.
     ///
@@ -526,6 +532,9 @@ impl TvClient {
     /// on the screen (a panel with *Always Ready* keeps the port open while dark).
     /// That is an inference, and reporting it as `High` is how a fleet starts lying
     /// about what is actually showing.
+    ///
+    /// The probe dials afresh on every call — a connect test *is* a fresh connect,
+    /// so there is no session involved and the pooled channel is left untouched.
     ///
     /// # Errors
     ///
@@ -565,6 +574,10 @@ impl TvClient {
     /// webOS, and an ECP app id on Roku. Use the typed accessors when you need
     /// to resolve a human-readable name first (see
     /// [`RokuClient::query_app_id`]).
+    ///
+    /// Session-wise the three differ: Tizen's launch is a fire-and-forget DIAL
+    /// `POST` (plain HTTP, no session to open), webOS routes through the pooled
+    /// session, and Roku's ECP call is stateless.
     ///
     /// # Errors
     ///
@@ -864,5 +877,132 @@ mod power_state_tests {
     #[test]
     fn unknown_stays_unknown() {
         assert_eq!(map_roku_power(RokuPowerMode::Unknown), PowerState::Unknown);
+    }
+}
+
+/// Session-reuse truth pass: every connection-bound facade method must route
+/// through the pool the handle already holds, not open (and drop) one per call.
+///
+/// The Tizen counting double is built here rather than borrowed from either
+/// protocol crate's `testkit` feature so the regression runs under a plain
+/// `cargo test -p tv-rs`. The public pool traits are the seam; nothing in this
+/// module touches a network.
+#[cfg(test)]
+mod session_reuse_tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+
+    use super::*;
+    use tv_rs_tizen::{TizenChannel, TizenChannelFactory};
+
+    /// A channel that records every frame it is asked to send.
+    struct CountingChannel {
+        sent: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl TizenChannel for CountingChannel {
+        async fn send_key(&mut self, _key: TizenRemoteKey) -> tv_rs_tizen::Result<()> {
+            self.sent.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        async fn send_raw(&mut self, _raw: &str) -> tv_rs_tizen::Result<()> {
+            self.sent.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    /// A factory that counts how many channels the facade asked it to open.
+    struct CountingChannelFactory {
+        opens: Arc<AtomicUsize>,
+        sent: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl TizenChannelFactory for CountingChannelFactory {
+        async fn open(&self, _client: &TizenClient) -> tv_rs_tizen::Result<Box<dyn TizenChannel>> {
+            self.opens.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::new(CountingChannel {
+                sent: self.sent.clone(),
+            }))
+        }
+    }
+
+    /// A Tizen handle whose pool counts opens instead of dialling a television.
+    fn counting_tizen(opens: &Arc<AtomicUsize>, sent: &Arc<AtomicUsize>) -> TvClient {
+        TvClient::Tizen {
+            client: TizenClient::new("10.0.0.1"),
+            pool: Arc::new(DynConnectionPool::with_factory(Box::new(
+                CountingChannelFactory {
+                    opens: opens.clone(),
+                    sent: sent.clone(),
+                },
+            ))),
+            mac: None,
+        }
+    }
+
+    /// `power_off` used to be documented as opening (and dropping) a session
+    /// per call. It never did after the pool landed: two calls must share one
+    /// channel, or the doc would be right and this test wrong.
+    #[tokio::test]
+    async fn tizen_power_off_reuses_one_pooled_channel() {
+        let opens = Arc::new(AtomicUsize::new(0));
+        let sent = Arc::new(AtomicUsize::new(0));
+        let client = counting_tizen(&opens, &sent);
+
+        client.power_off().await.expect("the fake channel serves");
+        client.power_off().await.expect("the fake channel serves");
+
+        assert_eq!(
+            opens.load(Ordering::SeqCst),
+            1,
+            "power_off must reuse the pooled channel, not dial per call"
+        );
+        assert_eq!(
+            sent.load(Ordering::SeqCst),
+            2,
+            "both commands must reach the TV"
+        );
+    }
+
+    /// The same truth for the webOS half of `power_off` / `launch_app` /
+    /// `open_url`, using the protocol crate's counting double. Behind
+    /// `testkit` because the double ships with that feature; no network.
+    #[cfg(feature = "testkit")]
+    #[tokio::test]
+    async fn webos_convenience_calls_share_one_pooled_session() {
+        use tv_rs_webos::testkit::{counters, factory};
+
+        let (opens, served) = counters();
+        let client = TvClient::Webos {
+            client: WebosClient::new("10.0.0.3"),
+            pool: Arc::new(DynSessionPool::with_factory(Box::new(factory(
+                opens.clone(),
+                0,
+                served.clone(),
+            )))),
+            mac: None,
+        };
+
+        client.power_off().await.expect("the fake session serves");
+        client
+            .launch_app("netflix")
+            .await
+            .expect("the fake session serves");
+        client
+            .open_url("https://example.com")
+            .await
+            .expect("the fake session serves");
+
+        assert_eq!(
+            opens.load(Ordering::SeqCst),
+            1,
+            "three commands must share one pooled session"
+        );
+        assert_eq!(served.load(Ordering::SeqCst), 3);
     }
 }
