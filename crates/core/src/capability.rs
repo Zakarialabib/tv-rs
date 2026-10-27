@@ -63,9 +63,12 @@ pub enum Capability {
     /// can start an application it cannot enumerate (Tizen's remote channel is
     /// exactly that), so "can I launch" and "can I list what is installed" are
     /// independent facts, and the fleet grid renders a blank column on the wrong
-    /// one. Declared last so the `CapabilitySet` bit layout of every capability
-    /// before it is unchanged.
+    /// one.
     AppList,
+    /// Screen casting or screen receiving preview / mirroring stream capability.
+    ScreenCast,
+    /// Spatial audio routing to Bluetooth A2DP sinks, PulseAudio/PipeWire streams, directional domes, or ceiling speakers.
+    SpatialAudio,
 }
 
 impl Capability {
@@ -92,6 +95,8 @@ impl Capability {
             Self::ScreenCapture => "screen_capture",
             Self::TextInput => "text_input",
             Self::AppList => "app_list",
+            Self::ScreenCast => "screen_cast",
+            Self::SpatialAudio => "spatial_audio",
         }
     }
 }
@@ -172,6 +177,8 @@ const ALL_CAPABILITIES: &[Capability] = &[
     Capability::ScreenCapture,
     Capability::AppList,
     Capability::TextInput,
+    Capability::ScreenCast,
+    Capability::SpatialAudio,
 ];
 
 const fn capability_index(capability: Capability) -> u16 {
@@ -195,6 +202,8 @@ const fn capability_index(capability: Capability) -> u16 {
         Capability::ScreenCapture => 14,
         Capability::AppList => 15,
         Capability::TextInput => 16,
+        Capability::ScreenCast => 17,
+        Capability::SpatialAudio => 18,
     }
 }
 
@@ -660,6 +669,40 @@ pub trait ScreenCapturer: Send + Sync {
     async fn capture(&self) -> Result<Option<ScreenFrame>, TvError>;
 }
 
+/// Screen casting and preview / mirroring control trait.
+#[async_trait]
+pub trait ScreenCastProvider: Send + Sync {
+    /// Starts screen casting / preview stream for the target or from the device.
+    async fn start_cast(&self, _target_url: Option<&str>, _cmd: CommandId) -> Result<(), TvError> {
+        Err(TvError::Unsupported(Capability::ScreenCast))
+    }
+
+    /// Stops active screen casting session.
+    async fn stop_cast(&self, _cmd: CommandId) -> Result<(), TvError> {
+        Err(TvError::Unsupported(Capability::ScreenCast))
+    }
+}
+
+/// Spatial audio routing and sound dome / speaker sink management trait.
+#[async_trait]
+pub trait SpatialAudioProvider: Send + Sync {
+    /// Connects or routes audio to a target audio sink (e.g. Bluetooth A2DP, PulseAudio/PipeWire node).
+    async fn route_audio(&self, _sink_id: &str, _cmd: CommandId) -> Result<(), TvError> {
+        Err(TvError::Unsupported(Capability::SpatialAudio))
+    }
+
+    /// Updates listener position for spatial audio gain/panning adjustment.
+    async fn update_listener_position(
+        &self,
+        _x: f64,
+        _y: f64,
+        _z: f64,
+        _cmd: CommandId,
+    ) -> Result<(), TvError> {
+        Err(TvError::Unsupported(Capability::SpatialAudio))
+    }
+}
+
 /// An erased television.
 ///
 /// The fleet reason this trait exists: `Vec<Arc<dyn DeviceHandle>>` compiles, and a
@@ -740,6 +783,16 @@ pub trait DeviceHandle: Send + Sync {
     /// Still-frame capture, or `None`.
     #[cfg(feature = "supporting")]
     fn as_screen_capturer(&self) -> Option<&dyn ScreenCapturer> {
+        None
+    }
+
+    /// Screen cast / receiver control, or `None`.
+    fn as_screen_cast(&self) -> Option<&dyn ScreenCastProvider> {
+        None
+    }
+
+    /// Spatial audio routing and sound dome / speaker sink management, or `None`.
+    fn as_spatial_audio(&self) -> Option<&dyn SpatialAudioProvider> {
         None
     }
 

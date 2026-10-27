@@ -20,8 +20,11 @@ tv-rs-sicp = { path = "crates/sicp", version = "0.4.0" }
 tv-rs-sim = { path = "crates/sim", version = "0.4.0" }
 tv-rs-tizen = { path = "crates/tizen", version = "0.4.0" }
 tv-rs-webos = { path = "crates/webos", version = "0.4.0" }
+tv-rs-cec = { path = "crates/cec", version = "0.4.0" }
+tv-rs-ir = { path = "crates/ir", version = "0.4.0" }
 # Local display probe: no network, no TV control. Published separately.
 tv-rs-local = { path = "crates/local", version = "0.4.0" }
+tv-rs-spatial-audio = { path = "crates/spatial-audio", version = "0.4.0" }
 # Shared transport vocabulary; must be published before tizen/webos.
 #
 # `default-features = false` keeps a TLS stack out of the crates that only need
@@ -63,6 +66,8 @@ rustls-platform-verifier = "0.7.1"
 sha2 = "0.11"
 url = "2"
 base64 = "0.23"
+quinn = { version = "0.11", default-features = false, features = ["rustls-ring", "runtime-tokio"] }
+rcgen = "0.14"
 
 # --- errors / logging / cli ---
 thiserror = "2"
