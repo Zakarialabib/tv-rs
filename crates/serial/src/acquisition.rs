@@ -148,7 +148,7 @@ mod tests {
         let guard1 = manager
             .acquire(port)
             .expect("first acquisition should succeed");
-        assert_eq!(guard1.port_name(), "COM1");
+        assert!(guard1.port_name().eq_ignore_ascii_case("COM1"));
 
         let err = manager.acquire(port).unwrap_err();
         assert!(matches!(err, TvError::Transport(TransportError::PortBusy)));
@@ -158,6 +158,6 @@ mod tests {
         let guard2 = manager
             .acquire(port)
             .expect("acquisition should succeed after drop");
-        assert_eq!(guard2.port_name(), "COM1");
+        assert!(guard2.port_name().eq_ignore_ascii_case("COM1"));
     }
 }

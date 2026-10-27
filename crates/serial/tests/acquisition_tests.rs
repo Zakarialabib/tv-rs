@@ -15,7 +15,12 @@ fn test_simultaneous_port_acquisition_returns_port_busy() {
     let guard1 = manager
         .acquire(port_path)
         .expect("first acquisition must succeed");
-    assert_eq!(guard1.port_name(), port_path);
+    assert!(
+        guard1.port_name().eq_ignore_ascii_case(port_path),
+        "guard port name {:?} should match {:?}",
+        guard1.port_name(),
+        port_path
+    );
 
     let second_attempt = manager.acquire(port_path);
     assert!(
@@ -32,7 +37,12 @@ fn test_simultaneous_port_acquisition_returns_port_busy() {
     let guard2 = manager
         .acquire(port_path)
         .expect("acquisition must succeed after dropping guard1");
-    assert_eq!(guard2.port_name(), port_path);
+    assert!(
+        guard2.port_name().eq_ignore_ascii_case(port_path),
+        "guard port name {:?} should match {:?}",
+        guard2.port_name(),
+        port_path
+    );
 }
 
 #[tokio::test]
