@@ -38,6 +38,8 @@ const ORDER: [&str; 18] = [
     "tv-rs-tizen",
     "tv-rs-webos",
     "tv-rs-app",
+    "tv-rs-ir",
+    "tv-rs-spatial-audio",
     "tv-rs-vision",
     "tv-rs",
     "tv-rs-media",

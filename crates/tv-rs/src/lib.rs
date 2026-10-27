@@ -45,6 +45,7 @@
 #![forbid(unsafe_code)]
 
 mod client;
+mod dedupe;
 mod error;
 mod handle;
 mod types;
@@ -66,8 +67,10 @@ pub use types::{DiscoveredTv, TvVendor};
 pub mod map;
 
 /// SSDP & mDNS discovery, UPnP descriptor parsing, and signage pairing: [`discovery::SsdpScanner`], [`discovery::MdnsScanner`].
+pub use tv_rs_cec as cec;
 pub use tv_rs_core as core;
 pub use tv_rs_discovery as discovery;
+pub use tv_rs_ir as ir;
 /// Samsung MDC commercial display protocol client: [`mdc::MdcClient`].
 pub use tv_rs_mdc as mdc;
 /// Wake-on-LAN and power-state probing: [`power::WolSender`].
@@ -76,6 +79,8 @@ pub use tv_rs_power::PowerState;
 pub use tv_rs_roku as roku;
 /// Philips SICP commercial display protocol client: [`sicp::SicpClient`].
 pub use tv_rs_sicp as sicp;
+/// Spatial audio routing and sound dome / speaker sink management: [`spatial_audio::SpatialAudioRouter`].
+pub use tv_rs_spatial_audio as spatial_audio;
 /// Samsung Tizen remote channel and DIAL: [`tizen::TizenClient`].
 pub use tv_rs_tizen as tizen;
 /// TLS policy and pinning, shared by every vendor channel: [`transport::TlsPolicy`].
