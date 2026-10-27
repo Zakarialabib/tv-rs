@@ -137,7 +137,10 @@ impl Quirks {
     /// a row without those cannot be acted on, so accepting it would silently
     /// disable the workaround it was written for.
     pub fn parse(source: &str) -> Result<Self, QuirkError> {
-        let document: toml::Value = source
+        // toml 1.x split `FromStr`: `toml::Value::from_str` now parses a single
+        // inline value (`{ ... }`), not a document, while `toml::Table::from_str`
+        // keeps the document semantics `Quirks::parse` needs for `[[quirk]]` rows.
+        let document: toml::Table = source
             .parse()
             .map_err(|error: toml::de::Error| QuirkError::Parse(error.to_string()))?;
 
