@@ -177,17 +177,6 @@ work is already in the plan as A5/C1. The **TV is a target**, and it was written
 off for the wrong reason — ADB's trust model. The peer landscape found a second
 door.
 
-## Cross-Platform Matrix (The Operator's Reality)
-
-AV hardware is notoriously OS-dependent. The HAL traits isolate these realities, focusing strictly on the environments where technicians actually deploy control software.
-
-| Concern | Windows (Primary) | Android (Primary) | Linux (Secondary) |
-| --- | --- | --- | --- |
-| **Serial (RS-232/USB)** | COM* via SetupAPI/Registry | USB Host API (OTG adapters) | `/dev/ttyUSB*` (udev rules) |
-| **DDC/CI (Monitors)** | `GetPhysicalMonitorsFromHMONITOR` (DXVA2) | USB-C DisplayPort Aux / Kernel DRM | `/dev/i2c-*` (requires `i2c-dev`) |
-| **HDMI-CEC** | USB-CEC adapters (`libcec` wrapper) | Android `HdmiControlManager` (System apps) | `/dev/cec*` (CEC framework) |
-| **Permissions** | UAC / Driver prompts | USB Device Permissions / System App signature | `dialout` / `i2c` / `video` groups |
-
 ## Peer landscape — the same work in other languages
 
 Written on 2026-10-23 from the libraries' own READMEs/releases (search-verified

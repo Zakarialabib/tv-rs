@@ -2743,6 +2743,7 @@ dependencies = [
  "tv-rs-mdc",
  "tv-rs-power",
  "tv-rs-roku",
+ "tv-rs-serial",
  "tv-rs-sicp",
  "tv-rs-spatial-audio",
  "tv-rs-tizen",
@@ -2818,18 +2819,6 @@ dependencies = [
  "thiserror 2.0.21",
  "toml",
  "uuid",
-]
-
-[[package]]
-name = "tv-rs-ddcci"
-version = "0.4.0"
-dependencies = [
- "async-trait",
- "libc",
- "thiserror 2.0.21",
- "tokio",
- "tv-rs-core",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2949,6 +2938,20 @@ dependencies = [
  "tracing",
  "tv-rs-core",
  "tv-rs-vision",
+]
+
+[[package]]
+name = "tv-rs-serial"
+version = "0.4.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "serde",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-serial",
+ "tracing",
+ "tv-rs-core",
 ]
 
 [[package]]
