@@ -2744,6 +2744,7 @@ dependencies = [
  "tv-rs-power",
  "tv-rs-roku",
  "tv-rs-sicp",
+ "tv-rs-sim",
  "tv-rs-spatial-audio",
  "tv-rs-tizen",
  "tv-rs-transport",

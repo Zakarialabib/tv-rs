@@ -73,6 +73,8 @@ pub fn identify_vendor(
         TvVendor::Samsung
     } else if haystack.contains("webos") || haystack.contains("lg electronics") {
         TvVendor::Lg
+    } else if haystack.contains("philips") || haystack.contains("sicp") {
+        TvVendor::Philips
     } else {
         TvVendor::Unknown
     }
@@ -175,6 +177,35 @@ pub async fn probe(address: &str) -> Option<DiscoveredTv> {
         }
     }
 
+    let (sicp_host, sicp_port) = if let Some((h, p)) = address.rsplit_once(':') {
+        if let Ok(parsed_port) = p.parse::<u16>() {
+            (h, Some(parsed_port))
+        } else {
+            (address, None)
+        }
+    } else {
+        (address, None)
+    };
+
+    let sicp_client = if let Some(port) = sicp_port {
+        SicpClient::with_options(
+            sicp_host,
+            tv_rs_sicp::SicpOptions {
+                port,
+                ..Default::default()
+            },
+        )
+    } else {
+        SicpClient::new(address)
+    };
+
+    if let Ok(power) = sicp_client.power().await {
+        let mut tv = DiscoveredTv::probed(TvVendor::Philips, address);
+        tv.manufacturer = Some("Philips".to_string());
+        let _ = power;
+        return Some(tv);
+    }
+
     // A port guess, and only that: webOS listens on 3000. An open port on a
     // sleeping set still answers, which is what makes this useful before a wake.
     //
@@ -248,6 +279,13 @@ pub enum TvClient {
         /// than a lever — it is what a fleet dashboard shows as the box's identity.
         mac: Option<String>,
     },
+    /// Philips SICP: commercial display protocol over TCP (5000).
+    Philips {
+        /// The SICP client.
+        client: SicpClient,
+        /// Hardware address, when known.
+        mac: Option<String>,
+    },
 }
 
 /// The pools hold live sockets and have no useful `Debug` form, so the handle
@@ -264,6 +302,7 @@ impl fmt::Debug for TvClient {
                 .field("client", client)
                 .finish_non_exhaustive(),
             Self::Roku { client, .. } => f.debug_tuple("Roku").field(client).finish(),
+            Self::Philips { client, .. } => f.debug_tuple("Philips").field(client).finish(),
         }
     }
 }
@@ -325,6 +364,29 @@ impl TvClient {
                 client: RokuClient::new(tv.ip.clone()),
                 mac: None,
             }),
+            TvVendor::Philips => {
+                let (host, port) = if let Some((h, p)) = tv.ip.rsplit_once(':') {
+                    if let Ok(parsed_port) = p.parse::<u16>() {
+                        (h.to_string(), Some(parsed_port))
+                    } else {
+                        (tv.ip.clone(), None)
+                    }
+                } else {
+                    (tv.ip.clone(), None)
+                };
+                let client = if let Some(port) = port {
+                    SicpClient::with_options(
+                        host,
+                        tv_rs_sicp::SicpOptions {
+                            port,
+                            ..Default::default()
+                        },
+                    )
+                } else {
+                    SicpClient::new(tv.ip.clone())
+                };
+                Ok(Self::Philips { client, mac: None })
+            }
             TvVendor::Unknown => Err(TvError::UnsupportedDevice {
                 address: tv.ip.clone(),
                 reason: "device did not advertise a known vendor signature".to_string(),
@@ -378,6 +440,10 @@ impl TvClient {
                 client: RokuClient::new(tv.ip.clone()),
                 mac: None,
             }),
+            TvVendor::Philips => Ok(Self::Philips {
+                client: SicpClient::new(tv.ip.clone()),
+                mac: None,
+            }),
             TvVendor::Unknown => Err(TvError::UnsupportedDevice {
                 address: tv.ip.clone(),
                 reason: "device did not advertise a known vendor signature".to_string(),
@@ -418,6 +484,10 @@ impl TvClient {
                 vendor: "roku",
                 operation: "open_url",
             }),
+            Self::Philips { .. } => Err(TvError::UnsupportedOperation {
+                vendor: "philips",
+                operation: "open_url",
+            }),
         }
     }
 
@@ -427,19 +497,21 @@ impl TvClient {
             Self::Tizen { .. } => TvVendor::Samsung,
             Self::Webos { .. } => TvVendor::Lg,
             Self::Roku { .. } => TvVendor::Roku,
+            Self::Philips { .. } => TvVendor::Philips,
         }
     }
 
     /// The address the underlying client targets, for logging and diagnostics.
     ///
-    /// Tizen and webOS report the bare host; Roku's ECP client reports its full
-    /// base URL (`http://host:8060`). Use [`DiscoveredTv::ip`] when you need the
-    /// address in a uniform form.
+    /// Tizen, webOS and Philips SICP report the bare host; Roku's ECP client reports
+    /// its full base URL (`http://host:8060`). Use [`DiscoveredTv::ip`] when you
+    /// need the address in a uniform form.
     pub fn address(&self) -> &str {
         match self {
             Self::Tizen { client, .. } => client.host(),
             Self::Webos { client, .. } => client.host(),
             Self::Roku { client, .. } => client.base_url(),
+            Self::Philips { client, .. } => client.host(),
         }
     }
 
@@ -447,6 +519,14 @@ impl TvClient {
     pub fn as_tizen(&self) -> Option<&TizenClient> {
         match self {
             Self::Tizen { client, .. } => Some(client),
+            _ => None,
+        }
+    }
+
+    /// The SICP client, when this handle targets a Philips commercial display.
+    pub fn as_sicp(&self) -> Option<&SicpClient> {
+        match self {
+            Self::Philips { client, .. } => Some(client),
             _ => None,
         }
     }
@@ -495,6 +575,13 @@ impl TvClient {
                     .power_off()
                     .await
                     .map_err(|error| map::roku(&error, Capability::PowerState))?;
+                Ok(())
+            }
+            Self::Philips { client, .. } => {
+                client
+                    .power_off()
+                    .await
+                    .map_err(|error| TvError::protocol(error.to_string()))?;
                 Ok(())
             }
         }
@@ -565,6 +652,15 @@ impl TvClient {
                         .map_err(|error| map::power(&error))?,
                 ))
             }
+            Self::Philips { client, .. } => {
+                let state = match client.power().await {
+                    Ok(tv_rs_sicp::SicpPower::On) => PowerState::On,
+                    Ok(tv_rs_sicp::SicpPower::Off) => PowerState::Off,
+                    Ok(tv_rs_sicp::SicpPower::Standby) => PowerState::Standby,
+                    Err(_) => PowerState::Unknown,
+                };
+                Ok(ObservedField::from_read(state))
+            }
         }
     }
 
@@ -603,7 +699,44 @@ impl TvClient {
                     .map_err(|error| map::roku(&error, Capability::AppLaunch))?;
                 Ok(())
             }
+            Self::Philips { .. } => Err(TvError::UnsupportedOperation {
+                vendor: "philips",
+                operation: "launch_app",
+            }),
         }
+    }
+
+    /// Polls power observation on `interval` and calls `on_change` when state changes.
+    ///
+    /// Runs in a spawned tokio task until `stop_rx` receives a signal or is dropped.
+    pub fn observe<F>(
+        &self,
+        interval: std::time::Duration,
+        mut stop_rx: tokio::sync::oneshot::Receiver<()>,
+        mut on_change: F,
+    ) -> tokio::task::JoinHandle<()>
+    where
+        F: FnMut(ObservedField<PowerState>) + Send + 'static,
+    {
+        let client = self.clone();
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(interval);
+            let mut last_observed: Option<PowerState> = None;
+
+            loop {
+                tokio::select! {
+                    _ = &mut stop_rx => break,
+                    _ = ticker.tick() => {
+                        if let Ok(obs) = client.power_observation().await {
+                            if last_observed != obs.value {
+                                last_observed = obs.value;
+                                on_change(obs);
+                            }
+                        }
+                    }
+                }
+            }
+        })
     }
 }
 
@@ -636,15 +769,34 @@ pub fn mdc_handle(address: impl Into<String>) -> Result<Box<dyn DeviceHandle>> {
         // resolution failure.
         return Err(TvError::protocol("mdc address must not be empty"));
     }
+    let (host, port) = if let Some((h, p)) = address.rsplit_once(':') {
+        if let Ok(parsed_port) = p.parse::<u16>() {
+            (h.to_string(), Some(parsed_port))
+        } else {
+            (address.clone(), None)
+        }
+    } else {
+        (address.clone(), None)
+    };
+
+    let client = if let Some(port) = port {
+        MdcClient::with_options(
+            host,
+            tv_rs_mdc::MdcOptions {
+                port,
+                ..Default::default()
+            },
+        )
+    } else {
+        MdcClient::new(address.clone())
+    };
+
     let descriptor = DeviceDescriptor::new(
         DeviceId::new(format!("mdc:{address}"))?,
         DeviceOs::SamsungMdc,
         address.clone(),
     );
-    Ok(Box::new(MdcDevice::new(
-        MdcClient::new(address),
-        descriptor,
-    )))
+    Ok(Box::new(MdcDevice::new(client, descriptor)))
 }
 
 /// Builds a handle for a commercial panel driven by Philips SICP.
@@ -659,15 +811,34 @@ pub fn sicp_handle(address: impl Into<String>) -> Result<Box<dyn DeviceHandle>> 
     if address.trim().is_empty() {
         return Err(TvError::protocol("sicp address must not be empty"));
     }
+    let (host, port) = if let Some((h, p)) = address.rsplit_once(':') {
+        if let Ok(parsed_port) = p.parse::<u16>() {
+            (h.to_string(), Some(parsed_port))
+        } else {
+            (address.clone(), None)
+        }
+    } else {
+        (address.clone(), None)
+    };
+
+    let client = if let Some(port) = port {
+        SicpClient::with_options(
+            host,
+            tv_rs_sicp::SicpOptions {
+                port,
+                ..Default::default()
+            },
+        )
+    } else {
+        SicpClient::new(address.clone())
+    };
+
     let descriptor = DeviceDescriptor::new(
         DeviceId::new(format!("sicp:{address}"))?,
         DeviceOs::PhilipsSicp,
         address.clone(),
     );
-    Ok(Box::new(SicpDevice::new(
-        SicpClient::new(address),
-        descriptor,
-    )))
+    Ok(Box::new(SicpDevice::new(client, descriptor)))
 }
 
 #[cfg(test)]
@@ -807,6 +978,37 @@ mod tests {
 
         let error = TvClient::from_discovered(&tv).unwrap_err();
         assert!(matches!(error, TvError::UnsupportedDevice { .. }));
+    }
+
+    #[tokio::test]
+    async fn observe_ticker_notifies_on_state_change() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::time::Duration;
+        use tv_rs_sim::MockSicpServer;
+
+        let server = MockSicpServer::start("127.0.0.1:0").await.unwrap();
+        let addr = server.local_addr().to_string();
+
+        let tv = DiscoveredTv::probed(TvVendor::Philips, &addr);
+        let client = tv.to_client().unwrap();
+
+        let count = Arc::new(AtomicUsize::new(0));
+        let count_clone = count.clone();
+
+        let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
+        let handle = client.observe(Duration::from_millis(10), stop_rx, move |_obs| {
+            count_clone.fetch_add(1, Ordering::SeqCst);
+        });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let _ = stop_tx.send(());
+        let _ = handle.await;
+
+        assert!(
+            count.load(Ordering::SeqCst) >= 1,
+            "observe ticker should have notified at least once"
+        );
+        server.shutdown().await;
     }
 
     #[test]

@@ -62,6 +62,8 @@ pub mod metadata;
 pub mod models;
 /// Media path selection and optimal delivery routing.
 pub mod path;
+/// UPnP MediaRenderer receiver SOAP request parsing and response generation.
+pub mod receiver;
 /// SOAP control for two UPnP services: AVTransport (casting/playback) and
 /// RenderingControl (volume/mute).
 pub mod soap;
@@ -87,6 +89,13 @@ pub use gena_registry::{
 pub use metadata::build_didl_lite;
 pub use models::Renderer;
 pub use path::{MediaPath, MediaPathSelector, MediaPathType, SelectionCriteria};
+pub use receiver::{
+    build_get_media_info_response, build_get_position_info_response,
+    build_get_protocol_info_response, build_get_transport_info_response, build_pause_response,
+    build_play_response, build_set_av_transport_uri_response, build_stop_response,
+    handle_receiver_soap_request, parse_receiver_soap_request, ReceiverAction, ReceiverState,
+    CONNECTION_MANAGER_ACTION, DEFAULT_SINK_PROTOCOL_INFO,
+};
 pub use soap::{
     cast, extract_service_control_url, get_mute, get_volume, pause, seek, set_mute, set_volume,
     stop, AvTransport, RenderingControl, SoapAvTransport, SoapRenderingControl,

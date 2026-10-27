@@ -11,7 +11,7 @@ keywords = ["tv", "mock", "simulator", "mdc", "sicp"]
 categories = ["development-tools", "network-programming"]
 
 [dependencies]
-tokio.workspace = true
+tokio = { workspace = true, features = ["signal"] }
 tv-rs-mdc.workspace = true
 tv-rs-sicp.workspace = true
 tracing.workspace = true

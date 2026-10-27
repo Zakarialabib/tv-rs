@@ -36,6 +36,7 @@ tokio.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
+tv-rs-sim.workspace = true
 
 [features]
 # Hardware-in-the-loop tests. Off by default so `cargo test` never touches a

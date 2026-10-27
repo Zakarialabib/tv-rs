@@ -87,6 +87,9 @@ impl TvClient {
                 // `keypress/Lit_<char>` types printable ASCII.
                 set.insert(Capability::TextInput);
             }
+            Self::Philips { .. } => {
+                // Philips SICP provides power control.
+            }
         }
         // The other two drop their network stack when they sleep, so a magic
         // packet is the only path — a capability only once there is an address to
@@ -101,9 +104,10 @@ impl TvClient {
     #[must_use]
     pub fn mac(&self) -> Option<&str> {
         match self {
-            Self::Tizen { mac, .. } | Self::Webos { mac, .. } | Self::Roku { mac, .. } => {
-                mac.as_deref()
-            }
+            Self::Tizen { mac, .. }
+            | Self::Webos { mac, .. }
+            | Self::Roku { mac, .. }
+            | Self::Philips { mac, .. } => mac.as_deref(),
         }
     }
 
@@ -120,7 +124,8 @@ impl TvClient {
         match &mut self {
             Self::Tizen { mac: slot, .. }
             | Self::Webos { mac: slot, .. }
-            | Self::Roku { mac: slot, .. } => *slot = Some(mac),
+            | Self::Roku { mac: slot, .. }
+            | Self::Philips { mac: slot, .. } => *slot = Some(mac),
         }
         self
     }
@@ -169,6 +174,10 @@ impl TvClient {
                 vendor: "lg",
                 operation: "learn_mac",
             }),
+            Self::Philips { .. } => Err(TvError::UnsupportedOperation {
+                vendor: "philips",
+                operation: "learn_mac",
+            }),
         }
     }
 
@@ -186,7 +195,7 @@ impl TvClient {
         match self {
             Self::Tizen { pool, .. } => pool.clear().await,
             Self::Webos { pool, .. } => pool.clear().await,
-            Self::Roku { .. } => 0,
+            Self::Roku { .. } | Self::Philips { .. } => 0,
         }
     }
 }
@@ -308,10 +317,10 @@ impl PowerControl for TvClient {
                     None => Err(map::roku(&error, Capability::Wake)),
                 },
             },
-            // Tizen and webOS drop their network stack when they sleep, so the
+            // Tizen, webOS, and Philips SICP drop their network stack when they sleep, so the
             // broadcast packet is the only path — and it needs the address the
             // caller supplied. Without one this is a refusal, not a guess.
-            Self::Tizen { .. } | Self::Webos { .. } => match self.mac() {
+            Self::Tizen { .. } | Self::Webos { .. } | Self::Philips { .. } => match self.mac() {
                 Some(mac) => wake_with_packet(mac).await,
                 None => Err(TvError::Unsupported(Capability::Wake)),
             },
@@ -351,6 +360,7 @@ impl KeyInput for TvClient {
                             .await
                             .map_err(|error| map::roku(&error, Capability::Key))
                     }
+                    Self::Philips { .. } => Err(TvError::Unsupported(Capability::Key)),
                 }
             })
             .await
@@ -385,7 +395,9 @@ impl AppLaunch for TvClient {
                     .map_err(|error| map::roku(&error, Capability::Foreground))?;
                 Ok(active.app_id.map(AppRef::new))
             }
-            Self::Tizen { .. } => Err(TvError::Unsupported(Capability::Foreground)),
+            Self::Tizen { .. } | Self::Philips { .. } => {
+                Err(TvError::Unsupported(Capability::Foreground))
+            }
         }
     }
 
@@ -452,7 +464,9 @@ impl AppLaunch for TvClient {
             // Listing is its own capability, so the refusal names `AppList`: Tizen
             // launches what it cannot enumerate, and saying `AppLaunch` here would
             // claim the wrong thing.
-            Self::Tizen { .. } => Err(TvError::Unsupported(Capability::AppList)),
+            Self::Tizen { .. } | Self::Philips { .. } => {
+                Err(TvError::Unsupported(Capability::AppList))
+            }
         }
     }
 }
@@ -485,6 +499,7 @@ impl TextInput for TvClient {
                         .send_text(client, text)
                         .await
                         .map_err(|error| map::tizen(&error, Capability::TextInput)),
+                    Self::Philips { .. } => Err(TvError::Unsupported(Capability::TextInput)),
                 }
             })
             .await
@@ -611,6 +626,7 @@ fn device_os(vendor: TvVendor) -> DeviceOs {
         TvVendor::Samsung => DeviceOs::Tizen,
         TvVendor::Lg => DeviceOs::WebOs,
         TvVendor::Roku => DeviceOs::Roku,
+        TvVendor::Philips => DeviceOs::PhilipsSicp,
         TvVendor::Unknown => DeviceOs::Unknown,
     }
 }
