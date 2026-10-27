@@ -25,6 +25,7 @@ tv-rs-roku.workspace = true
 # id) can name its types and use its `DeviceHandle`.
 tv-rs-mdc.workspace = true
 tv-rs-sicp.workspace = true
+tv-rs-spatial-audio.workspace = true
 
 async-trait.workspace = true
 serde.workspace = true

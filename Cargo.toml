@@ -22,6 +22,7 @@ tv-rs-tizen = { path = "crates/tizen", version = "0.4.0" }
 tv-rs-webos = { path = "crates/webos", version = "0.4.0" }
 # Local display probe: no network, no TV control. Published separately.
 tv-rs-local = { path = "crates/local", version = "0.4.0" }
+tv-rs-spatial-audio = { path = "crates/spatial-audio", version = "0.4.0" }
 # Shared transport vocabulary; must be published before tizen/webos.
 #
 # `default-features = false` keeps a TLS stack out of the crates that only need
