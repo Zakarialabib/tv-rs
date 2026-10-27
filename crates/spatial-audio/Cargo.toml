@@ -1,0 +1,31 @@
+[package]
+name = "tv-rs-spatial-audio"
+description = "Spatial audio manager for Bluetooth A2DP sinks, PulseAudio/PipeWire local streams, directional sound domes, and ceiling speakers."
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["spatial-audio", "bluetooth", "pulseaudio", "pipewire", "audio-routing"]
+categories = ["multimedia::audio", "api-bindings"]
+
+[dependencies]
+async-trait.workspace = true
+serde = { workspace = true, optional = true }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "process"] }
+tracing.workspace = true
+tv-rs-core.workspace = true
+
+[dev-dependencies]
+serde.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tv-rs-core = { workspace = true, features = ["conformance", "mock-backend"] }
+
+[features]
+default = []
+serde = ["dep:serde", "tv-rs-core/serde"]
+
+[lints]
+workspace = true
