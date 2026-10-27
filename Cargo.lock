@@ -2967,6 +2967,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tv-rs-vision"
+version = "0.4.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tv-rs-core",
+]
+
+[[package]]
 name = "tv-rs-webos"
 version = "0.4.0"
 dependencies = [
