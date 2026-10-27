@@ -45,6 +45,7 @@
 #![forbid(unsafe_code)]
 
 mod client;
+mod dedupe;
 mod error;
 mod handle;
 mod types;
