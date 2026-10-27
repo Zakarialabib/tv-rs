@@ -2871,6 +2871,7 @@ name = "tv-rs-local"
 version = "0.4.0"
 dependencies = [
  "serde",
+ "serde_json",
  "tokio",
  "windows-sys 0.61.2",
  "wmi",
