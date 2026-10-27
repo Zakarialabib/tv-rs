@@ -1,0 +1,33 @@
+[package]
+name = "tv-rs-ir"
+description = "Universal IR Remote control and scanner for TVs and set-top boxes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["ir", "remote", "infrared", "nec", "tv-control"]
+categories = ["api-bindings", "hardware-support"]
+
+[dependencies]
+async-trait.workspace = true
+reqwest = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["time", "sync", "process", "net"] }
+toml.workspace = true
+tracing.workspace = true
+
+tv-rs-core.workspace = true
+tv-rs-cec.workspace = true
+tv-rs-power.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[features]
+default = []
+network-bridge = ["dep:reqwest"]
+
+[lints]
+workspace = true
