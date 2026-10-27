@@ -59,9 +59,11 @@ pub fn parse_ble_advertisement_frame(
             }
             // 0x02: Incomplete List of 16-bit Service UUIDs, 0x03: Complete List of 16-bit Service UUIDs
             0x02 | 0x03 => {
-                for chunk in data.chunks_exact(2) {
-                    let uuid16 = u16::from_le_bytes([chunk[0], chunk[1]]);
-                    service_uuids.push(format!("0x{uuid16:04X}"));
+                for chunk in data.chunks(2) {
+                    if chunk.len() == 2 {
+                        let uuid16 = u16::from_le_bytes([chunk[0], chunk[1]]);
+                        service_uuids.push(format!("0x{uuid16:04X}"));
+                    }
                 }
             }
             // 0x06 | 0x07: 128-bit Service Class UUIDs
