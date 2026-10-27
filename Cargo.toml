@@ -73,7 +73,7 @@ rcgen = "0.14"
 
 # --- errors / logging / cli ---
 thiserror = "2"
-toml = "1.1"
+toml = "0.8"
 uuid = { version = "1", features = ["v4"] }
 anyhow = "1"
 tracing = "0.1"

@@ -25,7 +25,7 @@ use std::time::Duration;
 /// Publish order. Every path dependency must reach crates.io before its
 /// dependents, so `transport` leads and the facade follows the protocol crates.
 /// Keep in sync with `docs/01-architecture.md` §Publishing.
-const ORDER: [&str; 18] = [
+const ORDER: [&str; 20] = [
     "tv-rs-core",
     "tv-rs-transport",
     "tv-rs-discovery",
