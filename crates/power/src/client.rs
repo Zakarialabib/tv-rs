@@ -9,10 +9,7 @@ use tokio::time::timeout;
 
 use crate::error::{PowerError, Result};
 use crate::payload::MagicPacket;
-use crate::types::{
-    ConfidenceScore, EvaluatedPowerState, MacAddress, PowerSignalSource, PowerState,
-    WOL_BROADCAST_ADDR, WOL_UDP_PORT,
-};
+use crate::types::{MacAddress, PowerState, WOL_BROADCAST_ADDR, WOL_UDP_PORT};
 
 /// Maximum time to wait for a TCP connect probe before declaring the device
 /// off.
@@ -57,41 +54,20 @@ impl WolSender {
     ///
     /// Binds an ephemeral UDP socket to `0.0.0.0:0`, enables broadcast, and
     /// sends the packet to the configured broadcast address.
-    pub async fn wake(&self, mac: &MacAddress) -> Result<EvaluatedPowerState> {
+    pub async fn wake(&self, mac: &MacAddress) -> Result<()> {
         let socket = UdpSocket::bind("0.0.0.0:0").await?;
         socket.set_broadcast(true)?;
         let packet = build_magic_packet(mac);
         socket
             .send_to(packet.as_bytes(), self.broadcast_addr)
             .await?;
-        Ok(EvaluatedPowerState::new(
-            PowerState::On,
-            ConfidenceScore::Low,
-            PowerSignalSource::WolPacketSent,
-        ))
-    }
-
-    /// Sleep / power off request for Wake-on-LAN sender.
-    ///
-    /// Sending a Wake-on-LAN magic packet cannot put a device to sleep over network broadcast.
-    /// Returns unsupported error.
-    pub async fn sleep(&self) -> Result<EvaluatedPowerState> {
-        Err(PowerError::Unsupported(tv_rs_transport::Unsupported::new(
-            1,
-            "Sleep command over Wake-on-LAN broadcast is not supported",
-        )))
-    }
-
-    /// Probes the device power state using TCP connect probe.
-    pub async fn probe(&self, addr: &str) -> Result<EvaluatedPowerState> {
-        probe_power_state_with_confidence(addr).await
+        Ok(())
     }
 }
 
 /// Wakes a device by broadcasting a magic packet to the default address.
 pub async fn wake_on_lan(mac: &MacAddress) -> Result<()> {
-    WolSender::new()?.wake(mac).await?;
-    Ok(())
+    WolSender::new()?.wake(mac).await
 }
 
 /// Probes the power state of a TV listening at `addr` (`host:port`, for
@@ -118,28 +94,6 @@ pub async fn poll_power_state(addr: &str) -> Result<PowerState> {
         Ok(Err(_other)) => Ok(PowerState::Unknown),
         Err(_elapsed) => Ok(PowerState::Off),
     }
-}
-
-/// Probes the power state of a TV listening at `addr` (`host:port`) and returns
-/// an [`EvaluatedPowerState`] with confidence scoring.
-///
-/// Semantics:
-/// * `PowerState::On` -> `ConfidenceScore::Medium` (TCP port answered)
-/// * `PowerState::Standby` -> `ConfidenceScore::Medium` (TCP connect refused by host)
-/// * `PowerState::Off` -> `ConfidenceScore::Low` (connection timed out)
-/// * `PowerState::Unknown` -> `ConfidenceScore::Unknown`
-pub async fn probe_power_state_with_confidence(addr: &str) -> Result<EvaluatedPowerState> {
-    let state = poll_power_state(addr).await?;
-    let confidence = match state {
-        PowerState::On | PowerState::Standby => ConfidenceScore::Medium,
-        PowerState::Off => ConfidenceScore::Low,
-        PowerState::Unknown => ConfidenceScore::Unknown,
-    };
-    Ok(EvaluatedPowerState::new(
-        state,
-        confidence,
-        PowerSignalSource::TcpProbe,
-    ))
 }
 
 /// Validates the syntactic shape of a `host:port` probe target.
@@ -209,22 +163,5 @@ mod tests {
         assert!(validate_probe_target("192.168.1.10").is_err());
         assert!(validate_probe_target("192.168.1.10:notaport").is_err());
         assert!(validate_probe_target(":8002").is_err());
-    }
-
-    #[tokio::test]
-    async fn wol_sender_sleep_returns_unsupported() {
-        let sender = WolSender::new().unwrap();
-        assert!(sender.sleep().await.is_err());
-    }
-
-    #[tokio::test]
-    async fn wol_sender_wake_returns_low_confidence_evaluated_state() {
-        let sender = WolSender::new().unwrap();
-        let mac: MacAddress = "AA:BB:CC:DD:EE:FF".parse().unwrap();
-        let evaluated = sender.wake(&mac).await.unwrap();
-
-        assert_eq!(evaluated.state, PowerState::On);
-        assert_eq!(evaluated.confidence, ConfidenceScore::Low);
-        assert_eq!(evaluated.source, PowerSignalSource::WolPacketSent);
     }
 }
