@@ -12,11 +12,15 @@ categories = ["hardware-support", "api-bindings"]
 
 [dependencies]
 serde.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 wmi = "0.14"
-windows-sys = { version = "0.61", features = [
+windows-sys = { version = "0.59", features = [
   "Win32_Foundation",
   "Win32_Graphics_Gdi",
   "Win32_System_Registry",

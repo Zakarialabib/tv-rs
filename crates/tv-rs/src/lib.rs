@@ -45,16 +45,17 @@
 #![forbid(unsafe_code)]
 
 mod client;
-mod dedupe;
 mod error;
+mod dedupe;
 mod handle;
+pub mod subscription;
 mod types;
 
 pub use client::{
-    discover, discover_stream, discover_with, identify_vendor, mdc_handle, probe, sicp_handle,
-    TvClient,
+    discover, discover_stream, discover_with, identify_vendor, mdc_handle, probe, TvClient,
 };
 pub use error::{Result, TvError};
+pub use subscription::{FacadeEvent, SubscriptionHandle};
 pub use types::{DiscoveredTv, TvVendor};
 
 /// The one home of vendor-error → [`TvError`] mapping.
@@ -66,21 +67,17 @@ pub use types::{DiscoveredTv, TvVendor};
 /// variant is a compile error here until someone names its remedy.
 pub mod map;
 
-/// SSDP & mDNS discovery, UPnP descriptor parsing, and signage pairing: [`discovery::SsdpScanner`], [`discovery::MdnsScanner`].
-pub use tv_rs_cec as cec;
+/// SSDP discovery and UPnP descriptor parsing: [`discovery::SsdpScanner`] (mDNS is planned).
 pub use tv_rs_core as core;
 pub use tv_rs_discovery as discovery;
-pub use tv_rs_ir as ir;
-/// Samsung MDC commercial display protocol client: [`mdc::MdcClient`].
+/// DLNA UPnP MediaRenderer eventing and SOAP control: [`dlna::Subscription`].
+pub use tv_rs_dlna as dlna;
+/// Roku OS ECP REST client: [`roku::RokuClient`].
 pub use tv_rs_mdc as mdc;
 /// Wake-on-LAN and power-state probing: [`power::WolSender`].
 pub use tv_rs_power as power;
 pub use tv_rs_power::PowerState;
 pub use tv_rs_roku as roku;
-/// Philips SICP commercial display protocol client: [`sicp::SicpClient`].
-pub use tv_rs_sicp as sicp;
-/// Spatial audio routing and sound dome / speaker sink management: [`spatial_audio::SpatialAudioRouter`].
-pub use tv_rs_spatial_audio as spatial_audio;
 /// Samsung Tizen remote channel and DIAL: [`tizen::TizenClient`].
 pub use tv_rs_tizen as tizen;
 /// TLS policy and pinning, shared by every vendor channel: [`transport::TlsPolicy`].
