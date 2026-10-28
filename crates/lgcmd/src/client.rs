@@ -1,5 +1,5 @@
 use crate::error::{LgCmdError, Result};
-use crate::protocol::{CMD_KEY, CMD_POWER, CMD_VOLUME, CMD_MUTE};
+use crate::protocol::{CMD_KEY, CMD_MUTE, CMD_POWER, CMD_VOLUME};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -46,12 +46,14 @@ impl LgCmdClient {
         loop {
             let n = timeout(Duration::from_secs(3), stream.read(&mut buf))
                 .await
-                .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "read timed out"))??;
+                .map_err(|_| {
+                    std::io::Error::new(std::io::ErrorKind::TimedOut, "read timed out")
+                })??;
             if n == 0 {
                 break;
             }
             let chunk = String::from_utf8_lossy(&buf[..n]);
-            response.push_str(&chunk.as_ref());
+            response.push_str(chunk.as_ref());
             if response.contains('x') {
                 break;
             }
@@ -78,14 +80,16 @@ impl LgCmdClient {
 
     /// Sends a remote control key code.
     pub async fn send_key(&self, key_code: u8) -> Result<()> {
-        self.send_command(CMD_KEY, &format!("{:02x}", key_code)).await?;
+        self.send_command(CMD_KEY, &format!("{:02x}", key_code))
+            .await?;
         Ok(())
     }
 
     /// Sets the volume level (0-100).
     pub async fn set_volume(&self, level: u8) -> Result<()> {
         let level = std::cmp::min(level, 100);
-        self.send_command(CMD_VOLUME, &format!("{:02x}", level)).await?;
+        self.send_command(CMD_VOLUME, &format!("{:02x}", level))
+            .await?;
         Ok(())
     }
 

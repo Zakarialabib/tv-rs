@@ -1,4 +1,4 @@
-/// Command constants for the LG commercial ASCII serial protocol.
+//! Command constants for the LG commercial ASCII serial protocol.
 
 /// Power command (`ka`)
 pub const CMD_POWER: &str = "ka";
