@@ -404,6 +404,34 @@ mod tests {
     }
 
     #[test]
+    fn msearch_parse_handles_additional_malformed_and_edge_cases() {
+        // Empty string
+        assert!(parse_msearch_st("").is_none());
+
+        // Single line M-SEARCH with no headers
+        assert!(parse_msearch_st("M-SEARCH * HTTP/1.1").is_none());
+
+        // Mixed line endings (\n without \r)
+        assert_eq!(
+            parse_msearch_st("M-SEARCH * HTTP/1.1\nST: ssdp:all\n\n").as_deref(),
+            Some("ssdp:all")
+        );
+
+        // Whitespace before colon in key
+        assert_eq!(
+            parse_msearch_st("M-SEARCH * HTTP/1.1\r\nST : ssdp:all\r\n").as_deref(),
+            Some("ssdp:all")
+        );
+
+        // Duplicate ST headers (returns first non-empty match)
+        assert_eq!(
+            parse_msearch_st("M-SEARCH * HTTP/1.1\r\nST: first:target\r\nST: second:target\r\n")
+                .as_deref(),
+            Some("first:target")
+        );
+    }
+
+    #[test]
     fn search_response_carries_usn_pairing_udn_and_st() {
         let r = search_response(&cfg(), "urn:schemas-upnp-org:device:MediaServer:1");
         assert!(r.starts_with("HTTP/1.1 200 OK\r\n"));

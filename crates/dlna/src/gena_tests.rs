@@ -142,6 +142,35 @@ fn parse_notify_body_handles_mismatched_or_unclosed_lastchange_tags() {
     assert!(parse_notify_body(xml).is_none());
 }
 
+#[test]
+fn parse_notify_body_handles_invalid_or_non_numeric_error_codes() {
+    // Non-numeric TransportErrorCode must not panic and must not report an error code
+    let xml_abc = r#"<propertyset><property><LastChange>&lt;Event&gt;&lt;InstanceID val="0"&gt;&lt;TransportState val="STOPPED"/&gt;&lt;TransportErrorCode val="abc"/&gt;&lt;/InstanceID&gt;&lt;/Event&gt;</LastChange></property></propertyset>"#;
+    let ev = parse_notify_body(xml_abc).unwrap();
+    assert_eq!(ev.state, TransportState::Stopped);
+    assert_eq!(ev.error_code, None);
+
+    let xml_neg = r#"<propertyset><property><LastChange>&lt;Event&gt;&lt;InstanceID val="0"&gt;&lt;TransportErrorCode val="-50"/&gt;&lt;/InstanceID&gt;&lt;/Event&gt;</LastChange></property></propertyset>"#;
+    assert!(parse_notify_body(xml_neg).is_none());
+}
+
+#[test]
+fn parse_notify_body_handles_corrupted_attributes_and_malformed_inner_xml() {
+    // Unclosed quote in attribute value
+    let xml_unclosed_quote = r#"<propertyset><property><LastChange>&lt;Event&gt;&lt;InstanceID val="0&gt;&lt;TransportState val="PLAYING"/&gt;&lt;/InstanceID&gt;&lt;/Event&gt;</LastChange></property></propertyset>"#;
+    let _ = parse_notify_body(xml_unclosed_quote);
+
+    // Missing LastChange tag completely
+    let xml_no_lastchange =
+        r#"<propertyset><property><OtherProperty>val</OtherProperty></property></propertyset>"#;
+    assert!(parse_notify_body(xml_no_lastchange).is_none());
+
+    // Empty inner LastChange contents or whitespace only
+    let xml_whitespace =
+        r#"<propertyset><property><LastChange>   </LastChange></property></propertyset>"#;
+    assert!(parse_notify_body(xml_whitespace).is_none());
+}
+
 // ── TransportState semantics ──────────────────────────────────────────────────
 
 #[test]
@@ -260,6 +289,38 @@ fn parse_timeout_header_handles_case_insensitive_infinite() {
 }
 
 #[test]
+fn parse_timeout_header_handles_mixed_case_prefix_leading_zeroes_whitespace_overflow() {
+    let fallback = Duration::from_secs(REQUESTED_TIMEOUT_SECS);
+
+    // Mixed case prefix variation e.g. sECoND-900
+    assert_eq!(
+        parse_timeout_header(Some("sECoND-900")),
+        Duration::from_secs(900)
+    );
+
+    // Whitespace after dash e.g. Second- 900
+    assert_eq!(
+        parse_timeout_header(Some("Second- 900")),
+        Duration::from_secs(900)
+    );
+
+    // Leading zeroes e.g. Second-0300
+    assert_eq!(
+        parse_timeout_header(Some("Second-0300")),
+        Duration::from_secs(300)
+    );
+
+    // Integer overflow e.g. Second-999999999999999999999999999
+    assert_eq!(
+        parse_timeout_header(Some("Second-999999999999999999999999999")),
+        fallback
+    );
+
+    // Trailing non-digit text
+    assert_eq!(parse_timeout_header(Some("Second-600, extra")), fallback);
+}
+
+#[test]
 fn a_shorter_grant_than_requested_is_honoured() {
     // The renderer decides. Assuming our requested value would let the subscription
     // lapse before the renewal loop wakes.
@@ -328,6 +389,30 @@ fn resolve_relative_handles_absolute_paths_with_leading_slash() {
     assert_eq!(
         resolve_relative("http://10.0.0.5:8080", "/evt"),
         "http://10.0.0.5:8080/evt"
+    );
+}
+
+#[test]
+fn resolve_relative_handles_query_and_fragment_in_relative_path() {
+    assert_eq!(
+        resolve_relative("http://10.0.0.5:8080/dmr/desc.xml", "evt?a=1&b=2#sec"),
+        "http://10.0.0.5:8080/dmr/evt?a=1&b=2#sec"
+    );
+    assert_eq!(
+        resolve_relative("http://10.0.0.5:8080/dmr/desc.xml", "/evt?a=1&b=2#sec"),
+        "http://10.0.0.5:8080/evt?a=1&b=2#sec"
+    );
+}
+
+#[test]
+fn resolve_relative_handles_base_without_scheme_or_slash() {
+    assert_eq!(
+        resolve_relative("10.0.0.5:8080", "/evt"),
+        "10.0.0.5:8080/evt"
+    );
+    assert_eq!(
+        resolve_relative("10.0.0.5:8080/desc.xml", "evt"),
+        "10.0.0.5:8080/evt"
     );
 }
 
@@ -432,4 +517,39 @@ fn extract_event_sub_url_handles_whitespace_and_casing_in_tags() {
     </service></root>"#;
     let url = extract_event_sub_url(desc, "http://10.0.0.5:8080/desc.xml").unwrap();
     assert_eq!(url, "http://10.0.0.5:8080/evt/path");
+}
+
+#[test]
+fn extract_event_sub_url_handles_empty_servicelist_or_missing_eventsuburl() {
+    let empty_list = r#"<root><serviceList></serviceList></root>"#;
+    assert!(extract_event_sub_url(empty_list, "http://h/desc.xml").is_err());
+
+    let missing_tag = r#"<root><service>
+      <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+      <controlURL>/AVTransport/ctrl</controlURL>
+    </service></root>"#;
+    assert!(extract_event_sub_url(missing_tag, "http://h/desc.xml").is_err());
+}
+
+#[test]
+fn extract_event_sub_url_handles_namespaced_tags_and_reverse_tag_ordering() {
+    let namespaced_and_reversed = r#"<u:root xmlns:u="urn:schemas-upnp-org:device-1-0"><u:service>
+      <u:eventSubURL>/AVTransport/evt</u:eventSubURL>
+      <u:serviceType>urn:schemas-upnp-org:service:AVTransport:1</u:serviceType>
+    </u:service></u:root>"#;
+    let url =
+        extract_event_sub_url(namespaced_and_reversed, "http://10.0.0.5:8080/desc.xml").unwrap();
+    assert_eq!(url, "http://10.0.0.5:8080/AVTransport/evt");
+}
+
+#[test]
+fn extract_event_sub_url_handles_cdata_and_comments() {
+    let xml_cdata_comments = r#"<root><!-- Service definitions -->
+      <service>
+        <serviceType><![CDATA[urn:schemas-upnp-org:service:AVTransport:1]]></serviceType>
+        <eventSubURL><![CDATA[/AVTransport/evt]]></eventSubURL>
+      </service>
+    </root>"#;
+    let url = extract_event_sub_url(xml_cdata_comments, "http://10.0.0.5:8080/desc.xml").unwrap();
+    assert_eq!(url, "http://10.0.0.5:8080/AVTransport/evt");
 }

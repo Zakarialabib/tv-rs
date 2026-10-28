@@ -195,14 +195,17 @@ pub fn parse_timeout_header(raw: Option<&str>) -> Duration {
         return fallback;
     }
 
-    trimmed
-        .strip_prefix("Second-")
-        .or_else(|| trimmed.strip_prefix("second-"))
-        .or_else(|| trimmed.strip_prefix("SECOND-"))
-        .and_then(|s| s.trim().parse::<u64>().ok())
-        .filter(|s| *s > 0)
-        .map(Duration::from_secs)
-        .unwrap_or(fallback)
+    if trimmed.len() >= 7 && trimmed[..7].eq_ignore_ascii_case("second-") {
+        return trimmed[7..]
+            .trim()
+            .parse::<u64>()
+            .ok()
+            .filter(|s| *s > 0)
+            .map(Duration::from_secs)
+            .unwrap_or(fallback);
+    }
+
+    fallback
 }
 
 /// Build the `CALLBACK` header value for a SUBSCRIBE request.
@@ -271,6 +274,17 @@ pub fn extract_event_sub_url(description_xml: &str, base_url: &str) -> Result<St
                     _ => {}
                 }
             }
+            Ok(quick_xml::events::Event::CData(ref c)) => {
+                if !in_service {
+                    continue;
+                }
+                let text = c.decode().unwrap_or_default().into_owned();
+                match last_tag.to_ascii_lowercase().as_str() {
+                    "servicetype" => service_type = text,
+                    "eventsuburl" => event_url = text,
+                    _ => {}
+                }
+            }
             Ok(quick_xml::events::Event::Eof) => break,
             Ok(_) => {}
             Err(e) => return Err(DlnaError::ParseError(e.to_string())),
@@ -305,10 +319,16 @@ pub(crate) fn resolve_relative(base: &str, path: &str) -> String {
                 .unwrap_or(base.len());
             return format!("{}{}", &base[..authority_end], path);
         }
+        let authority_end = base.find('/').unwrap_or(base.len());
+        return format!("{}{}", &base[..authority_end], path);
     }
 
     if let Some(slash) = base.rfind('/') {
         return format!("{}{}", &base[..=slash], path.trim_start_matches('/'));
     }
-    format!("{base}/{path}")
+    format!(
+        "{}/{}",
+        base.trim_end_matches('/'),
+        path.trim_start_matches('/')
+    )
 }
