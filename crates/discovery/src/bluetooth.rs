@@ -52,7 +52,9 @@ pub fn parse_ble_advertisement_frame(
 
         match ad_type {
             // 0x08: Shortened Local Name, 0x09: Complete Local Name
-            0x08 | 0x09 => {
+            0x08 | 0x09 =>
+            {
+                #[allow(clippy::collapsible_match)]
                 if name.is_none() {
                     name = Some(String::from_utf8_lossy(data).to_string());
                 }
@@ -68,11 +70,15 @@ pub fn parse_ble_advertisement_frame(
             }
             // 0x06 | 0x07: 128-bit Service Class UUIDs
             0x06 | 0x07 => {
-                if data.len() == 16 {
-                    let mut bytes = data.to_vec();
-                    bytes.reverse(); // Convert LE to BE display string
-                    let hex = bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
-                    service_uuids.push(hex);
+                #[allow(clippy::single_match)]
+                match data.len() {
+                    16 => {
+                        let mut bytes = data.to_vec();
+                        bytes.reverse(); // Convert LE to BE display string
+                        let hex = bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
+                        service_uuids.push(hex);
+                    }
+                    _ => {}
                 }
             }
             // 0xFF: Manufacturer Specific Data
