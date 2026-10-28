@@ -36,6 +36,7 @@ const ORDER: &[&str] = &[
     "tv-rs-dlna",
     "tv-rs-roku",
     "tv-rs-mdc",
+    "tv-rs-sim",
     "tv-rs-sicp",
     "tv-rs-tizen",
     "tv-rs-webos",
