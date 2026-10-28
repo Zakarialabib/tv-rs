@@ -1,0 +1,28 @@
+[package]
+name = "tv-rs-lgcmd"
+description = "LG commercial ASCII serial protocol (ka/mc) over TCP 9761 or RS-232."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["lg", "serial", "signage", "display"]
+categories = ["api-bindings", "network-programming"]
+
+[features]
+# RS-232 serial line support
+serial = ["dep:tokio-serial"]
+
+[dependencies]
+async-trait.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-serial = { workspace = true, optional = true }
+tv-rs-core.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+tv-rs-core = { workspace = true, features = ["conformance", "mock-backend"] }
+
+[lints]
+workspace = true

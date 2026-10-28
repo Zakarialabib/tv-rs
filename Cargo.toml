@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "xtask"]
+members = [
+    "crates/lgcmd","crates/*", "xtask"]
 
 [workspace.package]
 version = "0.5.0"
@@ -15,6 +16,7 @@ tv-rs-core = { path = "crates/core", version = "0.5.0" }
 tv-rs-discovery = { path = "crates/discovery", version = "0.5.0" }
 tv-rs-power = { path = "crates/power", version = "0.5.0" }
 tv-rs-roku = { path = "crates/roku", version = "0.5.0" }
+tv-rs-lgcmd = { path = "crates/lgcmd", version = "0.5.0" }
 tv-rs-mdc = { path = "crates/mdc", version = "0.5.0" }
 tv-rs-sicp = { path = "crates/sicp", version = "0.5.0" }
 tv-rs-sim = { path = "crates/sim", version = "0.5.0" }
