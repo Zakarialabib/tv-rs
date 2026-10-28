@@ -76,7 +76,6 @@ fn capability_accessors(handle: &dyn DeviceHandle, violations: &mut Vec<Violatio
             Capability::NoSignalStatus,
             handle.as_panel_health().is_some(),
         ),
-        (Capability::ScreenCast, handle.as_screen_cast().is_some()),
         #[cfg(feature = "supporting")]
         (
             Capability::LampOrPanelHours,
@@ -112,18 +111,6 @@ async fn unsupported_routing(handle: &dyn DeviceHandle, violations: &mut Vec<Vio
                 other => violations.push(Violation::new(
                     "unsupported_routing",
                     format!("key_press without Key capability returned {other:?}"),
-                )),
-            }
-        }
-    }
-
-    if !set.contains(Capability::ScreenCast) {
-        if let Some(cast) = handle.as_screen_cast() {
-            match cast.start_cast(None, CommandId::new()).await {
-                Err(TvError::Unsupported(Capability::ScreenCast)) => {}
-                other => violations.push(Violation::new(
-                    "unsupported_routing",
-                    format!("start_cast without ScreenCast returned {other:?}"),
                 )),
             }
         }

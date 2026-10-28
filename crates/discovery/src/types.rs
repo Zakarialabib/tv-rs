@@ -31,33 +31,4 @@ pub enum DiscoveryMethod {
     Bonjour,
     /// ARP table scanning to map an IP address to a MAC address.
     Arp,
-    /// ADB over TCP network discovery (port 5555).
-    Adb,
-    /// Bluetooth LE advertising scan.
-    Bluetooth,
-    /// Google Cast / Chromecast service discovery.
-    Cast,
-    /// Local HTTP / REST / MDC / SICP web API display probe.
-    LocalHttp,
-    /// HDMI-CEC topology bus scanning.
-    CecTopology,
-}
-
-/// Category or brand classification of a discovered display/device.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DiscoveredDeviceKind {
-    /// Consumer Smart TV with brand name (e.g. Samsung Tizen, LG webOS, Sony Bravia, Roku TV).
-    TvBrand(String),
-    /// Android TV box or streaming device (e.g. Nvidia Shield, generic Android TV).
-    AndroidBox(String),
-    /// Amlogic platform device (reference board, OTT set-top-box).
-    AmlogicDevice(String),
-    /// Amazon Fire TV device (Fire TV stick, cube, Fire Edition TV).
-    FireTv(String),
-    /// Google Chromecast or Cast receiver device.
-    ChromecastLike(String),
-    /// Commercial or industrial digital signage display panel (Samsung MDC, LG Signage, SICP, NEC).
-    CommercialPanel(String),
-    /// Generic or unclassified display.
-    Unknown(String),
 }

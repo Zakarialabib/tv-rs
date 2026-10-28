@@ -115,7 +115,6 @@ here and becomes installable when the `0.3.0` release publishes):
 | `tv-rs-mdc`       | Samsung MDC over TCP 1515 or RS-232: power, volume/mute, input, brightness, status, panel lock/orientation/health; shared socket for walls | different wire protocol from Tizen; no WebSocket or TLS; serial is a feature |
 | `tv-rs-transport` | TLS policy/pinning + budgeted WebSocket frame reader                                                                                       | one place for the TLS decision                                               |
 | `tv-rs-agent`     | providers, `decide()`, healer, graduated remediation ladder (dim → restart → reboot), audit log, run loop                                  | opinionated; the facade stays a library                                      |
-| `tv-rs-bluetooth` | Bluetooth HID keyboard & BLE remote emulation                                                                                              | emulates a Bluetooth HID keyboard / remote for Apple TV, Fire TV, etc.       |
 | `tv-rs-cec`       | HDMI-CEC via `cec-client` (optional)                                                                                                       | needs an adapter most machines lack                                          |
 | `tv-rs-media`     | `206` + HLS HTTP server                                                                                                                    | pulls `axum`; must never enter a protocol crate's graph                      |
 | `tv-rs-cli`       | `discover`, `status`, `ensure`, `wake`, `power-off`, `key`, `launch`                                                                       | the facade's reference consumer (`publish = false`)                          |
@@ -152,7 +151,6 @@ crates/media         206 + HLS server  (package `tv-rs-media`)
 crates/agent         reconciliation    (package `tv-rs-agent`)
 crates/cec           HDMI-CEC          (package `tv-rs-cec`)
 crates/cli           terminal front end (package `tv-rs-cli`, not published)
-crates/bluetooth     Bluetooth HID     (package `tv-rs-bluetooth`)
 quirks/              model+firmware defects, as data
 xtask                `cargo xtask publish` · `cargo xtask hw-test`
 ```

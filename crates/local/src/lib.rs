@@ -1,9 +1,9 @@
-//! Local display probing, topology management, and zone mapping.
+//! Local display probing: connector, EDID identity and TV likelihood.
 //!
-//! This crate probes physical displays (connector, EDID, TV likelihood) and maps
-//! screens to physical venue zones (e.g., entrance, checkout, kitchen, aisle)
-//! so a TV is identified as "the entrance display in the restaurant" rather than
-//! just an IP or connector string. It is independent of Tauri and SQLite.
+//! This crate answers the questions that need no network and no TV control:
+//! which physical connector a display uses, what EDID says about it, how large
+//! it is, and how likely it is to be a television. It is deliberately
+//! independent of Tauri, SQLite and any signage model.
 //!
 //! Platforms:
 //! - Windows: WMI (`root\WMI`) for EDID-derived identity + connector, and
@@ -44,12 +44,10 @@ use serde::{Deserialize, Serialize};
 pub mod ddc;
 pub mod drm;
 pub mod edid;
-pub mod topology;
 
 pub use ddc::{DdcError, DdcMonitor, VcpValue};
 pub use drm::{probe_drm_connectors, DrmDisplayMode, RotationState};
 pub use edid::{parse_edid, DetailedTiming, Edid, EdidError};
-pub use topology::{DisplayTopology, GridPosition, MappedDisplay, Zone, ZoneType};
 
 /// Physical connector class. `Unknown` is a first-class value: it means the
 /// probe could not establish the connector, not "not a TV".
@@ -142,16 +140,6 @@ impl ProbeInfo {
     /// Human-readable connection label, if known.
     pub fn connection_type(&self) -> Option<String> {
         self.attachment.connection_type().map(str::to_string)
-    }
-
-    /// Converts this probed display into a [`MappedDisplay`] with an assigned zone and role.
-    pub fn into_mapped_display(
-        self,
-        id: impl Into<String>,
-        zone: Zone,
-        role: impl Into<String>,
-    ) -> MappedDisplay {
-        MappedDisplay::new(id, zone, role).with_probe_info(self)
     }
 }
 

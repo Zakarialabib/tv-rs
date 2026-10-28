@@ -198,7 +198,6 @@ mod tests {
             Capability::PanelLock,
             Capability::Orientation,
             Capability::NoSignalStatus,
-            Capability::ScreenCast,
         ];
         for capability in all {
             assert_eq!(

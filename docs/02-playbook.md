@@ -324,13 +324,11 @@ reply parser on both carriers.
 0xAA | command | display id | length | data… | checksum
 ```
 
-**Addressing & Daisy-Chaining** — every frame carries a display id, which is how one
-connection or RS-232 serial line serves a whole video wall fixture: ids `0x00`–`0xFD`
-address individual panels in the daisy-chain, `0xFE` is broadcast to the entire wall,
-`0xFF` is reserved for the reply header and a valid id in a request is rejected.
-Serial HAL abstractions (`tv-rs-serial` / `tokio-serial`) handle port locking and byte
-framing across physical or virtual RS-232 serial lines. Clones of an `MdcClient` share
-the transport socket or serial port guard; `.display(id)` changes only the addressed id.
+**Addressing** — every frame carries a display id, which is how one connection
+serves a whole video wall: ids `0x00`–`0xFD` address individual panels,
+`0xFE` is broadcast to the wall, `0xFF` is reserved for the reply header and a
+valid id in a request is rejected. Clones of an `MdcClient` share the socket;
+`.display(id)` changes only the addressed id.
 
 **Commands implemented** — power (`0x11`; the sub-code also carries reboot),
 input (`0x14`, plus the aggregated status command `0x00` that reads power,
@@ -364,23 +362,6 @@ missing binary or a missing adapter is a typed `Unavailable`, not a silent
 no-op. It is optional (`client` feature) and never linked into the agent's
 default build. A native `/dev/cec` path is planned only after a latency
 measurement ([`06-plan.md`](06-plan.md) item 5).
-
-**Logical Address Topology (0–15)** — HDMI-CEC assigns fixed logical addresses:
-- `0`: TV (primary display)
-- `1`, `2`, `3`: Recording Devices
-- `4`, `5`, `6`, `7`: Tuner / Audio System (`5`)
-- `8`, `9`, `10`: Playback Devices
-- `11`: Audio System
-- `12`, `13`: Reserved / Switch
-- `14`: Free use
-- `15`: Unregistered / Broadcast
-
-The domain entity mapping binds these logical addresses to `DeviceDescriptor` and
-`DeviceHandle` instances for input routing and status queries. Querying power state sends
-`<Give Device Power Status>` (`0x8F`); target devices reply with `<Report Power Status>`
-(`0x90`). Audio control commands (`<User Control Pressed>` volume/mute) are explicitly
-routed to logical address `5` or `11` (Audio System) or dropped when sent to targets
-without audio capability.
 
 ## §8 DLNA renderer control
 
@@ -431,37 +412,7 @@ seg0.ts
 `TARGETDURATION` must be the rounded-up maximum segment length; a value smaller
 than the longest segment makes some players refuse the playlist.
 
-## §11 PJLink Protocol (Projectors)
-
-**PJLink** is a standardized network/serial protocol for controlling Class 1 and Class 2
-projectors over TCP port 4352 or RS-232 lines (`tv-rs-pjlink`, living in `crates/pjlink`).
-
-**Frame structure** — ASCII framing with header prefix, command, parameter and carriage
-return:
-
-```
-%1POWR 1\r      (Power On command)
-%1POWR ?\r      (Power Query command)
-%1LAMP ?\r      (Lamp Query command)
-```
-
-**Responses** — projector replies with status prefix:
-
-```
-%1POWR=OK\r              (Power command accepted)
-%1POWR=1\r               (Power query reply: 1 = On, 0 = Standby)
-%1LAMP=1234 1\r          (Lamp query reply: 1234 cumulative hours, lamp on)
-```
-
-**Authentication** — Class 1/2 projectors optionally require MD5 challenge-response auth:
-upon TCP connection, the projector transmits `PJLINK 1 <digest_key>`. Subsequent commands
-prepend `MD5(<digest_key><password>)` to the request frame.
-
-**Domain Mapping** — `%1POWR` maps to `PowerControl` (`wake`, `sleep`, `probe`). `%1LAMP?`
-parses runtime hours and status into `PanelHoursProvider` (`lamp_or_panel_hours`). Input
-queries (`%1INPT ?`) map to `InputSelect`.
-
-## §12 Not implemented here
+## §10 Not implemented here
 
 Everything in this section returns a typed `Unsupported` carrying a phase and a
 reason (`tv_rs_transport::Unsupported`). Library code never panics and never

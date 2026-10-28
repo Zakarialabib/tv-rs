@@ -1,64 +1,65 @@
 # tv-rs-discovery
 
-Universal display discovery, device fingerprinting, and persistent device registry:
-finds televisions, digital signage panels, streaming boxes, and media receivers across LAN and peripheral buses.
+SSDP `M-SEARCH` and UPnP device-descriptor parsing: the part that finds
+televisions on the LAN before any protocol is spoken. It knows nothing about
+vendors — that identification lives in `tv-rs`.
 
 ```rust,no_run
 use std::time::Duration;
-use tv_rs_discovery::{UniversalScanner, DeviceRegistry};
+use tv_rs_discovery::SsdpScanner;
 
 # async fn run() -> tv_rs_discovery::Result<()> {
-let mut scanner = UniversalScanner::new().with_timeout(Duration::from_secs(2));
+let scanner = SsdpScanner::new().with_timeout(Duration::from_secs(2));
 
-// Run multi-protocol discovery and save devices into registry
-let saved_devices = scanner.scan_and_save().await;
-
-for dev in saved_devices {
-    println!("Found display: {} ({:?})", dev.friendly_name, dev.kind);
-}
+// Results as they arrive, so a "Find displays" screen fills in live.
+scanner
+    .discover_tvs_with(|response, descriptor| {
+        println!("{} — {:?}", response.source, descriptor.friendly_name);
+    })
+    .await?;
 # Ok(())
 # }
 ```
 
-# Supported Protocols & Scanning
+# Two levels
 
-| Discovery Component | Protocol / Target | Identifies |
-| ------------------- | ----------------- | ---------- |
-| `SsdpScanner` | UDP 1900 multicast M-SEARCH | UPnP devices, Samsung Tizen, LG webOS |
-| `MdnsScanner` | UDP 5353 mDNS / Bonjour | Signage players, Smart TVs |
-| `AdbScanner` | TCP 5555 ADB daemon | Android TV boxes, Fire TVs, Amlogic devices |
-| `BluetoothScanner` | BLE Advertising & EIR frames | BLE remotes, Fire TV sticks, signage beacons |
-| `CastScanner` | `_googlecast._tcp.local` mDNS | Google Chromecasts, Cast receivers |
-| `LocalHttpDisplayScanner` | TCP 80, 8060, 3000, 1515, 8080, 8443 | Roku ECP, LG webOS SSAP, Samsung MDC, SICP panels |
-| `CecTopologyScanner` | HDMI-CEC logical/physical addresses | Anynet+, SimpLink, Bravia Sync, CEC Vendor IDs |
-| `DeviceRegistry` | Persistent JSON registry | Saved devices, tokens, first/last seen timestamps |
+| Call                                        | Answers                                  |
+| ------------------------------------------- | ---------------------------------------- |
+| `msearch(target, mx)`                       | raw `M-SEARCH` replies, after the window |
+| `discover()`                                | `msearch` for `ssdp:all`                 |
+| `fetch_descriptor(location)`                | one UPnP device descriptor               |
+| `discover_tvs()`                            | replies joined with their descriptors    |
+| `discover_tvs_with(on_found)`               | the same, calling back per device        |
 
-# Innovation: Device Fingerprinting
-
-The `DeviceFingerprint` aggregates signatures across all protocols:
-- **MAC pattern / OUI**
-- **mDNS host name**
-- **SSDP Server header**
-- **Open TCP ports**
-- **HDMI-CEC Vendor ID**
-- **Bluetooth name**
-- **ADB model string**
-
-Fingerprint identification classifies displays into:
-- **TV Brands:** Samsung Tizen, LG webOS, Sony Bravia, Roku TV
-- **Android Boxes:** NVIDIA SHIELD, Mi Box, generic Android TV
-- **Amlogic Devices:** Reference boards, OTT set-top boxes
-- **Fire TV Devices:** Amazon Fire TV sticks, cubes, Fire Edition TVs
-- **Chromecast-like Devices:** Google Chromecast, Cast receivers
-- **Commercial Panels:** Samsung MDC, SICP, LG webOS Signage
+`discover_tvs_with` is the one to reach for when a UI is watching: the descriptor
+fetch happens **inside** the reply loop, so a set that answers in 40 ms surfaces
+then instead of after the slowest set in the window has answered. `discover_tvs`
+is `discover_tvs_with(|_, _| {})`, so there is one implementation.
 
 # Rules it holds to
 
-- **Silence is an error, not an empty list.** `DiscoveryError::SilentProbe` means nothing answered at all, naming both permission/network reachability and silent hosts.
-- **Dedup & Merging.** Multiple protocol responses from the same physical display are merged into a single `DiscoveredDevice` / `SavedDevice`.
-- **Silence on missing endpoints.** A broken or unresponsive HTTP probe fails gracefully without interrupting remaining scans.
+- **Silence is an error, not an empty list.** `DiscoveryError::SilentProbe` means
+  nothing answered at all, which is a different statement from "no displays on this
+  network" — and usually the wrong one to show a person.
+- **Dedup is by `USN`, falling back to `LOCATION`.** A single TV answers several
+  search targets and must appear once.
+- **A missing `LOCATION` or a failed descriptor fetch is skipped silently.** One
+  broken responder does not fail a scan.
+- **The timeout is the caller's.** `with_timeout`, `with_interface` and
+  `with_bind_addr` exist for short windows and multi-homed hosts; the defaults are
+  a two-second `MX`.
+
+# What it deliberately does not do
+
+- **It does not identify vendors.** `identify_vendor` lives in `tv-rs`, because it
+  is a product decision, not a protocol fact.
+- **It does not speak mDNS.** `MDNS_MULTICAST_IP` and the port are declared for the
+  planned path; only SSDP is implemented.
+- **It does not reach across subnets.** SSDP is multicast and link-local by design.
 
 # Development
 
-- **Tests:** `cargo test -p tv-rs-discovery`.
-- **Formatting:** `cargo fmt --all --check` must be clean.
+- **Tests:** `cargo test -p tv-rs-discovery`. Parsing is covered by fixtures; the
+  socket loop is exercised against the real multicast group, so the suite expects a
+  host with a network interface.
+- **No wrap:** `cargo fmt --all --check` must be clean.

@@ -70,8 +70,6 @@ pub enum DeviceOs {
     /// A different control surface from the consumer Tizen channel: no pairing, no
     /// WebSocket, and a display id instead of a remote.
     SamsungMdc,
-    /// Philips commercial firmware driven by SICP over TCP or RS-232.
-    PhilipsSicp,
     /// Discovered, not identified.
     #[default]
     Unknown,
@@ -86,7 +84,6 @@ impl DeviceOs {
             Self::WebOs => "webos",
             Self::Roku => "roku",
             Self::SamsungMdc => "samsung_mdc",
-            Self::PhilipsSicp => "philips_sicp",
             Self::Unknown => "unknown",
         }
     }

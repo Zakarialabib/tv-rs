@@ -39,8 +39,6 @@
 
 #[cfg(feature = "ws")]
 pub mod frame;
-#[cfg(feature = "p2p")]
-pub mod p2p;
 #[cfg(feature = "ws")]
 pub mod retry;
 pub mod tls;
@@ -48,11 +46,6 @@ pub mod unsupported;
 
 #[cfg(feature = "ws")]
 pub use frame::{read_until, ReadOutcome, WsStream};
-#[cfg(feature = "p2p")]
-pub use p2p::{
-    create_p2p_client_config, create_p2p_server_config, generate_p2p_cert, AssetHeader,
-    P2pConnection, P2pEndpoint, P2pError,
-};
 #[cfg(feature = "ws")]
 pub use retry::should_try_next_port;
 #[cfg(all(feature = "ws", feature = "rustls"))]

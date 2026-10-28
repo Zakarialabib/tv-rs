@@ -46,7 +46,6 @@
 
 mod client;
 mod error;
-mod dedupe;
 mod handle;
 pub mod subscription;
 mod types;
@@ -78,12 +77,6 @@ pub use tv_rs_mdc as mdc;
 pub use tv_rs_power as power;
 pub use tv_rs_power::PowerState;
 pub use tv_rs_roku as roku;
-/// Serial HAL, port enumeration, acquisition and framing: [`serial::SerialPortManager`].
-pub use tv_rs_serial as serial;
-/// Philips SICP commercial display protocol client: [`sicp::SicpClient`].
-pub use tv_rs_sicp as sicp;
-/// Spatial audio routing and sound dome / speaker sink management: [`spatial_audio::SpatialAudioRouter`].
-pub use tv_rs_spatial_audio as spatial_audio;
 /// Samsung Tizen remote channel and DIAL: [`tizen::TizenClient`].
 pub use tv_rs_tizen as tizen;
 /// TLS policy and pinning, shared by every vendor channel: [`transport::TlsPolicy`].
