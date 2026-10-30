@@ -401,7 +401,9 @@ mod tests {
         .await
         .unwrap_err();
 
-        assert!(err.to_string().contains("failed to read CA cert at '/path/to/missing_ca.pem'"));
+        assert!(err
+            .to_string()
+            .contains("failed to read CA cert at '/path/to/missing_ca.pem'"));
     }
 
     #[tokio::test]
