@@ -77,18 +77,6 @@ fn capability_accessors(handle: &dyn DeviceHandle, violations: &mut Vec<Violatio
             handle.as_panel_health().is_some(),
         ),
         (Capability::ScreenCast, handle.as_screen_cast().is_some()),
-        (
-            Capability::ProjectorPower,
-            handle.as_projector_power().is_some(),
-        ),
-        (
-            Capability::ProjectorShutter,
-            handle.as_projector_shutter().is_some(),
-        ),
-        (
-            Capability::LaserTelemetry,
-            handle.as_laser_telemetry().is_some(),
-        ),
         #[cfg(feature = "supporting")]
         (
             Capability::LampOrPanelHours,
@@ -129,41 +117,6 @@ async fn unsupported_routing(handle: &dyn DeviceHandle, violations: &mut Vec<Vio
         }
     }
 
-    if !set.contains(Capability::ProjectorPower) {
-        if let Some(proj) = handle.as_projector_power() {
-            match proj.power_on(CommandId::new()).await {
-                Err(TvError::Unsupported(Capability::ProjectorPower)) => {}
-                other => violations.push(Violation::new(
-                    "unsupported_routing",
-                    format!("projector power_on without ProjectorPower returned {other:?}"),
-                )),
-            }
-        }
-    }
-
-    if !set.contains(Capability::ProjectorShutter) {
-        if let Some(proj) = handle.as_projector_shutter() {
-            match proj.set_shutter(true, CommandId::new()).await {
-                Err(TvError::Unsupported(Capability::ProjectorShutter)) => {}
-                other => violations.push(Violation::new(
-                    "unsupported_routing",
-                    format!("set_shutter without ProjectorShutter returned {other:?}"),
-                )),
-            }
-        }
-    }
-
-    if !set.contains(Capability::LaserTelemetry) {
-        if let Some(telemetry) = handle.as_laser_telemetry() {
-            match telemetry.laser_telemetry().await {
-                Err(TvError::Unsupported(Capability::LaserTelemetry)) => {}
-                other => violations.push(Violation::new(
-                    "unsupported_routing",
-                    format!("laser_telemetry without LaserTelemetry returned {other:?}"),
-                )),
-            }
-        }
-    }
 
     if !set.contains(Capability::ScreenCast) {
         if let Some(cast) = handle.as_screen_cast() {
