@@ -147,7 +147,7 @@ impl Reconciler {
     pub async fn tick(&mut self) -> Vec<Outcome> {
         let concurrency = self.policy.concurrency.max(1);
         let mut outcomes = Vec::with_capacity(self.fleet.len());
-        let mut eligible = Vec::new();
+        let mut eligible = Vec::with_capacity(self.fleet.len());
 
         for handle in &self.fleet {
             let id = handle.id();
