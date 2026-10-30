@@ -117,7 +117,6 @@ async fn unsupported_routing(handle: &dyn DeviceHandle, violations: &mut Vec<Vio
         }
     }
 
-
     if !set.contains(Capability::ScreenCast) {
         if let Some(cast) = handle.as_screen_cast() {
             match cast.start_cast(None, CommandId::new()).await {
