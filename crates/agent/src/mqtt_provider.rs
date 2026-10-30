@@ -135,12 +135,18 @@ impl MqttSubscribeProvider {
         client_id: &str,
         transport: MqttTransport,
     ) -> Result<Self, ProviderError> {
-        let (host, port) = broker.rsplit_once(':').ok_or_else(|| {
-            ProviderError::Unavailable(format!("broker must be host:port, got '{broker}'"))
-        })?;
-        let port: u16 = port
-            .parse()
-            .map_err(|_| ProviderError::Unavailable(format!("'{port}' is not a port")))?;
+        let (host, port) = if let Some((h, p)) = broker.rsplit_once(':') {
+            let port: u16 = p
+                .parse()
+                .map_err(|_| ProviderError::Unavailable(format!("'{p}' is not a port")))?;
+            (h, port)
+        } else {
+            let default_port = match transport {
+                MqttTransport::Tls(_) => 8883,
+                MqttTransport::Tcp => 1883,
+            };
+            (broker, default_port)
+        };
 
         let mut options = MqttOptions::new(client_id, host, port);
 
@@ -336,15 +342,19 @@ mod tests {
 
     #[tokio::test]
     async fn connect_rejects_invalid_broker_format() {
-        let err = MqttSubscribeProvider::connect("invalid_broker", "screens", "client")
+        let err = MqttSubscribeProvider::connect("host:not_a_port", "screens", "client")
             .await
             .unwrap_err();
-        assert!(err.to_string().contains("broker must be host:port"));
+        assert!(err.to_string().contains("is not a port"));
+    }
 
-        let err2 = MqttSubscribeProvider::connect("host:not_a_port", "screens", "client")
+    #[tokio::test]
+    async fn connect_defaults_port_when_omitted() {
+        // Without port, connect defaults to 8883 for TLS
+        let provider = MqttSubscribeProvider::connect("127.0.0.1", "screens", "client")
             .await
-            .unwrap_err();
-        assert!(err2.to_string().contains("is not a port"));
+            .expect("TLS transport initialized with default port 8883");
+        assert_eq!(provider.topic_prefix(), "screens");
     }
 
     #[tokio::test]
@@ -377,5 +387,34 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("failed to read CA cert"));
+    }
+
+    #[tokio::test]
+    async fn connect_with_transport_custom_ca_cert_file_not_found() {
+        let config = MqttTlsConfig::new().with_ca_cert("/path/to/missing_ca.pem");
+        let err = MqttSubscribeProvider::connect_with_transport(
+            "127.0.0.1:8883",
+            "screens",
+            "client",
+            MqttTransport::Tls(config),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(err.to_string().contains("failed to read CA cert at '/path/to/missing_ca.pem'"));
+    }
+
+    #[tokio::test]
+    async fn connect_with_transport_tls_default_config_creates_transport() {
+        let provider = MqttSubscribeProvider::connect_with_transport(
+            "127.0.0.1:8883",
+            "screens",
+            "client",
+            MqttTransport::Tls(MqttTlsConfig::default()),
+        )
+        .await
+        .expect("TLS transport initialized");
+
+        assert_eq!(provider.topic_prefix(), "screens");
     }
 }
