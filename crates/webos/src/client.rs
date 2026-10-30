@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::io::AsyncWriteExt;
 
 use tokio_tungstenite::connect_async_tls_with_config;
 use tokio_tungstenite::tungstenite::Message;
@@ -84,7 +85,14 @@ pub async fn save_client_key(path: impl AsRef<Path>, client_key: &str) -> Result
     let body = serde_json::to_string(&SsapClientKeyFile {
         client_key: client_key.to_string(),
     })?;
-    tokio::fs::write(path, body).await?;
+    let mut options = tokio::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        options.mode(0o600);
+    }
+    let mut file = options.open(path).await?;
+    file.write_all(body.as_bytes()).await?;
     Ok(())
 }
 
@@ -799,5 +807,35 @@ mod tests {
         assert!(parse_register_response("not json").is_err());
         assert!(parse_register_response("").is_err());
         assert!(parse_register_response(r#"{"payload": "string instead of struct"}"#).is_err());
+    }
+
+    #[tokio::test]
+    async fn save_and_load_client_key_roundtrips() {
+        let temp_dir = std::env::temp_dir();
+        let key_path = temp_dir.join("test_webos_client_key.json");
+
+        let key = "test_key_12345";
+        super::save_client_key(&key_path, key)
+            .await
+            .expect("save_client_key succeeds");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = std::fs::metadata(&key_path).expect("file metadata");
+            let mode = metadata.permissions().mode();
+            assert_eq!(
+                mode & 0o777,
+                0o600,
+                "saved client key permissions must be 0o600"
+            );
+        }
+
+        let loaded = super::load_client_key(&key_path)
+            .await
+            .expect("load_client_key succeeds");
+        assert_eq!(loaded.as_deref(), Some(key));
+
+        let _ = tokio::fs::remove_file(&key_path).await;
     }
 }
