@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-31
+
 ### Added
 
 - **Leased-control vocabulary** (`tv-rs-core`): `MaintenanceLease`, `LeaseMode`
