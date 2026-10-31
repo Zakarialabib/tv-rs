@@ -628,6 +628,7 @@ fn device_os(vendor: TvVendor) -> DeviceOs {
         TvVendor::Roku => DeviceOs::Roku,
         TvVendor::Philips => DeviceOs::PhilipsSicp,
         TvVendor::Unknown => DeviceOs::Unknown,
+        TvVendor::GoogleCast => DeviceOs::GoogleCast,
     }
 }
 
