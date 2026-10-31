@@ -18,6 +18,7 @@ tv-rs-transport.workspace = true
 tv-rs-tizen.workspace = true
 tv-rs-webos.workspace = true
 tv-rs-roku.workspace = true
+tv-rs-cast = { path = "../cast", version = "0.5.0", optional = true }
 # MDC is a protocol crate like the others, but it is not reached through
 # `TvClient`: SSDP carries no authoritative vendor field, so a commercial panel
 # is never *classified* from a discovery reply. The facade re-exports it so a
@@ -42,6 +43,7 @@ tv-rs-sim.workspace = true
 # Hardware-in-the-loop tests. Off by default so `cargo test` never touches a
 # physical television. Enable with `cargo test --features hil` and set the
 # TV_RS_HIL_* environment variables documented in tests/hardware_in_the_loop.rs.
+cast = ["tv-rs-cast"]
 hil = []
 
 # Runs the shared device-model conformance suite against the facade's clients.

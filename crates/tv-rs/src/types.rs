@@ -27,6 +27,8 @@ pub enum TvVendor {
     Roku,
     /// Philips SICP: commercial display protocol over TCP (5000).
     Philips,
+    /// Google Cast or Chromecast.
+    GoogleCast,
     /// The device answered SSDP but matched no known vendor signature.
     Unknown,
 }
@@ -39,6 +41,7 @@ impl TvVendor {
             Self::Lg => "lg",
             Self::Roku => "roku",
             Self::Philips => "philips",
+            Self::GoogleCast => "googlecast",
             Self::Unknown => "unknown",
         }
     }
@@ -57,6 +60,7 @@ impl TvVendor {
             Self::Lg => Some(WEBOS_WS_PORT),
             Self::Roku => Some(ROKU_ECP_PORT),
             Self::Philips => Some(SICP_TCP_PORT),
+            Self::GoogleCast => Some(8009),
             Self::Unknown => None,
         }
     }

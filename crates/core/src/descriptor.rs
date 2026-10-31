@@ -72,6 +72,8 @@ pub enum DeviceOs {
     SamsungMdc,
     /// Philips commercial firmware driven by SICP over TCP or RS-232.
     PhilipsSicp,
+    /// Google Cast or Chromecast.
+    GoogleCast,
     /// Discovered, not identified.
     #[default]
     Unknown,
@@ -88,6 +90,7 @@ impl DeviceOs {
             Self::SamsungMdc => "samsung_mdc",
             Self::PhilipsSicp => "philips_sicp",
             Self::Unknown => "unknown",
+            Self::GoogleCast => "googlecast",
         }
     }
 }

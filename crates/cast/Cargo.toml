@@ -1,0 +1,30 @@
+[package]
+name = "tv-rs-cast"
+description = "Google Cast sender implementation for smart TVs and Chromecasts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+prost = "0.13"
+bytes = "1"
+rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
+tokio-rustls = "0.26"
+pki-types = { package = "rustls-pki-types", version = "1.7" }
+
+[build-dependencies]
+prost-build = "0.13"
+
+[dev-dependencies]
+tokio.workspace = true
+wiremock.workspace = true
+
+[lints]
+workspace = true

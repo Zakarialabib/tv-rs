@@ -8,6 +8,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`tv-rs-cast`**: the Google Cast sender — a TLS control channel on port 8009
+  carrying length-prefixed CASTV2 protobuf messages (`crates/cast/proto/
+cast_channel.proto` compiled with `prost-build`), JSON-typed payloads for the
+  connection/heartbeat/receiver/media namespaces, a `CastClient` (connect,
+  status, launch, load_media, transport play/pause/stop, set_volume, stop) and a
+  DIAL HTTP fallback (`DialClient`, port 8008). Payload and protobuf round-trip
+  unit tests included; reuses `tv-rs-discovery`'s mDNS `_googlecast._tcp` scan.
+  The facade gains `TvVendor::GoogleCast` / `DeviceOs::GoogleCast` and a `cast`
+  feature, deliberately refusing it through the generic `TvClient` — the client
+  is standalone today, the facade wiring is tracked in
+  [`docs/cast-plan.md`](docs/cast-plan.md).
+
 - **`tv-rs-vision`**: the computer-vision / edge-AI event engine — RTSP stream
   ingestion, pluggable inference engines behind `VisionEngine` (with a mock
   engine so CI never needs hardware), spatial zone analytics, and structured

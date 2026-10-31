@@ -387,6 +387,10 @@ impl TvClient {
                 };
                 Ok(Self::Philips { client, mac: None })
             }
+            TvVendor::GoogleCast => Err(TvError::UnsupportedDevice {
+                address: tv.ip.clone(),
+                reason: "cast connection unsupported via generic client".to_string(),
+            }),
             TvVendor::Unknown => Err(TvError::UnsupportedDevice {
                 address: tv.ip.clone(),
                 reason: "device did not advertise a known vendor signature".to_string(),
@@ -443,6 +447,10 @@ impl TvClient {
             TvVendor::Philips => Ok(Self::Philips {
                 client: SicpClient::new(tv.ip.clone()),
                 mac: None,
+            }),
+            TvVendor::GoogleCast => Err(TvError::UnsupportedDevice {
+                address: tv.ip.clone(),
+                reason: "cast connection unsupported via generic client".to_string(),
             }),
             TvVendor::Unknown => Err(TvError::UnsupportedDevice {
                 address: tv.ip.clone(),
