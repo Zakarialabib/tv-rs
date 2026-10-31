@@ -491,6 +491,22 @@ impl TizenClient {
         self
     }
 
+    /// Sets the client identity this pairing presents to the TV.
+    ///
+    /// This is [`with_device_name`](Self::with_device_name) under the name the
+    /// provisioning vocabulary uses, deliberately. On Tizen the identity a set
+    /// sees is the client-supplied remote name — base64'd into the channel
+    /// URL's `?name=` parameter and echoed back in the connect response — so
+    /// the remote's *name* is the remote's *identity*. A mobile instalment
+    /// re-pairing with a token that was issued to a desktop one must present
+    /// the same identity, or the TV sees an unfamiliar remote holding a
+    /// borrowed token. Symmetric with [`TvClient::with_client_identity`].
+    #[must_use]
+    pub fn with_client_identity(mut self, identity: impl Into<String>) -> Self {
+        self.device_name = identity.into();
+        self
+    }
+
     /// Sets a previously-saved pairing token for reconnects.
     pub fn with_token(mut self, token: impl Into<String>) -> Self {
         self.token = Some(token.into());
@@ -836,6 +852,17 @@ mod tests {
         assert!(
             tls.starts_with("wss://192.168.1.10:8002/api/v2/channels/samsung.remote.control?name="),
             "unexpected tls url: {tls}"
+        );
+    }
+
+    #[test]
+    fn with_client_identity_names_the_remote() {
+        // The identity lands in the same slot `with_device_name` fills: the
+        // remote name that becomes the URL's `?name=` parameter.
+        let client = TizenClient::new("192.168.1.10").with_client_identity("station-7");
+        assert!(
+            format!("{client:?}").contains("device_name: \"station-7\""),
+            "identity must set the remote name: {client:?}"
         );
     }
 

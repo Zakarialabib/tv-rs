@@ -11,6 +11,7 @@ use std::sync::Arc;
 use crate::error::{Result, TvError};
 use crate::map;
 use crate::types::{DiscoveredTv, TvVendor};
+use tv_rs_core::ProvisioningBundleV1;
 use tv_rs_core::{Capability, DeviceDescriptor, DeviceHandle, DeviceId, DeviceOs, ObservedField};
 use tv_rs_discovery::{SsdpDeviceDescriptor, SsdpMsearchResponse, SsdpScanner};
 use tv_rs_mdc::{MdcClient, MdcDevice};
@@ -459,6 +460,129 @@ impl TvClient {
         }
     }
 
+    /// Builds the control client a provisioning bundle points at.
+    ///
+    /// This is the mobile-commissioning path: a desktop instalment provisions a
+    /// set, hands the suppressed `ProvisioningBundleV1` to a phone, and the
+    /// phone reconstructs a client that presents as the *same* client the TV
+    /// already paired. Everything the bundle carries is applied:
+    ///
+    /// * the vendor classification selects the backend, exactly as
+    ///   [`from_discovered`](Self::from_discovered) would, including the
+    ///   quirks-table port pinning;
+    /// * a `network_target.tls_fingerprint` pins the TLS layer up front
+    ///   ([`TlsPolicy::pinned`]) — no trust-on-first-use pass;
+    /// * `network_target.auth_token` becomes the Tizen pairing token or the
+    ///   webOS `client-key` (Roku ECP and Philips SICP are unauthenticated
+    ///   protocols on their wire, so the field has nowhere to be applied);
+    /// * `network_target.mac` pre-fills Wake-on-LAN;
+    /// * `client_identity_override` rides in through
+    ///   [`with_client_identity`](Self::with_client_identity) so the re-pairing
+    ///   instalment presents the name the desktop one paired under.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TvError::Protocol`] when the bundle carries no
+    /// `network_target` (there is nothing to drive) or its fingerprint is not
+    /// valid hex, and [`TvError::UnsupportedDevice`] for the platforms without
+    /// a [`TvClient`] backend — [`DeviceOs::SamsungMdc`] walls (`mdc_handle`
+    /// takes them, with the bundle's `mdc_topology` display id), cast devices
+    /// and unknown classifications.
+    pub fn from_provisioning_bundle(bundle: &ProvisioningBundleV1) -> Result<Self> {
+        let vendor = match bundle.vendor {
+            DeviceOs::Tizen => TvVendor::Samsung,
+            DeviceOs::WebOs => TvVendor::Lg,
+            DeviceOs::Roku => TvVendor::Roku,
+            DeviceOs::PhilipsSicp => TvVendor::Philips,
+            DeviceOs::SamsungMdc => {
+                return Err(TvError::UnsupportedDevice {
+                    address: bundle
+                        .network_target
+                        .as_ref()
+                        .map(|target| target.ip.clone())
+                        .unwrap_or_default(),
+                    reason: "MDC walls have no TvClient backend; drive them through \
+                             tv_rs::mdc_handle with the bundle's mdc_topology display id"
+                        .to_string(),
+                });
+            }
+            DeviceOs::GoogleCast => {
+                return Err(TvError::UnsupportedDevice {
+                    address: bundle
+                        .network_target
+                        .as_ref()
+                        .map(|target| target.ip.clone())
+                        .unwrap_or_default(),
+                    reason: "cast connection unsupported via generic client".to_string(),
+                });
+            }
+            DeviceOs::Unknown => {
+                return Err(TvError::UnsupportedDevice {
+                    address: bundle
+                        .network_target
+                        .as_ref()
+                        .map(|target| target.ip.clone())
+                        .unwrap_or_default(),
+                    reason: "provisioning bundle carries an unknown classification".to_string(),
+                });
+            }
+        };
+
+        let target = bundle.network_target.as_ref().ok_or_else(|| {
+            TvError::protocol(
+                "provisioning bundle carries no network_target; there is no address to drive",
+            )
+        })?;
+
+        let tv = DiscoveredTv {
+            vendor,
+            ip: target.ip.clone(),
+            location: None,
+            friendly_name: None,
+            manufacturer: None,
+            model_name: None,
+            serial_number: None,
+            usn: None,
+            mac: target.mac.clone(),
+        };
+
+        let tls = match target.tls_fingerprint.as_deref() {
+            Some(hex) => TlsPolicy::pinned(hex)
+                .map_err(|error| TvError::protocol(format!("tls_fingerprint: {error}")))?,
+            None => TlsPolicy::default(),
+        };
+
+        let mut client = Self::from_discovered_with(&tv, tls)?;
+
+        if let Some(mac) = target.mac.as_deref() {
+            client = client.with_mac(mac);
+        }
+
+        match &mut client {
+            Self::Tizen { client: slot, .. } => {
+                if let Some(token) = target.auth_token.as_deref() {
+                    let next = slot.clone();
+                    *slot = next.with_token(token);
+                }
+            }
+            Self::Webos { client: slot, .. } => {
+                if let Some(key) = target.auth_token.as_deref() {
+                    let next = slot.clone();
+                    *slot = next.with_client_key(key);
+                }
+            }
+            // Roku ECP is unauthenticated and SICP's credentials are per-site
+            // wiring, not a pairing credential: nothing to apply.
+            Self::Roku { .. } | Self::Philips { .. } => {}
+        }
+
+        if let Some(identity) = bundle.client_identity_override.as_deref() {
+            client = client.with_client_identity(identity);
+        }
+
+        Ok(client)
+    }
+
     /// Shows a URL on the screen.
     ///
     /// This is the signage primitive: "put this page on this panel" without
@@ -853,6 +977,7 @@ pub fn sicp_handle(address: impl Into<String>) -> Result<Box<dyn DeviceHandle>> 
 mod tests {
     use super::*;
 
+    use tv_rs_core::NetworkProvisionTarget;
     /// A panel is never *classified* from discovery — SSDP cannot tell a commercial
     /// Samsung display from a consumer one — so the handle is built from what the
     /// caller already knows, and it comes back as the same erased handle the rest of
@@ -882,6 +1007,181 @@ mod tests {
         assert_eq!(handle.descriptor().address, "192.168.1.50");
         assert!(handle.capabilities().contains(Capability::PowerState));
         assert!(!handle.capabilities().contains(Capability::Key));
+    }
+
+    /// Long enough to reach `with_client_identity`'s slot on both pairing
+    /// vendors without a real connection: the builders are pure.
+    fn tizen_tv() -> DiscoveredTv {
+        DiscoveredTv {
+            vendor: TvVendor::Samsung,
+            ip: "192.168.1.10".to_string(),
+            location: None,
+            friendly_name: None,
+            manufacturer: None,
+            model_name: None,
+            serial_number: None,
+            usn: None,
+            mac: None,
+        }
+    }
+
+    #[test]
+    fn with_client_identity_reaches_the_pairing_vendors() {
+        let client = TvClient::from_discovered(&tizen_tv())
+            .expect("samsung is supported")
+            .with_client_identity("station-7");
+        match &client {
+            TvClient::Tizen { client: tizen, .. } => assert!(
+                format!("{tizen:?}").contains("device_name: \"station-7\""),
+                "identity must reach the Tizen remote name: {tizen:?}"
+            ),
+            other => panic!("expected a Tizen client, got {other:?}"),
+        }
+
+        let lg = DiscoveredTv {
+            vendor: TvVendor::Lg,
+            ..tizen_tv()
+        };
+        let client = TvClient::from_discovered(&lg)
+            .expect("lg is supported")
+            .with_client_identity("station-7");
+        match &client {
+            TvClient::Webos { client: webos, .. } => {
+                assert_eq!(webos.device_name(), "station-7");
+            }
+            other => panic!("expected a webOS client, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn with_client_identity_is_a_documented_noop_where_the_protocol_has_no_pairing_identity() {
+        // Roku ECP is unauthenticated on the LAN and Philips SICP drives a
+        // commercial panel by wire: neither side has a pairing identity to
+        // carry. The builder must not panic or surprise on them.
+        let roku = DiscoveredTv {
+            vendor: TvVendor::Roku,
+            ..tizen_tv()
+        };
+        let mac = TvClient::from_discovered(&roku)
+            .expect("roku is supported")
+            .with_client_identity("station-7")
+            .with_mac("aa:bb:cc:dd:ee:ff");
+        match &mac {
+            TvClient::Roku { mac, .. } => assert_eq!(mac.as_deref(), Some("aa:bb:cc:dd:ee:ff")),
+            other => panic!("expected a Roku client, got {other:?}"),
+        }
+    }
+
+    /// The 64 lowercase hex characters a bundle's pin must be.
+    fn sha256_hex() -> String {
+        "0123456789abcdef".repeat(4)
+    }
+
+    fn tizen_bundle() -> ProvisioningBundleV1 {
+        ProvisioningBundleV1::new(
+            tv_rs_core::provisioning::SCHEMA_VERSION_V1,
+            DeviceId::new("station:lounge-tv").expect("a valid device id"),
+            DeviceOs::Tizen,
+        )
+        .expect("schema v1 is the supported schema")
+        .with_client_identity_override("station-7")
+        .with_network_target(
+            NetworkProvisionTarget::new(
+                "192.168.1.10",
+                Some("aa:bb:cc:dd:ee:ff".to_string()),
+                Some(sha256_hex()),
+                Some("tok-9999".to_string()),
+            )
+            .expect("a valid target"),
+        )
+    }
+
+    #[test]
+    fn a_tizen_bundle_pins_tls_carries_the_token_mac_and_identity() {
+        let client = TvClient::from_provisioning_bundle(&tizen_bundle())
+            .expect("a tizen bundle builds a client");
+        match &client {
+            TvClient::Tizen {
+                client: tizen, mac, ..
+            } => {
+                assert_eq!(tizen.token(), Some("tok-9999"));
+                assert_eq!(
+                    tizen.tls_policy(),
+                    TlsPolicy::pinned(&sha256_hex()).expect("hex fixture is a valid pin"),
+                    "the bundle's pin must be installed up front"
+                );
+                assert_eq!(mac.as_deref(), Some("aa:bb:cc:dd:ee:ff"));
+                assert!(
+                    format!("{tizen:?}").contains("device_name: \"station-7\""),
+                    "the identity override must survive to the remote name: {tizen:?}"
+                );
+            }
+            other => panic!("expected a Tizen client, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_webos_bundle_lands_its_client_key() {
+        let bundle = ProvisioningBundleV1::new(
+            tv_rs_core::provisioning::SCHEMA_VERSION_V1,
+            DeviceId::new("station:york-lounge").expect("a valid device id"),
+            DeviceOs::WebOs,
+        )
+        .expect("schema v1 is the supported schema")
+        .with_client_identity_override("station-7")
+        .with_network_target(
+            NetworkProvisionTarget::new(
+                "192.168.1.20",
+                None,
+                None,
+                Some("ey-client-key-1".to_string()),
+            )
+            .expect("a valid target"),
+        );
+        let client =
+            TvClient::from_provisioning_bundle(&bundle).expect("a webOS bundle builds a client");
+        match &client {
+            TvClient::Webos {
+                client: webos, mac, ..
+            } => {
+                assert_eq!(webos.client_key(), Some("ey-client-key-1"));
+                assert_eq!(webos.device_name(), "station-7");
+                assert_eq!(mac.as_deref(), None, "no MAC in the bundle, none invented");
+            }
+            other => panic!("expected a webOS client, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_bundle_without_a_network_target_is_refused() {
+        let bundle = ProvisioningBundleV1::new(
+            tv_rs_core::provisioning::SCHEMA_VERSION_V1,
+            DeviceId::new("station:no-target").expect("a valid device id"),
+            DeviceOs::Tizen,
+        )
+        .expect("schema v1 is the supported schema");
+        let error =
+            TvClient::from_provisioning_bundle(&bundle).expect_err("there is nothing to drive");
+        assert!(error.to_string().to_lowercase().contains("network_target"));
+    }
+
+    #[test]
+    fn mdc_walls_are_refused_with_a_pointer_to_the_mdc_path() {
+        let bundle = ProvisioningBundleV1::new(
+            tv_rs_core::provisioning::SCHEMA_VERSION_V1,
+            DeviceId::new("wall:lobby").expect("a valid device id"),
+            DeviceOs::SamsungMdc,
+        )
+        .expect("schema v1 is the supported schema")
+        .with_network_target(
+            NetworkProvisionTarget::new("192.168.1.40", None, None, None).expect("a valid target"),
+        );
+        let error =
+            TvClient::from_provisioning_bundle(&bundle).expect_err("MDC has no TvClient variant");
+        assert!(
+            error.to_string().contains("mdc_handle"),
+            "the error must point at the supported path: {error}"
+        );
     }
 
     #[cfg(feature = "quirks")]

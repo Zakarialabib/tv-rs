@@ -354,11 +354,11 @@ mod tests {
     fn an_unsupported_capability_arrives_named() {
         let mapped = tizen(
             &tv_rs_tizen::TizenError::Unsupported(unsupported()),
-            Capability::ScreenCapture,
+            Capability::ScreenCast,
         );
         assert!(matches!(
             mapped,
-            TvError::Unsupported(Capability::ScreenCapture)
+            TvError::Unsupported(Capability::ScreenCast)
         ));
     }
 

@@ -23,6 +23,7 @@
 use std::net::IpAddr;
 use std::time::Duration;
 
+#[cfg(feature = "mobile")]
 use ipnet::Ipv4Net;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;

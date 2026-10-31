@@ -130,6 +130,39 @@ impl TvClient {
         self
     }
 
+    /// Sets the client identity the pairing presents to the TV.
+    ///
+    /// The provisioning vocabulary asks every client that supports one to
+    /// share the identity string a previous instalment paired under, so a
+    /// mobile-device re-pair with a stored credential does not read to the TV
+    /// as a stranger presenting a borrowed key. Tizen and webOS both honor it:
+    /// Tizen via the remote name in the channel URL (`?name=`), webOS via the
+    /// name in the on-screen "Allow?" prompt next to the stored `client-key`.
+    ///
+    /// Roku (ECP is unauthenticated on the LAN) and Philips (SICP drives a
+    /// commercial panel by wire) carry no pairing identity at all, so the
+    /// string is a documented no-op there.
+    #[must_use]
+    pub fn with_client_identity(mut self, identity: impl Into<String>) -> Self {
+        let identity = identity.into();
+        match &mut self {
+            Self::Tizen { client, .. } => {
+                *client = {
+                    let next = client.clone();
+                    next.with_client_identity(identity)
+                };
+            }
+            Self::Webos { client, .. } => {
+                *client = {
+                    let next = client.clone();
+                    next.with_client_identity(identity)
+                };
+            }
+            Self::Roku { .. } | Self::Philips { .. } => {}
+        }
+        self
+    }
+
     /// Ask the TV for its own hardware address, and remember it.
     ///
     /// Roku answers from `/query/device-info`, preferring the Wi-Fi address over the

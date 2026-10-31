@@ -239,6 +239,24 @@ impl WebosClient {
         self
     }
 
+    /// Sets the client identity this pairing presents to the TV.
+    ///
+    /// This is [`with_device_name`](Self::with_device_name) under the name the
+    /// provisioning vocabulary uses, deliberately. On webOS the *pairing*
+    /// identity is the `client-key` the TV issued — there is no client-identity
+    /// field in the registration manifest, and inventing a non-standard one
+    /// would make this client the only TV on the LAN that understands it — so
+    /// the deterministic surface a set actually shows for "who is asking" is
+    /// the name in the "Allow?" prompt, echoed back in
+    /// [`WebosPairing::device_name`]. A mobile instalment re-registering with a
+    /// `client-key` issued to a desktop one should carry the same identity
+    /// string so both instalments present as the same client.
+    #[must_use]
+    pub fn with_client_identity(mut self, identity: impl Into<String>) -> Self {
+        self.device_name = identity.into();
+        self
+    }
+
     /// Returns the configured host.
     #[must_use]
     pub fn host(&self) -> &str {
@@ -645,6 +663,16 @@ mod tests {
 
         let ladder = WebosClient::new("192.168.1.20").with_wss();
         assert_eq!(ladder.port_candidates(), vec![3001, 3000]);
+    }
+
+    #[test]
+    fn with_client_identity_sets_the_prompt_name() {
+        // The manifest carries no client-identity field and must not: the
+        // deterministic surface is the "Allow?" prompt name the TV echoes in
+        // WebosPairing::device_name, plus the stored client-key.
+        let client = WebosClient::new("192.168.1.20").with_client_identity("station-7");
+        assert_eq!(client.device_name(), "station-7");
+        assert!(client.client_key().is_none(), "identity must not mint keys");
     }
 
     #[test]
