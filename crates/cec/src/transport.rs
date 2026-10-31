@@ -50,12 +50,7 @@ impl super::CecTransport for ClientTransport {
     async fn send(&self, command: &str) -> Result<String, CecError> {
         use tokio::io::AsyncWriteExt;
 
-        let trimmed = command.trim();
-        if trimmed.is_empty() || !command.chars().all(|c| c.is_ascii_graphic() || c == ' ') {
-            return Err(CecError::Rejected(format!(
-                "invalid cec command: '{command}' contains illegal control characters, newlines, or is empty"
-            )));
-        }
+        let cmd = crate::CecCommand::try_from(command)?;
 
         let mut child = tokio::process::Command::new(&self.binary)
             .arg("-s")
@@ -75,7 +70,7 @@ impl super::CecTransport for ClientTransport {
 
         if let Some(mut stdin) = child.stdin.take() {
             stdin
-                .write_all(format!("{command}\n").as_bytes())
+                .write_all(format!("{cmd}\n").as_bytes())
                 .await
                 .map_err(|error| CecError::Io(error.to_string()))?;
             // Closing stdin is what makes cec-client execute and exit.
@@ -197,12 +192,7 @@ impl PersistentClientTransport {
 #[async_trait]
 impl super::CecTransport for PersistentClientTransport {
     async fn send(&self, command: &str) -> Result<String, CecError> {
-        let trimmed = command.trim();
-        if trimmed.is_empty() || !command.chars().all(|c| c.is_ascii_graphic() || c == ' ') {
-            return Err(CecError::Rejected(format!(
-                "invalid cec command: '{command}' contains illegal control characters, newlines, or is empty"
-            )));
-        }
+        let cmd = crate::CecCommand::try_from(command)?;
 
         let mut lock = self.process.lock().await;
 
@@ -218,11 +208,7 @@ impl super::CecTransport for PersistentClientTransport {
 
         let proc = lock.as_mut().unwrap();
 
-        if let Err(err) = proc
-            .stdin
-            .write_all(format!("{command}\n").as_bytes())
-            .await
-        {
+        if let Err(err) = proc.stdin.write_all(format!("{cmd}\n").as_bytes()).await {
             *lock = None;
             return Err(CecError::Io(format!(
                 "failed to write command to cec-client stdin: {err}"
@@ -345,6 +331,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn malformed_cec_commands_are_rejected() {
+        let transport = ClientTransport::new("definitely-not-a-cec-binary-xyz");
+        let error_on = transport
+            .send("on invalid_target")
+            .await
+            .expect_err("invalid on target");
+        assert!(matches!(error_on, CecError::Rejected(_)), "{error_on:?}");
+
+        let error_st = transport
+            .send("standby invalid_target")
+            .await
+            .expect_err("invalid standby target");
+        assert!(matches!(error_st, CecError::Rejected(_)), "{error_st:?}");
+    }
+
+    #[tokio::test]
     async fn persistent_transport_rejects_invalid_commands() {
         let transport = PersistentClientTransport::new("definitely-not-a-cec-binary-xyz");
         let error_newline = transport
@@ -353,8 +355,17 @@ mod tests {
             .expect_err("newline");
         assert!(matches!(error_newline, CecError::Rejected(_)));
 
+        let error_null = transport.send("on 0\0").await.expect_err("null byte");
+        assert!(matches!(error_null, CecError::Rejected(_)));
+
         let error_empty = transport.send("").await.expect_err("empty");
         assert!(matches!(error_empty, CecError::Rejected(_)));
+
+        let error_on = transport
+            .send("on bad_target")
+            .await
+            .expect_err("malformed command");
+        assert!(matches!(error_on, CecError::Rejected(_)));
     }
 
     #[cfg(unix)]
