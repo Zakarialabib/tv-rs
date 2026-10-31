@@ -122,6 +122,9 @@ fn a_fifty_device_fleet_converges_and_quarantines_the_pathological() {
                     let _ = ladder.on_failure(&id, &TvError::Unsupported(Capability::AppLaunch));
                     break;
                 }
+                // The simulation drives no lease book, so a leased-device
+                // decision never occurs here; the arms keep the match honest.
+                Decision::InhibitedByLease { .. } | Decision::YieldTransport => {}
             }
 
             // Simulate the two devices that never pair mid-run.
@@ -235,6 +238,8 @@ fn twenty_four_simulated_hours_with_three_blips() {
                     ladder.on_failure(&id, &TvError::Unsupported(Capability::Wake));
                     quarantined.insert(id.as_str().to_string());
                 }
+                // No lease book in this simulation; arms added for exhaustiveness.
+                Decision::InhibitedByLease { .. } | Decision::YieldTransport => {}
             }
 
             // The two devices that never pair: a token expires and they leave rotation

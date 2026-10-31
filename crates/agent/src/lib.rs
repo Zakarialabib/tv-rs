@@ -4,9 +4,9 @@
 //!
 //! | Piece | Question it answers |
 //! |---|---|
-//! | [`desired`] | *What should this screen be doing?* — behind a trait, so a CMS plugs in without the core knowing |
-//! | [`reconciler`] | *What is the next action, given belief and capabilities?* — a pure function |
-//! | [`healer`] | *This keeps failing; when do we stop?* — a counter with a ladder |
+//! | [`desired`] | *What should this screen be doing?* â€” behind a trait, so a CMS plugs in without the core knowing |
+//! | [`reconciler`] | *What is the next action, given belief and capabilities?* â€” a pure function |
+//! | [`healer`] | *This keeps failing; when do we stop?* â€” a counter with a ladder |
 //!
 //! Plus [`audit`]: one JSON object per line, readable by someone who has never seen
 //! Rust. That is a product requirement, not a debugging aid.
@@ -54,7 +54,7 @@ pub use healer::{HealerAction, HealerLadder};
 pub use http_provider::HttpPollProvider;
 #[cfg(feature = "mqtt")]
 pub use mqtt_provider::{MqttSubscribeProvider, MqttTlsConfig, MqttTransport};
-pub use reconciler::{decide, Decision};
-pub use remedy::{plan_remedy, symptom, RemedyPolicy, RemedyStep, Symptom};
+pub use reconciler::{decide, decide_with_lease, Decision};
+pub use remedy::{plan_remedy, plan_remedy_with_lease, symptom, RemedyPolicy, RemedyStep, Symptom};
 pub use runner::{Outcome, ReconcilePolicy, Reconciler};
 pub use telemetry::{assess_telemetry, TelemetryPolicy, TelemetryVerdict};

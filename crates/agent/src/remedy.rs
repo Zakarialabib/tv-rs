@@ -26,7 +26,7 @@
 //! restart — and is reported as quarantined either way, so a reboot that does not
 //! help never silently keeps a dead screen in the fleet.
 
-use tv_rs_core::{Capability, CapabilitySet, Telemetry};
+use tv_rs_core::{Capability, CapabilitySet, MaintenanceLease, Telemetry};
 
 use crate::telemetry::{TelemetryPolicy, TelemetryVerdict};
 
@@ -139,6 +139,9 @@ pub fn plan(
 }
 
 /// The step for this snapshot and verdict, in one call.
+///
+/// Legacy-shaped entry point callers without a lease book use: it never
+/// suppresses. Lease-aware callers use [`plan_remedy_with_lease`].
 #[must_use]
 pub fn plan_remedy(
     telemetry: &Telemetry,
@@ -147,13 +150,47 @@ pub fn plan_remedy(
     telemetry_policy: &TelemetryPolicy,
     remedy_policy: &RemedyPolicy,
 ) -> Option<RemedyStep> {
+    plan_remedy_with_lease(
+        telemetry,
+        verdict,
+        capabilities,
+        telemetry_policy,
+        remedy_policy,
+        None,
+        0,
+    )
+}
+
+/// The step for this snapshot and verdict, honouring an active control lease.
+///
+/// The ladder's every rung is a mutation — dim, restart, reboot — and a lease
+/// holder has borrowed the device *against* agent mutations, in both modes.
+/// A suppressed ladder is an honest `None`: the caller records that the
+/// device was deferred or quarantined **because it is leased**, not that a
+/// rung was skipped for want of a capability. Telemetry *reads* continue
+/// regardless — that is [`LeaseMode::ObserveAndRelay`]'s bargain.
+///
+/// An expired lease falls through: resuming after expiry is the whole point.
+#[must_use]
+pub fn plan_remedy_with_lease(
+    telemetry: &Telemetry,
+    verdict: TelemetryVerdict,
+    capabilities: CapabilitySet,
+    telemetry_policy: &TelemetryPolicy,
+    remedy_policy: &RemedyPolicy,
+    active_lease: Option<&MaintenanceLease>,
+    now_unix_ms: u64,
+) -> Option<RemedyStep> {
+    if active_lease.is_some_and(|lease| lease.is_active(now_unix_ms)) {
+        return None;
+    }
     symptom(telemetry, verdict, telemetry_policy)
         .and_then(|symptom| plan(symptom, capabilities, remedy_policy))
 }
 
 #[cfg(test)]
 mod tests {
-    use tv_rs_core::ObservedField;
+    use tv_rs_core::{DeviceId, LeaseMode, ObservedField};
 
     use super::*;
 
@@ -320,5 +357,55 @@ mod tests {
         assert_eq!(RemedyStep::DimBacklight { to: 1 }.as_str(), "dim_backlight");
         assert_eq!(RemedyStep::RestartPlayback.as_str(), "restart_playback");
         assert_eq!(RemedyStep::RebootPanel.as_str(), "reboot_panel");
+    }
+
+    /// A hot panel that would dim, under a lease.
+    fn under_lease(mode: LeaseMode, expires_at_unix_ms: u64) -> MaintenanceLease {
+        MaintenanceLease {
+            holder_id: "tablet-9".to_string(),
+            device_id: DeviceId::new("tv-1").unwrap(),
+            expires_at_unix_ms,
+            mode,
+        }
+    }
+
+    #[test]
+    fn an_active_lease_suppresses_every_rung_in_both_modes() {
+        // Every rung is a mutation, and a borrowed panel is not the agent's to
+        // mutate. The honest answer is None: the audit says "leased", not
+        // "no capability".
+        for mode in [LeaseMode::ObserveAndRelay, LeaseMode::DisconnectAndYield] {
+            let lease = under_lease(mode, 20_000);
+            assert_eq!(
+                plan_remedy_with_lease(
+                    &hot(70),
+                    TelemetryVerdict::Quarantine("temperature is critical"),
+                    capable(&[Capability::Reboot]),
+                    &TelemetryPolicy::default(),
+                    &RemedyPolicy::default(),
+                    Some(&lease),
+                    10_000,
+                ),
+                None,
+                "no rung runs under a {mode:?} lease"
+            );
+        }
+    }
+
+    #[test]
+    fn an_expired_lease_resumes_the_ladder() {
+        let lease = under_lease(LeaseMode::ObserveAndRelay, 20_000);
+        assert_eq!(
+            plan_remedy_with_lease(
+                &hot(70),
+                TelemetryVerdict::Wait("temperature is high"),
+                capable(&[Capability::Brightness]),
+                &TelemetryPolicy::default(),
+                &RemedyPolicy::default(),
+                Some(&lease),
+                20_001,
+            ),
+            Some(RemedyStep::DimBacklight { to: 20 })
+        );
     }
 }
