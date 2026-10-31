@@ -53,6 +53,7 @@ pub mod http_display;
 pub mod mdns;
 pub mod pairing;
 pub mod payload;
+pub mod probe;
 pub mod protocol;
 pub mod registry;
 pub mod types;
@@ -77,7 +78,13 @@ pub use pairing::{
     SignagePairingSession, DEFAULT_SESSION_TTL_SECS, SIGNAGE_PAIRING_URI_SCHEME,
 };
 pub use payload::{SsdpDeviceDescriptor, SsdpMsearchResponse};
-pub use protocol::SsdpDiscovery;
+#[cfg(feature = "mobile")]
+pub use probe::sweep_subnet_bounded;
+pub use probe::{
+    probe_host, ProbeSignal, ProbedEndpoint, ProbedVendor, ATR_V2_PORT, PROBE_CONNECT_TIMEOUT,
+    ROKU_ECP_PORT, TIZEN_API_PORT, WEBOS_SSAP_PORT,
+};
+pub use protocol::{DiscoveryDiagnostics, DiscoveryOutcome, SsdpDiscovery};
 pub use types::{
     DiscoveryMethod, MDNS_MULTICAST_IP, MDNS_UDP_PORT, SSDP_ALL_DEVICES, SSDP_MULTICAST_IP,
     SSDP_ROOT_DEVICE, SSDP_UDP_PORT,

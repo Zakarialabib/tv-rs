@@ -46,15 +46,24 @@ pub struct NetworkProvisionTarget {
     /// IP or host:port the device answers on.
     pub ip: String,
     /// MAC, when known — the Wake-on-LAN prerequisite.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub mac: Option<String>,
     /// SHA-256 certificate fingerprint as 64 lowercase hex characters, when the
     /// install is pinned. Feeds [`tv_rs_transport`]'s `Pinned` policy through
     /// the facade.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub tls_fingerprint: Option<String>,
     /// The pairing credential as issued (Tizen token, webOS `client-key`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub auth_token: Option<String>,
 }
 
@@ -128,7 +137,10 @@ pub struct MdcTopology {
     /// The display id commands are addressed to, `0x00..=0xFD`.
     pub display_id: u8,
     /// Position on the RS-232 / daisy-chain, when the transport is a chain.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub daisy_chain_index: Option<u8>,
     /// How the wire reaches the panel.
     pub transport_hint: MdcTransportHint,
@@ -137,13 +149,19 @@ pub struct MdcTopology {
     /// 0x0D reports signal state and panel health — lamp fault, input-source
     /// error, temperature, fan. **It does not report a serial number.** Nothing
     /// here manufactures one from it, ever.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub health_snapshot_0x0d: Option<PanelHealth>,
     /// The panel's serial as *read from hardware*, not from a command:
     /// `tv-rs-local`'s EDID parse when the panel is attached, or a barcode/QR
     /// scan. Its provenance is the point — a serial that came off the wire is
     /// not a serial the asset list can trust.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub hardware_serial: Option<String>,
 }
 

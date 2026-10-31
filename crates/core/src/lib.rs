@@ -45,9 +45,9 @@ pub mod imperative;
 pub mod lease;
 #[cfg(feature = "mock-backend")]
 pub mod mock;
+pub mod provisioning;
 #[cfg(feature = "quirks")]
 pub mod quirks;
-pub mod provisioning;
 pub mod state;
 pub mod telemetry;
 
@@ -64,9 +64,9 @@ pub use capability::{
 pub use capability::{FrameFormat, PanelHoursProvider, ScreenCapturer, ScreenFrame};
 pub use command::CommandId;
 pub use descriptor::{DeviceDescriptor, DeviceId, DeviceOs, PowerState};
+pub use error::{AuthError, ProtocolError, QuirkId, Remedy, StateError, TransportError, TvError};
 pub use imperative::ImperativeCommand;
 pub use lease::{LeaseMode, MaintenanceLease};
 pub use provisioning::{MdcTopology, NetworkProvisionTarget, ProvisioningBundleV1};
-pub use error::{AuthError, ProtocolError, QuirkId, Remedy, StateError, TransportError, TvError};
 pub use state::{Confidence, ObservedField, ObservedState};
 pub use telemetry::{Telemetry, TelemetryProvider};

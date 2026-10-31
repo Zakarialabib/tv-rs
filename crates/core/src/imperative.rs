@@ -74,11 +74,7 @@ impl ImperativeCommand {
     /// Returns [`TvError::Unsupported`] when the device does not advertise the
     /// capability — the same fact `as_key()` / `as_text()` returning `None`
     /// would — and whatever the backend returns on send failure otherwise.
-    pub async fn dispatch(
-        &self,
-        handle: &dyn DeviceHandle,
-        cmd: CommandId,
-    ) -> Result<(), TvError> {
+    pub async fn dispatch(&self, handle: &dyn DeviceHandle, cmd: CommandId) -> Result<(), TvError> {
         match self {
             Self::Key { key } => match handle.as_key() {
                 Some(input) => input.key_press(*key, cmd).await,

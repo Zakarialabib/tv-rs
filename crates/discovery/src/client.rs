@@ -7,6 +7,7 @@ use tokio::net::UdpSocket;
 
 use crate::error::{DiscoveryError, Result};
 use crate::payload::{SsdpDeviceDescriptor, SsdpMsearchResponse};
+use crate::protocol::{DiscoveryDiagnostics, DiscoveryOutcome};
 use crate::types::{SSDP_ALL_DEVICES, SSDP_MULTICAST_IP, SSDP_UDP_PORT};
 
 /// Default time to wait for SSDP replies.
@@ -16,7 +17,7 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(2);
 const RECV_BUFFER_SIZE: usize = 8192;
 
 /// The default `MX` value advertised when discovering every device.
-const DEFAULT_MX: u8 = 2;
+pub const DEFAULT_MX: u8 = 2;
 
 /// Build the raw SSDP `M-SEARCH` datagram for `target`.
 ///
@@ -150,13 +151,19 @@ impl SsdpScanner {
         self.timeout
     }
 
-    /// Send an SSDP `M-SEARCH` for `target` and collect the replies.
+    /// Send an SSDP `M-SEARCH` for `target` and collect the replies, with
+    /// answer-window diagnostics.
     ///
-    /// The scanner binds a UDP socket, joins the SSDP multicast group, sends
-    /// the datagram and reads responses until the timeout elapses. Replies are
-    /// deduplicated by `USN`, falling back to `LOCATION` when no `USN` is
-    /// present.
-    pub async fn msearch(&self, target: &str, mx: u8) -> Result<Vec<SsdpMsearchResponse>> {
+    /// The C1 signal lives here: `total_datagrams_received == 0` means the
+    /// subnet was silent for the whole `M-SEARCH` window — on a mobile device
+    /// whose OS drops multicast, that is the fact that distinguishes "no
+    /// displays" from "not allowed to hear them". A zero-datagram window
+    /// returns [`DiscoveryOutcome::MulticastSilence`] and only an IO failure
+    /// is an error.
+    ///
+    /// Replies are deduplicated by `USN`, falling back to `LOCATION` when no
+    /// `USN` is present.
+    pub async fn msearch_outcome(&self, target: &str, mx: u8) -> Result<DiscoveryOutcome> {
         let multicast_addr: Ipv4Addr = SSDP_MULTICAST_IP
             .parse()
             .map_err(|err: std::net::AddrParseError| DiscoveryError::Malformed(err.to_string()))?;
@@ -171,6 +178,7 @@ impl SsdpScanner {
 
         let mut responses: Vec<SsdpMsearchResponse> = Vec::new();
         let mut datagrams = 0usize;
+        let mut unique_usns: Vec<String> = Vec::new();
         let mut seen: Vec<String> = Vec::new();
         let mut buffer = vec![0u8; RECV_BUFFER_SIZE];
         let deadline = tokio::time::Instant::now() + self.timeout;
@@ -187,6 +195,12 @@ impl SsdpScanner {
                     let raw = String::from_utf8_lossy(&buffer[..len]);
                     let response = parse_msearch_response(&raw, &peer.ip().to_string())?;
 
+                    if let Some(usn) = response.usn.as_deref() {
+                        if !unique_usns.iter().any(|seen| seen == usn) {
+                            unique_usns.push(usn.to_owned());
+                        }
+                    }
+
                     if let Some(key) = response.usn.clone().or_else(|| response.location.clone()) {
                         if seen.contains(&key) {
                             continue;
@@ -201,15 +215,37 @@ impl SsdpScanner {
             }
         }
 
+        let diagnostics = DiscoveryDiagnostics {
+            total_datagrams_received: datagrams,
+            unique_usns: unique_usns.len(),
+        };
+
         if datagrams == 0 {
-            // Nothing answered. An empty list would read as "no displays on this
-            // network", which is a different statement and usually the wrong one.
-            return Err(DiscoveryError::SilentProbe {
-                target: target.to_string(),
-            });
+            // Nothing answered at all. An empty list would read as "no displays
+            // on this network", which is a different statement and usually the
+            // wrong one.
+            return Ok(DiscoveryOutcome::MulticastSilence(diagnostics));
         }
 
-        Ok(responses)
+        Ok(DiscoveryOutcome::Found {
+            responses,
+            diagnostics,
+        })
+    }
+
+    /// Send an SSDP `M-SEARCH` for `target` and collect the replies.
+    ///
+    /// Legacy-shaped sugar over [`msearch_outcome`](Self::msearch_outcome): a
+    /// silent window stays an error here
+    /// ([`DiscoveryError::SilentProbe`]), so existing callers keep their
+    /// contract. Callers that want the C1 distinction call `msearch_outcome`.
+    pub async fn msearch(&self, target: &str, mx: u8) -> Result<Vec<SsdpMsearchResponse>> {
+        match self.msearch_outcome(target, mx).await? {
+            DiscoveryOutcome::Found { responses, .. } => Ok(responses),
+            DiscoveryOutcome::MulticastSilence(_) => Err(DiscoveryError::SilentProbe {
+                target: target.to_string(),
+            }),
+        }
     }
 
     /// Discover every SSDP device on the local network.

@@ -2988,6 +2988,7 @@ name = "tv-rs-discovery"
 version = "0.5.0"
 dependencies = [
  "async-trait",
+ "ipnet",
  "reqwest",
  "roxmltree",
  "serde",
