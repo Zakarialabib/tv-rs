@@ -43,19 +43,19 @@ word you will meet in the code or the protocol docs, with the place that explain
 
 ## Where the code lives
 
-| Path                                                | Contents                                                                                                        |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `crates/core`                                       | the device model: capability traits, the erased `DeviceHandle`, `CommandId`, observed state, the error taxonomy |
-| `crates/tv-rs`                                      | facade: discovery orchestration, vendor identification, `TvClient`                                              |
-| `crates/{discovery,power,tizen,webos,roku,mdc,cec}` | one wire protocol each (SSDP, Wake-on-LAN, Tizen, webOS, Roku ECP, Samsung MDC, HDMI-CEC)                       |
-| `crates/local`                                      | the host's own display (EDID/mode probing)                                                                      |
-| `crates/{transport,dlna,media}`                     | support: TLS/frame reader; DLNA renderer transport; `206`/HLS server                                            |
-| `crates/app`                                        | the TV app producer: a supplied payload in, `.wgt` / webOS app directory / web bundle out                       |
-| `crates/agent`                                      | reconciliation: desired state in, fleet converged, audited                                                      |
-| `crates/cli`                                        | the reference consumer (`publish = false`)                                                                      |
-| `xtask`                                             | workspace automation: `cargo xtask publish`, `cargo xtask hw-test`                                              |
-| `quirks/`                                           | the quirks table as data                                                                                        |
-| `docs/`                                             | these pages                                                                                                     |
+| Path                                                               | Contents                                                                                                                                          |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `crates/core`                                                      | the device model: capability traits, the erased `DeviceHandle`, `CommandId`, observed state, the error taxonomy                                   |
+| `crates/tv-rs`                                                     | facade: discovery orchestration, vendor identification, `TvClient`                                                                                |
+| `crates/{discovery,power,tizen,webos,roku,mdc,cec,bluetooth,cast}` | one wire protocol each (SSDP, Wake-on-LAN, Tizen, webOS, Roku ECP, Samsung MDC, HDMI-CEC) plus Bluetooth HID emulation and the Google Cast sender |
+| `crates/local`                                                     | the host's own display (EDID/mode probing)                                                                                                        |
+| `crates/{transport,dlna,media}`                                    | support: TLS/frame reader; DLNA renderer transport; `206`/HLS server                                                                              |
+| `crates/app`                                                       | the TV app producer: a supplied payload in, `.wgt` / webOS app directory / web bundle out                                                         |
+| `crates/agent`                                                     | reconciliation: desired state in, fleet converged, audited                                                                                        |
+| `crates/cli`                                                       | the reference consumer (`publish = false`)                                                                                                        |
+| `xtask`                                                            | workspace automation: `cargo xtask publish`, `cargo xtask hw-test`                                                                                |
+| `quirks/`                                                          | the quirks table as data                                                                                                                          |
+| `docs/`                                                            | these pages                                                                                                                                       |
 
 ---
 
@@ -200,7 +200,7 @@ is quarantined instead of aborting startup, and an empty token never overwrites 
 stored one. Where: [`crates/tizen/src/token_store.rs`](../crates/tizen/src/token_store.rs).
 
 **`identify_vendor`** — the heuristic that turns an SSDP reply and its descriptor
-into `Samsung` / `Lg` / `Roku` / `Unknown`. Deliberately narrow: unknown is a
+into `Samsung` / `Lg` / `Roku` / `Philips` / `Unknown`. Deliberately narrow: unknown is a
 normal answer. Where: [`src/client.rs`](../crates/tv-rs/src/client.rs).
 
 **HIL** — hardware in the loop: tests that talk to real televisions, compiled out

@@ -1,6 +1,7 @@
 //! Google Cast sender implementation for smart TVs and Chromecasts.
 //!
-//! Control channel uses TLS on port 8009 and EKE2 handshake.
+//! Control channel uses TLS on port 8009 with length-prefixed CASTV2
+//! protobuf messages (the device's self-signed certificate is accepted).
 //! Fallback to DIAL over HTTP port 8008 for launch/stop.
 
 #![forbid(unsafe_code)]

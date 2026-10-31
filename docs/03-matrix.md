@@ -119,8 +119,13 @@ in CI (Linux and Windows).
   firmware — the evidence and the rules are in
   [`02-playbook.md` §10](02-playbook.md#10-not-implemented-here).
 - **mDNS/Bonjour** discovery, **ARP** resolution, **WoWLAN** reasons.
-- **Android TV ADB**, **Google Cast**, **AirPlay** — separate trust models,
+- **Android TV ADB**, **AirPlay** — separate trust models,
   separate crates, not started (the Android TV spike is [plan item 2.4](06-plan.md)).
+  Google Cast moved out of this bullet: the sender ships standalone as
+  `tv-rs-cast` (TLS + CASTV2 protobuf on 8009, DIAL fallback on 8008) behind the
+  facade's `cast` feature, but it is a plain client, not a `DeviceHandle` backend —
+  `TvClient` still refuses `TvVendor::GoogleCast` and discovery does not classify
+  Cast devices into it. See [`cast-plan.md`](cast-plan.md).
 - **HLS segmentation** — the server serves existing segments; it does not cut
   them.
 
@@ -179,12 +184,12 @@ door.
 
 AV hardware is notoriously OS-dependent. The HAL traits isolate these realities, focusing strictly on the environments where technicians actually deploy control software.
 
-| Concern | Windows (Primary) | Android (Primary) | Linux (Secondary) |
-| --- | --- | --- | --- |
-| **Serial (RS-232/USB)** | COM* via SetupAPI/Registry | USB Host API (OTG adapters) | `/dev/ttyUSB*` (udev rules) |
-| **DDC/CI (Monitors)** | `GetPhysicalMonitorsFromHMONITOR` (DXVA2) | USB-C DisplayPort Aux / Kernel DRM | `/dev/i2c-*` (requires `i2c-dev`) |
-| **HDMI-CEC** | USB-CEC adapters (`libcec` wrapper) | Android `HdmiControlManager` (System apps) | `/dev/cec*` (CEC framework) |
-| **Permissions** | UAC / Driver prompts | USB Device Permissions / System App signature | `dialout` / `i2c` / `video` groups |
+| Concern                 | Windows (Primary)                         | Android (Primary)                             | Linux (Secondary)                  |
+| ----------------------- | ----------------------------------------- | --------------------------------------------- | ---------------------------------- |
+| **Serial (RS-232/USB)** | COM* via SetupAPI/Registry                | USB Host API (OTG adapters)                   | `/dev/ttyUSB*` (udev rules)        |
+| **DDC/CI (Monitors)**   | `GetPhysicalMonitorsFromHMONITOR` (DXVA2) | USB-C DisplayPort Aux / Kernel DRM            | `/dev/i2c-*` (requires `i2c-dev`)  |
+| **HDMI-CEC**            | USB-CEC adapters (`libcec` wrapper)       | Android `HdmiControlManager` (System apps)    | `/dev/cec*` (CEC framework)        |
+| **Permissions**         | UAC / Driver prompts                      | USB Device Permissions / System App signature | `dialout` / `i2c` / `video` groups |
 
 ## Peer landscape — the same work in other languages
 
