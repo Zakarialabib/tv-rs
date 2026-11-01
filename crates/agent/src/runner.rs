@@ -114,7 +114,7 @@ impl Reconciler {
     /// Each message pairs the device with an [`ImperativeCommand`]. The run
     /// loop dispatches a message only while an **active**
     /// [`LeaseMode::ObserveAndRelay`] lease names the same device and
-    /// holder-class surface ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â a relay without a live lease is refused, because
+    /// holder-class surface — a relay without a live lease is refused, because
     /// "do this now" over an unleased set is exactly the fight the lease
     /// vocabulary stops. Dispatch results are audited and surface as relay
     /// outcomes in `run`'s return value.
@@ -131,7 +131,7 @@ impl Reconciler {
     ///
     /// Returns the *existing active* lease when one is held, leaving state
     /// untouched: the caller decides to override it (release, then acquire
-    /// again) or back off. Only a live lease blocks ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â an expired row is swept
+    /// again) or back off. Only a live lease blocks — an expired row is swept
     /// rather than returned.
     ///
     /// This is the ingestion point a commissioning server calls; the HTTP and
@@ -155,7 +155,7 @@ impl Reconciler {
     /// Extends the device's lease to `expires_at_unix_ms`.
     ///
     /// Returns the updated lease, or `None` when no live lease is held for the
-    /// device under this holder ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â a renewal is not an acquisition.
+    /// device under this holder — a renewal is not an acquisition.
     #[must_use]
     pub fn renew_lease(
         &self,
@@ -167,7 +167,7 @@ impl Reconciler {
         let now = now_unix_ms();
         let held = leases.get_mut(device_id)?;
         // A renewal is not an acquisition: a different holder cannot extend a
-        // lease it does not hold, and an expired lease cannot be renewed ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â
+        // lease it does not hold, and an expired lease cannot be renewed —
         // acquire instead.
         if held.holder_id != holder_id {
             return None;
@@ -220,13 +220,13 @@ impl Reconciler {
 
     /// Puts a quarantined device back into rotation.
     ///
-    /// Quarantine is a stop, not a verdict: whoever fixed the television ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â or the
-    /// network in front of it ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â needs a way to say "try this one again" without
+    /// Quarantine is a stop, not a verdict: whoever fixed the television — or the
+    /// network in front of it — needs a way to say "try this one again" without
     /// restarting the agent. Both halves have to move for that to be true: the
     /// reconciler's own list decides whether a device is visited at all, and the
     /// ladder's count decides which step it resumes on. Releasing one without the
     /// other leaves the device held, or resumes it at the attempt that quarantined
-    /// it ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â which is why this is one call and not two.
+    /// it — which is why this is one call and not two.
     ///
     /// Returns whether the device was actually being held, so a UI can say
     /// "released" rather than "released (it was not quarantined)".
@@ -295,8 +295,8 @@ impl Reconciler {
 
     /// Runs passes until `stop` fires, relaying imperative commands in between.
     ///
-    /// Between ticks, a relay message ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â a device id plus the holder's
-    /// [`ImperativeCommand`] ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â is dispatched immediately if, and only if, an
+    /// Between ticks, a relay message — a device id plus the holder's
+    /// [`ImperativeCommand`] — is dispatched immediately if, and only if, an
     /// active [`LeaseMode::ObserveAndRelay`] lease covers that device. Relay
     /// outcomes are appended to the returned vector: each is an [`Outcome`]
     /// whose `action` is `None` and whose `result` names the relay verdict.
@@ -331,7 +331,7 @@ impl Reconciler {
 
     /// The next relay message, treating a closed channel as "no more".
     ///
-    /// Owning the retired channel inside the future ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â not in the select body ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â
+    /// Owning the retired channel inside the future — not in the select body —
     /// is what keeps a closed channel from busy-firing the loop: once
     /// `recv()` answers `None`, the receiver is dropped into `None` and the
     /// pending future takes over for the closed case.
@@ -446,7 +446,7 @@ impl Reconciler {
                 TelemetryVerdict::Healthy => {}
                 TelemetryVerdict::Wait(reason) => {
                     // Rung 1: a hot panel is dimmed before it is given up on. The
-                    // device is still deferred either way ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the remedy buys it a
+                    // device is still deferred either way — the remedy buys it a
                     // chance, it does not prove the panel recovered.
                     let remedy = self
                         .apply_remedy(handle, &telemetry, verdict, lease.as_ref())
@@ -609,7 +609,7 @@ impl Reconciler {
     ///
     /// Authorization **is** the lease: an active [`LeaseMode::ObserveAndRelay`]
     /// lease naming this device is what makes the holder's `do this now`
-    /// traffic legitimate. Without it the command is refused ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â unleased
+    /// traffic legitimate. Without it the command is refused — unleased
     /// imperative writes are exactly the wire-fight the vocabulary stops.
     async fn relay_command(&self, device_id: DeviceId, command: &ImperativeCommand) -> Outcome {
         let key = device_id.as_str().to_string();
@@ -711,7 +711,7 @@ fn describe(desired: &crate::desired::DesiredState) -> String {
 /// The fleet clock: Unix milliseconds from the platform wall clock.
 ///
 /// The lease vocabulary keeps no clock of its own, so the reconciler supplies
-/// one here ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â expiry is folded against this instant when a lease is read,
+/// one here — expiry is folded against this instant when a lease is read,
 /// renewed or swept.
 fn now_unix_ms() -> u64 {
     std::time::SystemTime::now()
@@ -731,7 +731,7 @@ fn remedy_label(step: RemedyStep) -> &'static str {
 
 /// The audit label and error text for a telemetry pass, given what the ladder did.
 ///
-/// `base` is used when the device could not take any step ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â an absent remedy is an
+/// `base` is used when the device could not take any step — an absent remedy is an
 /// honest "nothing this ladder can do", and the audit line should say exactly that
 /// rather than claim a rung that never ran.
 fn describe_remedy(
@@ -1181,7 +1181,7 @@ mod tests {
         tokio::fs::remove_dir_all(dir).await.unwrap();
     }
 
-    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Lease-aware runner tests ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+    // — Lease-aware runner tests —
 
     /// Helper: a lease that covers `device` for `holder` with the given mode,
     /// expiring one hour from now.
@@ -1345,7 +1345,7 @@ mod tests {
             .acquire_lease(mk("holder-A", LeaseMode::ObserveAndRelay, 60_000), now)
             .is_none());
 
-        // Second holder blocked ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â returns the existing lease.
+        // Second holder blocked — returns the existing lease.
         let blocked =
             reconciler.acquire_lease(mk("holder-B", LeaseMode::DisconnectAndYield, 120_000), now);
         assert!(blocked.is_some(), "second holder must be blocked");
