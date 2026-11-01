@@ -34,6 +34,7 @@ const ORDER: &[&str] = &[
     "tv-rs-power",
     "tv-rs-local",
     "tv-rs-dlna",
+    "tv-rs-cast",
     "tv-rs-roku",
     "tv-rs-mdc",
     "tv-rs-sicp",
