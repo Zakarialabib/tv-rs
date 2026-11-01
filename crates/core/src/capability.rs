@@ -580,7 +580,10 @@ impl Orientation {
 /// arriving, and is the panel well?* A panel with no signal is not broken — the
 /// source is — and a report that conflated the two would send someone to the wrong
 /// screen.
+/// A panel with no signal is not broken — the source is — and a report that conflated the two would send someone to the wrong
+/// screen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PanelHealth {
     /// Whether the active input carries a signal the panel can lock onto.
     pub signal_present: bool,

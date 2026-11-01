@@ -57,6 +57,95 @@ impl Serialize for Key {
     }
 }
 
+/// The inverse of [`Serialize for Key`]: `"up"` → `Key::Up`, `"digit_7"` →
+/// `Key::Digit(7)`. Kept here so the wire shape lives in one file — the
+/// companion's Tauri layer sends keys back, not just renders them.
+impl<'de> serde::Deserialize<'de> for Key {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let name = String::deserialize(deserializer)?;
+        if let Some(rest) = name.strip_prefix("digit_") {
+            let value: u8 = rest
+                .parse()
+                .map_err(|_| serde::de::Error::custom(format!("bad digit key {name:?}")))?;
+            return Key::digit(value)
+                .map_err(|_| serde::de::Error::custom(format!("digit out of range in {name:?}")));
+        }
+        let key = match name.as_str() {
+            "up" => Self::Up,
+            "down" => Self::Down,
+            "left" => Self::Left,
+            "right" => Self::Right,
+            "select" => Self::Select,
+            "back" => Self::Back,
+            "home" => Self::Home,
+            "menu" => Self::Menu,
+            "play" => Self::Play,
+            "pause" => Self::Pause,
+            "stop" => Self::Stop,
+            "rewind" => Self::Rewind,
+            "fast_forward" => Self::FastForward,
+            "previous" => Self::Previous,
+            "next" => Self::Next,
+            "info" => Self::Info,
+            "channel_up" => Self::ChannelUp,
+            "channel_down" => Self::ChannelDown,
+            "volume_up" => Self::VolumeUp,
+            "volume_down" => Self::VolumeDown,
+            "mute" => Self::Mute,
+            "power" => Self::Power,
+            "power_off" => Self::PowerOff,
+            "search" => Self::Search,
+            "enter" => Self::Enter,
+            "backspace" => Self::Backspace,
+            other => return Err(serde::de::Error::unknown_variant(other, KNOWN_KEYS)),
+        };
+        Ok(key)
+    }
+}
+
+/// The labels a `Key` can come back as, for a readable unknown-label error.
+const KNOWN_KEYS: &[&str] = &[
+    "up",
+    "down",
+    "left",
+    "right",
+    "select",
+    "back",
+    "home",
+    "menu",
+    "play",
+    "pause",
+    "stop",
+    "rewind",
+    "fast_forward",
+    "previous",
+    "next",
+    "info",
+    "channel_up",
+    "channel_down",
+    "volume_up",
+    "volume_down",
+    "mute",
+    "power",
+    "power_off",
+    "search",
+    "enter",
+    "backspace",
+    "digit_0",
+    "digit_1",
+    "digit_2",
+    "digit_3",
+    "digit_4",
+    "digit_5",
+    "digit_6",
+    "digit_7",
+    "digit_8",
+    "digit_9",
+];
+
 impl<T> Serialize for ObservedField<T>
 where
     T: Serialize,
@@ -155,6 +244,24 @@ mod tests {
             "\"digit_7\""
         );
         assert_eq!(serde_json::to_string(&Key::Up).unwrap(), "\"up\"");
+    }
+
+    #[test]
+    fn key_deserialises_back_from_the_wire_string() {
+        assert_eq!(from_str::<Key>("\"digit_7\"").unwrap(), Key::Digit(7));
+        assert_eq!(
+            from_str::<Key>("\"fast_forward\"").unwrap(),
+            Key::FastForward
+        );
+        assert!(from_str::<Key>("\"hyper\"").is_err());
+        assert!(from_str::<Key>("\"digit_11\"").is_err());
+        for label in KNOWN_KEYS {
+            // Round-trip every known label: parse the quoted wire string and
+            // re-serialise it. `digit_N` labels exercise the prefix branch.
+            let wire = format!("\"{label}\"");
+            let key = from_str::<Key>(&wire).expect("known label");
+            assert_eq!(to_string(&key).unwrap(), wire);
+        }
     }
 
     #[test]

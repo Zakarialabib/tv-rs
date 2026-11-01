@@ -58,10 +58,12 @@ impl fmt::Display for DeviceId {
 /// fact. [`DeviceOs::Unknown`] is a legitimate answer and must not be guessed into
 /// one of the others.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum DeviceOs {
     /// Samsung's Tizen remote-channel firmware.
     Tizen,
     /// LG's webOS SSAP firmware.
+    #[cfg_attr(feature = "serde", serde(rename = "webos"))]
     WebOs,
     /// Roku OS, whether a TV or a player.
     Roku,
@@ -69,13 +71,17 @@ pub enum DeviceOs {
     ///
     /// A different control surface from the consumer Tizen channel: no pairing, no
     /// WebSocket, and a display id instead of a remote.
+    #[cfg_attr(feature = "serde", serde(rename = "samsung_mdc"))]
     SamsungMdc,
     /// Philips commercial firmware driven by SICP over TCP or RS-232.
+    #[cfg_attr(feature = "serde", serde(rename = "philips_sicp"))]
     PhilipsSicp,
     /// Google Cast or Chromecast.
+    #[cfg_attr(feature = "serde", serde(rename = "googlecast"))]
     GoogleCast,
     /// Discovered, not identified.
     #[default]
+    #[cfg_attr(feature = "serde", serde(rename = "unknown"))]
     Unknown,
 }
 

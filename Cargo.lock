@@ -3006,7 +3006,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -3030,7 +3030,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-agent"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -3046,14 +3046,14 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-app"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "thiserror 2.0.21",
 ]
 
 [[package]]
 name = "tv-rs-bluetooth"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "bluer",
@@ -3066,7 +3066,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-cast"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "aes",
  "async-trait",
@@ -3091,7 +3091,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-cec"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "thiserror 2.0.21",
@@ -3100,7 +3100,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-cli"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "thiserror 2.0.21",
@@ -3112,7 +3112,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-core"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -3125,9 +3125,10 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-discovery"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
+ "ipnet",
  "reqwest",
  "roxmltree",
  "serde",
@@ -3141,7 +3142,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-dlna"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "log",
@@ -3155,7 +3156,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-ir"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -3171,7 +3172,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-lgcmd"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "thiserror 2.0.21",
@@ -3182,7 +3183,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-local"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3193,7 +3194,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-mdc"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "thiserror 2.0.21",
@@ -3204,7 +3205,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-media"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "axum",
  "bytes",
@@ -3215,7 +3216,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-power"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -3226,7 +3227,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-roku"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -3241,7 +3242,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-rules"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -3255,7 +3256,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-sicp"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "thiserror 2.0.21",
@@ -3266,7 +3267,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-sim"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "tokio",
  "tracing",
@@ -3277,7 +3278,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-spatial-audio"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -3289,7 +3290,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-tizen"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -3308,7 +3309,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-transport"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bytes",
  "futures-util",
@@ -3328,7 +3329,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-vision"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -3341,7 +3342,7 @@ dependencies = [
 
 [[package]]
 name = "tv-rs-webos"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -3985,7 +3986,7 @@ checksum = "2f45bb2c13fec6a6cb4c0f76a7e94839e110a14ec803ec2940777a94c347bc52"
 
 [[package]]
 name = "xtask"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "tokio",
  "tv-rs",

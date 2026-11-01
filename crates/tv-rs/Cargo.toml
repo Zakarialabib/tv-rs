@@ -18,7 +18,7 @@ tv-rs-transport.workspace = true
 tv-rs-tizen.workspace = true
 tv-rs-webos.workspace = true
 tv-rs-roku.workspace = true
-tv-rs-cast = { path = "../cast", version = "0.5.0", optional = true }
+tv-rs-cast = { path = "../cast", version = "0.6.0", optional = true }
 # MDC is a protocol crate like the others, but it is not reached through
 # `TvClient`: SSDP carries no authoritative vendor field, so a commercial panel
 # is never *classified* from a discovery reply. The facade re-exports it so a

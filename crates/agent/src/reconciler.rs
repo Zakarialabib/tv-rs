@@ -6,7 +6,10 @@
 //! clock or a runtime — and it is why the 50-device simulation is a loop, not a
 //! fixture.
 
-use tv_rs_core::{AppRef, Capability, CapabilitySet, Confidence, ObservedState, PowerState};
+use tv_rs_core::{
+    AppRef, Capability, CapabilitySet, Confidence, LeaseMode, MaintenanceLease, ObservedState,
+    PowerState,
+};
 
 use crate::desired::{DesiredPower, DesiredState};
 
@@ -25,15 +28,92 @@ pub enum Decision {
     Launch(AppRef),
     /// Stop touching this device and say why.
     Quarantine(&'static str),
+    /// A leased device asks the agent to keep its hands off the mutations.
+    ///
+    /// Under a [`LeaseMode::ObserveAndRelay`] lease the holder drives and the
+    /// fleet only watches: wake/sleep/launch decisions are suppressed until
+    /// the lease expires, while reads (ProbePower, Nothing) still run so the
+    /// dashboard stays truthful. The holder's own [`ImperativeCommand`]
+    /// traffic is routed through the relay, not through reconciliation.
+    ///
+    /// [`ImperativeCommand`]: tv_rs_core::ImperativeCommand
+    InhibitedByLease {
+        /// Who holds the lease, for the audit line.
+        holder_id: String,
+    },
+    /// A leased device takes the connection with it: the agent yields.
+    ///
+    /// Under a [`LeaseMode::DisconnectAndYield`] lease the holder owns the
+    /// connection — a pairing solemnity or a display-id wall cannot survive a
+    /// second client — so reconciliation stops entirely, *including* the
+    /// power probe the agent would normally refresh, until the lease expires.
+    YieldTransport,
 }
 
 /// Decides the next action for a device.
 ///
-/// The rules are ordered by what the least information can support: a stale belief
-/// is always probed before it is acted on, and an impossible request is refused
-/// before a device is touched at all.
+/// The three-argument entry point callers without a lease book use: it never
+/// inhibits. Lease-aware callers use [`decide_with_lease`], which wraps these
+/// same rules.
 #[must_use]
 pub fn decide(
+    desired: &DesiredState,
+    observed: &ObservedState,
+    capabilities: CapabilitySet,
+) -> Decision {
+    decide_with_lease(desired, observed, capabilities, None, 0)
+}
+
+/// Decides the next action for a device, honouring an active control lease.
+///
+/// The rules are ordered by what the least information can support: a stale belief
+/// is always probed before it is acted on, and an impossible request is refused
+/// before a device is touched at all. An *active* lease — one whose
+/// `device_id` matches the device the caller is reconciling, filtered by the
+/// caller — is consulted last, so it reshapes the mutating decisions:
+///
+/// | Lease | `Wake`/`Sleep`/`Launch` | `ProbePower` | `Quarantine` |
+/// |---|---|---|---|
+/// | [`LeaseMode::ObserveAndRelay`] | [`Decision::InhibitedByLease`] | runs (a read) | runs (a stop, not a write) |
+/// | [`LeaseMode::DisconnectAndYield`] | [`Decision::YieldTransport`] | [`Decision::YieldTransport`] | runs |
+///
+/// An *expired* lease (`is_active(now)` false) falls through to the normal
+/// rules: resuming after a lease is the whole point of expiry.
+#[must_use]
+pub fn decide_with_lease(
+    desired: &DesiredState,
+    observed: &ObservedState,
+    capabilities: CapabilitySet,
+    active_lease: Option<&MaintenanceLease>,
+    now_unix_ms: u64,
+) -> Decision {
+    let decision = decide_unleased(desired, observed, capabilities);
+
+    let Some(lease) = active_lease.filter(|lease| lease.is_active(now_unix_ms)) else {
+        return decision;
+    };
+
+    match lease.mode {
+        LeaseMode::ObserveAndRelay => match decision {
+            Decision::Wake | Decision::Sleep | Decision::Launch(_) => Decision::InhibitedByLease {
+                holder_id: lease.holder_id.clone(),
+            },
+            Decision::ProbePower | Decision::Nothing | Decision::Quarantine(_) => decision,
+            // The decision being reshaped is always the pre-lease one; these
+            // two arms cannot occur here and only keep the match exhaustive.
+            Decision::InhibitedByLease { .. } | Decision::YieldTransport => decision,
+        },
+        // The holder owns the connection; even the power probe the agent would
+        // normally refresh is its own write.
+        LeaseMode::DisconnectAndYield => match decision {
+            Decision::Quarantine(_) => decision,
+            _ => Decision::YieldTransport,
+        },
+    }
+}
+
+/// The original three-argument rules, before lease reshaping.
+fn decide_unleased(
     desired: &DesiredState,
     observed: &ObservedState,
     capabilities: CapabilitySet,
@@ -102,7 +182,7 @@ pub fn decide(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tv_rs_core::ObservedField;
+    use tv_rs_core::{DeviceId, ObservedField};
 
     fn capable() -> CapabilitySet {
         CapabilitySet::empty()
@@ -208,5 +288,142 @@ mod tests {
             decide(&DesiredState::showing("netflix"), &on(None), without_app),
             Decision::Quarantine(_)
         ));
+    }
+
+    #[test]
+    fn a_stale_power_belief_still_probes_under_an_observe_and_relay_lease() {
+        // Observation is half the lease's bargain: the dashboards keep reading
+        // while the holder drives.
+        let now = 10_000u64;
+        let lease = MaintenanceLease {
+            holder_id: "tablet-9".to_string(),
+            device_id: DeviceId::new("tv-1").unwrap(),
+            expires_at_unix_ms: 20_000,
+            mode: LeaseMode::ObserveAndRelay,
+        };
+        let observed = ObservedState {
+            power: ObservedField::from_unverified_write(PowerState::On),
+            ..on(None)
+        };
+        assert_eq!(
+            decide_with_lease(
+                &DesiredState::showing("netflix"),
+                &observed,
+                capable(),
+                Some(&lease),
+                now
+            ),
+            Decision::ProbePower,
+            "a toggle is not proof under a lease either"
+        );
+    }
+
+    #[test]
+    fn mutating_decisions_are_inhibited_while_the_holder_drives() {
+        let lease = MaintenanceLease {
+            holder_id: "tablet-9".to_string(),
+            device_id: DeviceId::new("tv-1").unwrap(),
+            expires_at_unix_ms: 20_000,
+            mode: LeaseMode::ObserveAndRelay,
+        };
+        let observed = ObservedState {
+            power: ObservedField::from_read(PowerState::Standby),
+            ..ObservedState::nothing_observed()
+        };
+        assert_eq!(
+            decide_with_lease(
+                &DesiredState::showing("netflix"),
+                &observed,
+                capable(),
+                Some(&lease),
+                10_000
+            ),
+            Decision::InhibitedByLease {
+                holder_id: "tablet-9".to_string()
+            },
+            "the agent must not wake the borrowed set out from under the holder"
+        );
+    }
+
+    #[test]
+    fn an_expired_lease_resumes_normal_rules() {
+        let lease = MaintenanceLease {
+            holder_id: "tablet-9".to_string(),
+            device_id: DeviceId::new("tv-1").unwrap(),
+            expires_at_unix_ms: 20_000,
+            mode: LeaseMode::ObserveAndRelay,
+        };
+        let observed = ObservedState {
+            power: ObservedField::from_read(PowerState::Standby),
+            ..ObservedState::nothing_observed()
+        };
+        assert_eq!(
+            decide_with_lease(
+                &DesiredState::showing("netflix"),
+                &observed,
+                capable(),
+                Some(&lease),
+                20_001
+            ),
+            Decision::Wake
+        );
+    }
+
+    #[test]
+    fn a_disconnect_and_yield_lease_yields_even_the_power_probe() {
+        // The holder may need to be the only client; the agent's own refresh
+        // write would announce a second session.
+        let lease = MaintenanceLease {
+            holder_id: "rig-2".to_string(),
+            device_id: DeviceId::new("tv-1").unwrap(),
+            expires_at_unix_ms: 20_000,
+            mode: LeaseMode::DisconnectAndYield,
+        };
+        let observed = ObservedState {
+            power: ObservedField::from_unverified_write(PowerState::On),
+            ..on(None)
+        };
+        assert_eq!(
+            decide_with_lease(
+                &DesiredState::showing("netflix"),
+                &observed,
+                capable(),
+                Some(&lease),
+                10_000
+            ),
+            Decision::YieldTransport
+        );
+    }
+
+    #[test]
+    fn a_quarantine_survives_both_lease_modes() {
+        // Quarantine is a stop, not a wire write: an impossible request must
+        // still be refused while the device is borrowed.
+        let without_wake = CapabilitySet::empty().with(Capability::PowerState);
+        let observed = ObservedState {
+            power: ObservedField::from_read(PowerState::Standby),
+            ..ObservedState::nothing_observed()
+        };
+        for mode in [LeaseMode::ObserveAndRelay, LeaseMode::DisconnectAndYield] {
+            let lease = MaintenanceLease {
+                holder_id: "tablet-9".to_string(),
+                device_id: DeviceId::new("tv-1").unwrap(),
+                expires_at_unix_ms: 20_000,
+                mode,
+            };
+            assert!(
+                matches!(
+                    decide_with_lease(
+                        &DesiredState::showing("netflix"),
+                        &observed,
+                        without_wake,
+                        Some(&lease),
+                        10_000
+                    ),
+                    Decision::Quarantine(_)
+                ),
+                "quarantine survives a {mode:?} lease"
+            );
+        }
     }
 }
