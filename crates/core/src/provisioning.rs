@@ -52,7 +52,7 @@ pub struct NetworkProvisionTarget {
     )]
     pub mac: Option<String>,
     /// SHA-256 certificate fingerprint as 64 lowercase hex characters, when the
-    /// install is pinned. Feeds [`tv_rs_transport`]'s `Pinned` policy through
+    /// install is pinned. Feeds `tv-rs-transport`'s `Pinned` policy through
     /// the facade.
     #[cfg_attr(
         feature = "serde",
