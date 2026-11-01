@@ -168,7 +168,7 @@ pub fn plan_remedy(
 /// A suppressed ladder is an honest `None`: the caller records that the
 /// device was deferred or quarantined **because it is leased**, not that a
 /// rung was skipped for want of a capability. Telemetry *reads* continue
-/// regardless — that is [`LeaseMode::ObserveAndRelay`]'s bargain.
+/// regardless — that is `LeaseMode::ObserveAndRelay`'s bargain.
 ///
 /// An expired lease falls through: resuming after expiry is the whole point.
 #[must_use]

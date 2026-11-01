@@ -242,7 +242,15 @@ pub fn create_p2p_server_config(
     cert: rustls::pki_types::CertificateDer<'static>,
     key: rustls::pki_types::PrivateKeyDer<'static>,
 ) -> Result<quinn::ServerConfig, P2pError> {
-    let mut server_crypto = rustls::ServerConfig::builder()
+    // An explicit provider, not plain `builder()`: with both `ring` and
+    // `aws-lc-rs` unified into the rustls feature set (quinn's ecosystem pulls
+    // the latter), rustls refuses to pick a default and `builder()` panics
+    // with "no process-level CryptoProvider available". `tls.rs` made the same
+    // choice for the same reason.
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let mut server_crypto = rustls::ServerConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .map_err(|e| P2pError::TlsConfig(format!("TLS13 required for QUIC: {e}")))?
         .with_no_client_auth()
         .with_single_cert(vec![cert], key)
         .map_err(|e| P2pError::TlsConfig(format!("Failed to create server TLS config: {e}")))?;
@@ -260,7 +268,12 @@ pub fn create_p2p_server_config(
 
 /// Configures QUIC ClientConfig for connecting to P2P peers.
 pub fn create_p2p_client_config() -> Result<quinn::ClientConfig, P2pError> {
-    let mut client_crypto = rustls::ClientConfig::builder()
+    // Explicit provider: see `create_p2p_server_config` for why plain
+    // `builder()` is not safe under today's unified feature set.
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let mut client_crypto = rustls::ClientConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .map_err(|e| P2pError::TlsConfig(format!("TLS13 required for QUIC: {e}")))?
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(SkipServerVerification))
         .with_no_client_auth();

@@ -8,7 +8,7 @@
 //!   needs to know *what* is at that address before opening a control
 //!   channel. It tries the four high-signal vendor ports in order and answers
 //!   with a [`ProbedEndpoint`] or a nothing.
-//! * [`sweep_subnet_bounded`] is the fallback for the C1 world: multicast
+//! * `sweep_subnet_bounded` is the fallback for the C1 world: multicast
 //!   silent, so discovery walks the subnet's unicast instead — bounded to 32
 //!   concurrent sockets so a phone's radios and a hotel NAT both survive it,
 //!   and behind the `mobile` feature so a library consumer never gets a

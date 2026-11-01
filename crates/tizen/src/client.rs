@@ -500,7 +500,7 @@ impl TizenClient {
     /// the remote's *name* is the remote's *identity*. A mobile instalment
     /// re-pairing with a token that was issued to a desktop one must present
     /// the same identity, or the TV sees an unfamiliar remote holding a
-    /// borrowed token. Symmetric with [`TvClient::with_client_identity`].
+    /// borrowed token. Symmetric with the facade's `TvClient::with_client_identity`.
     #[must_use]
     pub fn with_client_identity(mut self, identity: impl Into<String>) -> Self {
         self.device_name = identity.into();
