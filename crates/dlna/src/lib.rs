@@ -52,6 +52,9 @@ pub mod error;
 pub mod gena;
 /// GENA HTTP client: SUBSCRIBE / renew / UNSUBSCRIBE.
 pub mod gena_client;
+/// The subscription handle: the ticking loop that executes the registry's
+/// plan, plus the `NOTIFY` ingestion point.
+pub mod gena_handle;
 /// GENA NOTIFY body parsing (doubly-encoded `LastChange`).
 pub mod gena_parse;
 /// GENA subscription registry + renewal scheduling (pure bookkeeping).
@@ -81,6 +84,7 @@ pub use gena::{
     RENEW_MARGIN_FRACTION, REQUESTED_TIMEOUT_SECS,
 };
 pub use gena_client::{renew, subscribe as subscribe_raw, subscribe_renderer, unsubscribe};
+pub use gena_handle::{RendererEvent, SubscriptionHandle};
 pub use gena_parse::parse_notify_body;
 pub use gena_registry::{
     next_tick_delay as next_subscription_tick, plan_action, SubscriptionAction,
