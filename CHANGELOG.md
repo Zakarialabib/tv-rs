@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **G18 — DLNA event push** (`tv-rs-dlna`): `SubscriptionHandle`, the delivery
+  side the GENA plumbing always needed. A background tick loop executes the
+  pure [`SubscriptionRegistry`](crates/dlna/src/gena_registry.rs) plan over
+  the network — subscribe on attach, renew inside the renewal margin,
+  re-subscribe after a lapse or after the renew-failure budget — and retires a
+  renderer with a `RendererEvent::Abandoned` report once the subscribe budget
+  runs out. `ingest_notify(sid, body)` maps an incoming renderer NOTIFY
+  through the registry (SID → UDN) and `parse_notify_body` straight onto the
+  caller's event stream, so events surface as they arrive rather than on
+  poll. The NOTIFY callback endpoint stays caller-owned (the crate hosts no
+  HTTP server on purpose); `shutdown()` awaits the loop and `UNSUBSCRIBE`s
+  the live subscriptions; a plain drop stops the loop without network calls.
+  A renderer did not become a `TvClient` arm — the house rule G10e set for
+  MDC — so the push surface is a handle over `subscribe_renderer`, exactly the
+  decision the plan recorded.
+
 ## [0.6.0] - 2026-10-31
 
 ### Added
@@ -52,7 +70,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     refused otherwise. Outcomes audited and appended to the return vector as
     `"relayed"` / `"failed"` / `"refused"`.
   - `reconcile_one` wired to `decide_with_lease` and `apply_remedy(...,
-    lease.as_ref())`; `InhibitedByLease` / `YieldTransport` short-circuit with
+lease.as_ref())`; `InhibitedByLease` / `YieldTransport` short-circuit with
     `"inhibited"` / `"yielded"` outcomes and `ladder.on_success`.
 
 > **Note — no HTTP server in `crates/agent`**: the `/provision`, `/pair_start`,
@@ -67,6 +85,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 > They are deliberately separate enums — the identity continuity work proved
 > that collapsing them would require forking the capability matrix or adding
 > vendor-specific dead arms to a protocol-level type. Never unify them.
+
 - **`tv-rs-cast`**: the Google Cast sender — a TLS control channel on port 8009
   carrying length-prefixed CASTV2 protobuf messages (`crates/cast/proto/
 cast_channel.proto` compiled with `prost-build`), JSON-typed payloads for the
