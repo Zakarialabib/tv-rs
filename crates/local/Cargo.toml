@@ -16,7 +16,7 @@ serde_json.workspace = true
 tokio.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-wmi = "0.14"
+wmi = "0.18"
 windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Graphics_Gdi",
