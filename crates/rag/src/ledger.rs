@@ -75,6 +75,33 @@ impl EmpiricalWeight {
     }
 }
 
+/// What one agent audit line knows, in the ledger's vocabulary — the
+/// Tier A→B bridge's parameter. `result` uses the audit vocabulary
+/// (`ok` / `failed` / `skipped` / `quarantined`); device knowledge
+/// (vendor, model, firmware, taxonomy) is the caller's to supply because
+/// the audit line does not carry it.
+#[derive(Debug, Clone)]
+pub struct AuditFacts {
+    /// Device identifier from the audit entry.
+    pub device_id: String,
+    /// The audit entry's result field.
+    pub result: String,
+    /// The remedy the action attempted (`RemedyStep::as_str`, `action`, …).
+    pub remedy_attempted: String,
+    /// Measured duration of the attempt.
+    pub duration_ms: u64,
+    /// When the attempt happened (deterministic in tests).
+    pub timestamp_ms: u64,
+    /// The device's platform label (`DeviceOs::as_str`).
+    pub vendor: String,
+    /// The device's model, when the descriptor knows one.
+    pub model: Option<String>,
+    /// The device's firmware, when the descriptor knows one.
+    pub firmware: Option<String>,
+    /// The error taxonomy classification (empty for successes).
+    pub error_taxonomy: String,
+}
+
 /// Bounded in-memory ledger storing remediation episodes with empirical success scoring.
 #[derive(Debug, Clone)]
 pub struct EpisodicLedger {
@@ -225,6 +252,38 @@ impl EpisodicLedger {
         });
 
         scored.into_iter().map(|(cand, _, _)| cand).collect()
+    }
+
+    /// Ingests one agent audit-log entry as a remediation episode.
+    ///
+    /// This is the Tier A→B bridge: the agent's `AuditEntry` fields
+    /// (`device_id`, `action`, `result`) map onto an episode. `vendor` /
+    /// `model` / `firmware` / `error_taxonomy` are the caller's knowledge
+    /// about the device — the audit line does not carry them. `outcome`
+    /// maps from the audit `result` vocabulary: `ok` → success, `failed` →
+    /// failure, anything else (`skipped`, `quarantined`) → skipped.
+    ///
+    /// This crate is zero-tokio by design, so the async `AuditLog` reader
+    /// stays in `tv-rs-agent`; this conversion is the ingestion point its
+    /// flush path calls.
+    #[must_use]
+    pub fn episode_from_audit(audit: AuditFacts) -> RemediationEpisode {
+        let outcome = match audit.result.as_str() {
+            "ok" => RemediationOutcome::Success,
+            "failed" => RemediationOutcome::Failure,
+            _ => RemediationOutcome::Skipped,
+        };
+        RemediationEpisode {
+            device_id: audit.device_id,
+            vendor: audit.vendor,
+            model: audit.model,
+            firmware: audit.firmware,
+            error_taxonomy: audit.error_taxonomy,
+            remedy_attempted: audit.remedy_attempted,
+            outcome,
+            duration_ms: audit.duration_ms,
+            timestamp_ms: audit.timestamp_ms,
+        }
     }
 }
 

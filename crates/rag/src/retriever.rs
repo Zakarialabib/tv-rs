@@ -332,6 +332,46 @@ impl HybridRetriever {
 
         results
     }
+
+    /// One-shot grounded query: corpus chunks, grammar templates, and (given
+    /// a ledger) empirical weights for the query's vendor — the single entry
+    /// point a caller (the agent's healer, the rules compiler) uses, so the
+    /// three knowledge tiers travel together into [`crate::PromptAssembler`].
+    ///
+    /// The vendor for the weights comes from the query's hard filter when
+    /// present, so `with_vendor("samsung")` scopes both the corpus and the
+    /// episodic ranking to Samsung.
+    #[must_use]
+    pub fn query(
+        &self,
+        query: &RetrievalQuery,
+        ledger: Option<&crate::ledger::EpisodicLedger>,
+    ) -> crate::assembler::RagContextEnvelope {
+        let protocol_chunks = self
+            .retrieve_corpus(query)
+            .into_iter()
+            .map(|m| m.item)
+            .collect();
+        let grammar_templates = self
+            .retrieve_templates(query)
+            .into_iter()
+            .map(|m| m.item)
+            .collect();
+
+        let empirical_weights = match (ledger, query.vendor.as_deref()) {
+            (Some(ledger), Some(vendor)) => {
+                ledger.compute_weights(vendor, query.model_prefix.as_deref(), None, None)
+            }
+            _ => std::collections::HashMap::new(),
+        };
+
+        crate::PromptAssembler::assemble(
+            query.query.clone(),
+            protocol_chunks,
+            empirical_weights,
+            grammar_templates,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -368,5 +408,123 @@ mod tests {
         let matches = retriever.retrieve_templates(&query);
         assert!(!matches.is_empty());
         assert_eq!(matches[0].item.id, "videowall_2x2_scene");
+    }
+
+    /// The spec's verification gate 1: one query must retrieve BOTH the exact
+    /// SICP protocol chunk AND the video-wall grammar template, within
+    /// sub-millisecond time.
+    #[test]
+    fn combined_query_retrieves_sicp_chunk_and_videowall_template_submillisecond() {
+        let corpus = Corpus::default_knowledge_base().unwrap();
+        let mut templates = TemplateRegistry::new();
+        templates.populate_defaults();
+        let retriever = HybridRetriever::new(corpus, templates);
+
+        let query = RetrievalQuery::new("Philips SICP 0x56 video wall tile positioning");
+        let start = std::time::Instant::now();
+        let envelope = retriever.query(&query, None);
+        let elapsed = start.elapsed();
+
+        // The exact SICP protocol chunk surfaced.
+        assert!(
+            envelope
+                .protocol_chunks
+                .iter()
+                .any(|c| c.id == "philips_sicp_0x56_videowall"),
+            "the exact SICP chunk must be retrieved"
+        );
+        // The video-wall grammar template surfaced by the same query.
+        assert!(
+            envelope
+                .grammar_templates
+                .iter()
+                .any(|t| t.id == "videowall_2x2_scene"),
+            "the video-wall grammar template must be retrieved by the same query"
+        );
+        // Sub-millisecond: the whole one-shot (both BM25 passes + assembly).
+        assert!(
+            elapsed.as_nanos() < 1_000_000,
+            "one-shot query must stay sub-millisecond, took {elapsed:?}"
+        );
+    }
+
+    /// The spec's verification gate 2, end-to-end: a ledger seeded with WoL
+    /// failures and serial successes flows through the one-shot query as
+    /// empirical weights that rank serial above WoL.
+    #[test]
+    fn combined_query_carries_empirical_weights_for_reranking() {
+        let corpus = Corpus::default_knowledge_base().unwrap();
+        let mut templates = TemplateRegistry::new();
+        templates.populate_defaults();
+        let retriever = HybridRetriever::new(corpus, templates);
+
+        let mut ledger = crate::ledger::EpisodicLedger::new(50);
+        let facts = |result: &str, remedy: &str, timestamp_ms: u64| crate::ledger::AuditFacts {
+            device_id: "tv-1".into(),
+            result: result.into(),
+            remedy_attempted: remedy.into(),
+            duration_ms: 2000,
+            timestamp_ms,
+            vendor: "samsung".into(),
+            model: Some("QB55R".into()),
+            firmware: Some("1042".into()),
+            error_taxonomy: "Transport(Timeout)".into(),
+        };
+        for i in 0..3 {
+            ledger.record(crate::ledger::EpisodicLedger::episode_from_audit(facts(
+                "failed",
+                "wake_on_lan",
+                1000 + i,
+            )));
+        }
+        ledger.record(crate::ledger::EpisodicLedger::episode_from_audit(facts(
+            "ok",
+            "rs232_power_0x11",
+            2000,
+        )));
+
+        let query = RetrievalQuery::new("tv will not wake")
+            .with_vendor("samsung")
+            .with_limit(5);
+        let envelope = retriever.query(&query, Some(&ledger));
+
+        let wol = envelope.empirical_weights.get("wake_on_lan").unwrap();
+        let serial = envelope.empirical_weights.get("rs232_power_0x11").unwrap();
+        assert_eq!(wol.success_rate, 0.0, "WoL failed every time");
+        assert_eq!(serial.success_rate, 1.0, "serial worked");
+        assert!(serial.success_rate > wol.success_rate);
+
+        // And the ledger's re-ranker, fed the same weights, puts serial first.
+        let ranked = ledger.rerank_remedies(
+            &["wake_on_lan".to_string(), "rs232_power_0x11".to_string()],
+            "samsung",
+            Some("QB55R"),
+            Some("1042"),
+            Some("Transport"),
+        );
+        assert_eq!(ranked[0], "rs232_power_0x11");
+        assert_eq!(ranked[1], "wake_on_lan");
+    }
+
+    /// The audit bridge maps the agent's result vocabulary onto outcomes.
+    #[test]
+    fn audit_result_vocabulary_maps_onto_outcomes() {
+        let facts = |result: &str| crate::ledger::AuditFacts {
+            device_id: "d1".into(),
+            result: result.into(),
+            remedy_attempted: "reconnect".into(),
+            duration_ms: 10,
+            timestamp_ms: 0,
+            vendor: "lg".into(),
+            model: None,
+            firmware: None,
+            error_taxonomy: "Transport".into(),
+        };
+        let ok = crate::ledger::EpisodicLedger::episode_from_audit(facts("ok"));
+        let failed = crate::ledger::EpisodicLedger::episode_from_audit(facts("failed"));
+        let skipped = crate::ledger::EpisodicLedger::episode_from_audit(facts("quarantined"));
+        assert_eq!(ok.outcome, crate::ledger::RemediationOutcome::Success);
+        assert_eq!(failed.outcome, crate::ledger::RemediationOutcome::Failure);
+        assert_eq!(skipped.outcome, crate::ledger::RemediationOutcome::Skipped);
     }
 }

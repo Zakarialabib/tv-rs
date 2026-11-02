@@ -13,5 +13,7 @@ pub mod retriever;
 pub use assembler::{PromptAssembler, RagContextEnvelope};
 pub use corpus::{Corpus, ProtocolDocChunk};
 pub use grammar::{GrammarTemplate, TemplateRegistry};
-pub use ledger::{EmpiricalWeight, EpisodicLedger, RemediationEpisode, RemediationOutcome};
+pub use ledger::{
+    AuditFacts, EmpiricalWeight, EpisodicLedger, RemediationEpisode, RemediationOutcome,
+};
 pub use retriever::{HybridRetriever, RetrievalQuery, ScoredMatch};

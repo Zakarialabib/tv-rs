@@ -8,6 +8,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`tv-rs-rag`**: the in-memory grounding module — a static vendor-quirks corpus
+  (Tier A: MDC `0x84`, SICP `0x56`, webOS SSAP, Tizen channel, EDID strings parsed
+  from `quirks/default.toml`), an episodic remediation ledger (Tier B: bounded
+  ring-buffer, JSONL persistence, empirical success weights per
+  (vendor, model, firmware, taxonomy, remedy) with a healer re-ranker), and a
+  rule/scene AST grammar registry (Tier C: video-wall, keypad-lock, overheat,
+  source-switch few-shot templates). `HybridRetriever` gives metadata hard-filters
+  plus BM25 lexical scoring with exact hex-token boosts; `query()` is the one-shot
+  path compiling all three tiers into a `RagContextEnvelope`. Zero-tokio, zero
+  cloud, synchronous — the air-gapped constraint is a dependency fact, not a
+  comment. Wired into the ecosystem: the facade re-exports it (`tv_rs::rag`), and
+  `tv-rs-agent`'s `Reconciler::with_ledger` feeds every remedy attempt into the
+  ledger (`record_episode`), with `remedy_weights` reading empirical success back
+  for re-ranking. The audit-bridge conversion (`AuditFacts` → `RemediationEpisode`)
+  maps the agent's result vocabulary (`ok`/`failed`/`skipped`/`quarantined`).
+  Spec gates verified: the SICP + video-wall combined retrieval stays
+  sub-millisecond; WoL-failure/serial-success history re-ranks serial first.
+
+
 - **G18 — DLNA event push** (`tv-rs-dlna`): `SubscriptionHandle`, the delivery
   side the GENA plumbing always needed. A background tick loop executes the
   pure [`SubscriptionRegistry`](crates/dlna/src/gena_registry.rs) plan over
