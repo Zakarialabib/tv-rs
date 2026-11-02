@@ -18,8 +18,18 @@ currently documentation-derived.
 ## In progress (headless)
 
 - **ATR v2 (plan item 2.4)** — protocol facts verified offline against the
-  reference client (`androidtvremote2`); the 9 ordered probes and the verdict
-  row are pending a real panel. See [`06-plan.md` §2.4](06-plan.md#headless-verification—​in-progress).
+  reference client (`androidtvremote2`); the crate is implemented and unit-tested
+  ([`06-plan.md` §2.4](06-plan.md), [`04-androidtv-remote-v2-spike.md`](04-androidtv-remote-v2-spike.md)).
+  The 9 ordered probes run with one command —
+  `cargo run -p tv-rs-androidtv --example probe -- <host> [pairing-code]` — and print
+  ready-made rows for the table above; the run and the verdict row are pending a real
+  panel. Pairing is the gate: without the 6-hex code shown on the TV the runner stops
+  after the on-screen prompt.
+
+- **Everything else in the `sim` exits** (webOS A2, Tizen A2 + TOFU, DLNA/GENA event
+  push, MDC, SICP) is CI-verified against mock servers speaking the recorded wire
+  shapes — see [`06-plan.md` §3](06-plan.md). Those rows are *mock*-verified, not
+  hardware-verified: this table stays untouched until a real panel answers.
 
 Leave a cell **not run** rather than guessing. A row with gaps is more useful than
 a row with assumptions.

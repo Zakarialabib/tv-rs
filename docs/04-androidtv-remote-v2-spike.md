@@ -102,7 +102,37 @@ A5/C1 in the host layer).
 
 ---
 
-## 5. Open (pending the brief + a panel)
+## 5. Implementation status (headless-complete, 2026-11-02)
+
+The crate exists and is tested — `tv-rs-androidtv` on branch `spec/atr-v2-spike`:
+
+- **Wire**: `polo.proto` (verbatim AOSP) + `remotemessage.proto` compiled via
+  `prost-build`; varint framing per the reference client's `_DecodeVarint` contract.
+- **Pairing**: full 8-step Polo handshake in `client.rs` (`pair()`), the secret
+  math (`compute_pairing_secret`: SHA-256 over both RSA moduli/exponents + the code
+  salt, first hash byte must equal `pairing_code[0:2]`), and device identity from the
+  server cert subject (`parse_device_identity`, both SHIELD and Nexus Player forms).
+- **Control**: `ControlSession` over 6466 — key inject (with the `TvKeys.txt`
+  catalog in `keys.rs`), volume get/set, app info, deep link, ping.
+- **Client cert**: RSA-2048 generated with the `rsa` crate and handed to rcgen for
+  signing — rcgen's own RSA keygen needs aws-lc-rs (NASM on Windows); ring can sign an
+  RSA key it did not generate. The Polo secret requires RSA: an ECDSA client cert has
+  no modulus to hash.
+- **Tests**: 7 unit tests (varint shapes/round-trip, both identity subject forms,
+  pairing-secret round-trip with generated RSA certs, short-code rejection) + 2
+  doctests, all passing; `cargo check --workspace` clean.
+
+**The probe runner is committed**: `cargo run -p tv-rs-androidtv --example probe --
+<host> [pairing-code]` executes the 9 probes of §3 against one panel and prints
+ready-made rows for `08-hil-results.md`. Pairing gates the control probes; without the
+6-hex code the runner stops after the on-screen prompt.
+
+**Deliberately not built here**: a Polo mock-loopback in `tv-rs-sim` (the handshake's
+*pieces* are unit-tested; the full loop against a mock adds a second mock server for
+facts the reference client already demonstrates — decide after the first real probe
+run whether a vendor deviation needs one).
+
+## 6. Open (pending a panel)
 
 - The brief `androidtv-v2/references/atr-v2-brief.md` is not in this workspace
   (it lives in the companion app's `androidtv-v2/` tree). Collecting it is the
@@ -110,7 +140,7 @@ A5/C1 in the host layer).
   reference client and the 02-playbook.md shapes.
 - The probe run itself requires a real Android TV panel in this workspace.
 
-## 6. Adjacent tooling assessed (2026-11-02)
+## 7. Adjacent tooling assessed (2026-11-02)
 
 **REA (RE/analysis MCP) — not used for this spike, by plan.** The decision in
 §2.4 of [`06-plan.md`](06-plan.md) stands: the wire protocol is fully known

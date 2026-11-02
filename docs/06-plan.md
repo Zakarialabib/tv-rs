@@ -369,6 +369,30 @@ offline and what is still pending a real TV:
 (Atr v2 as primary transport, ADB as privileged fallback); and the release-train
 numbering consequence for the `0.4.0`/`0.6.0` gap.
 
+**Probe runner (ready).** `cargo run -p tv-rs-androidtv --example probe -- <host>
+[pairing-code]` runs the 9 probes against one panel and prints them as ready-made
+`08-hil-results.md` rows — the HIL session is one command, not a rewrite. Pairing is
+the gate: without the 6-hex code the runner stops after the prompt appears.
+
+**Replanned out of the spike — the ADB fallback becomes its own item.** The spike
+decided the split this plan's research predicted, and the fallback now has a named
+home instead of a one-line mention:
+
+- **Next session — ADB fallback + vendor knowledge.** The debloat-list corpus in
+  [`Gathin23/cleanyourtv`](https://github.com/Gathin23/cleanyourtv) (416 models,
+  106 brands, actively maintained; Python lists of packages to `pm disable-user` per
+  brand) is behavior knowledge for the privileged path: which vendor packages own the
+  remote's shortcut buttons, CEC input reporting quirks, tracking services. That feeds
+  a quirks-file entry per brand, not code branches — the rule §Appendix already
+  records. An `tv-rs-androidtv` feature `adb` (wrapping `adb_client`) covers sideload,
+  shell, Reboot and arbitrary intents; CleanYourTV's wire mechanics are the validation
+  reference, not a protocol source — it never speaks ATR v2.
+- **Next session — launcher surfaces (mobile/desktop).** The CleanYourTV launcher APK
+  (572 KB, Apple-TV-style home) is the model for the tv-rs app producer's installable
+  payloads (`tv-rs-app` Tizen `.wgt` / webOS bundle). The phone-side control story is
+  the companion layer from Appendix A: pairing flows, remote keys, power and input —
+  reusing the ATR v2 client on Android and the existing protocol crates elsewhere.
+
 ## 3. `tv-rs-sim` — verify the hardware exits without hardware
 
 Every exit above that says "on a real TV" needs something that answers like one. This
@@ -413,15 +437,34 @@ transcripts are checked against the protocol facts in
 [`02-playbook.md`](02-playbook.md); a doc records which exits are now CI-verified and
 which still need a panel.
 
-**WebOS slice — in progress.** The A2 pairing exit is now CI-verified with no panel:
-`crates/tv-rs/tests/webos_pairing_sim.rs` drives the mock in `crates/sim/src/webos_server.rs`
-(the real client against the real SSAP wire shapes) and runs under
-`cargo test -p tv-rs --test webos_pairing_sim`, covering first pairing through the
-prompt with key issue, stored-key pairing without a prompt, command round-trip on the
-paired session, rejected-prompt failure, the prompt-delay contract, and no-leak of a
-presented key. The mock had to stop stringifying SSAP `id` values (it was echoing
-JSON-encoded strings, so the client's correlation match always failed); that bug is
-fixed. Tizen and DLNA slices remain queued.
+**All three WebSocket slices landed — the sim section is complete.**
+
+- **webOS (A2)**: `crates/tv-rs/tests/webos_pairing_sim.rs` drives the mock in
+  `crates/sim/src/webos_server.rs` — first pairing through the prompt with key issue,
+  stored-key pairing without a prompt, command round-trip, rejected-prompt failure, the
+  prompt-delay contract, and no-leak of a presented key. The mock had to stop
+  stringifying SSAP `id` values (it was echoing JSON-encoded strings, so the client's
+  correlation match always failed); that bug is fixed.
+- **Tizen (A2 + TOFU)**: `crates/tv-rs/tests/tizen_pairing_sim.rs` drives
+  `crates/sim/src/tizen_server.rs` — first pairing through the PIN prompt with token
+  issue, stored-token pairing with no new prompt, forged-token denial
+  (`ms.channel.unauthorized` → `TizenError::Unauthorized`, not a hang), key presses on
+  the channel, the Tizen ≤4 `ed.installedApp.get` enumeration shape from the playbook,
+  and the modern channel's trust model end-to-end: a self-signed mock certificate
+  accepted once under `TrustOnFirstUse`, its fingerprint recorded, and a `Pinned`
+  reconnect succeeding against it. The TLS mock had to bind port 8002 — the client
+  hard-wires "TLS iff port == 8002" in `open_channel`.
+- **DLNA/GENA (G18)**: `crates/tv-rs/tests/dlna_gena_sim.rs` closes the event-push loop
+  no earlier test closed: the handle SUBSCRIBEs over real HTTP to
+  `crates/sim/src/gena_renderer.rs`, the renderer POSTs a real NOTIFY (the
+  angle-bracketed `CALLBACK` header, the doubly-encoded `LastChange` body) back to the
+  caller-owned sink, and the event surfaces on the handle's stream as
+  `RendererEvent::Transport` — `TransportState::Playing` parsed from the escaped XML.
+  Shutdown UNSUBSCRIBEs the live subscription; an unknown SID is rejected at both ends.
+
+Roku (ECP) stays un-simulated by design: plain HTTP on 8060, already covered by
+`wiremock`, and a second mechanism for a solved problem is the mistake this plan
+records twice.
 
 ## 4. `tv-rs-sony` — Future work
 
