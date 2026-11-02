@@ -20,6 +20,7 @@ mqtt = ["dep:rumqttc", "rumqttc/use-rustls-no-provider"]
 
 [dependencies]
 tv-rs-core.workspace = true
+tv-rs-rag.workspace = true
 reqwest = { workspace = true, optional = true }
 rumqttc = { workspace = true, optional = true }
 async-trait.workspace = true

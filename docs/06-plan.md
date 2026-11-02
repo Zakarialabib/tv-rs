@@ -393,6 +393,59 @@ home instead of a one-line mention:
   the companion layer from Appendix A: pairing flows, remote keys, power and input —
   reusing the ATR v2 client on Android and the existing protocol crates elsewhere.
 
+### 2.5 `tv-rs-rag` — the grounding module (Tier A/B/C)
+
+Landed from the Jules PR (#92), taken over and completed on
+`feat/tv-rs-rag` after a rebase onto the ATR spike's `main`. The spec's
+non-negotiables hold as dependency facts, not comments: no tokio in the
+dependency list, no cloud API, bounded ring-buffer memory, deterministic
+timestamps in tests.
+
+The three tiers:
+
+- **Tier A corpus** (`corpus.rs`): vendor quirks from
+  `quirks/default.toml` plus canonical protocol specs (Samsung MDC `0x84`,
+  Philips SICP `0x56`, webOS SSAP, Tizen channel, EDID strings), chunked with
+  `(vendor, protocol, model_prefix, capability)` metadata for exact
+  pre-filtering.
+- **Tier B ledger** (`ledger.rs`): bounded episodic remediation history with
+  JSONL persistence; `compute_weights` scores `(vendor, model, firmware,
+  taxonomy, remedy)` tuples and `rerank_remedies` orders the healer's
+  candidates by what actually worked. `episode_from_audit(AuditFacts)` is the
+  bridge from the agent's audit vocabulary.
+- **Tier C grammar** (`grammar.rs`): declarative rule/scene/action AST
+  templates (video-wall 2×2, keypad lock, overheat rule, source switch) as
+  few-shot grounding for a natural-language command compiler.
+
+`retriever.rs` carries the inverted index (metadata hard-filters + BM25 with
+exact hex-token boosts) and `assembler.rs` the `RagContextEnvelope` +
+markdown rendering. The one-shot path `HybridRetriever::query(query, ledger)`
+compiles all three tiers into one envelope.
+
+**Where it is wired:**
+- the facade re-exports `tv_rs::rag` (like `tizen`, `webos`, `mdc`);
+- `tv-rs-agent`'s `Reconciler::with_ledger(...)` feeds every remedy attempt
+  (`record_episode`, timed, platform-labeled from `DeviceOs::as_str()`), and
+  `remedy_weights(handle)` reads the empirical weights back for the healer.
+
+**What it deliberately is not:** there is no LLM in this workspace and none is
+planned (the SaaS pivot's NO-AI rule). The envelope's markdown rendering is a
+grounding artifact for a caller that wants one — an offline rules compiler or
+an operator-facing diagnostic. The crate is useful with no model consumer at
+all: the ledger's re-ranker is a healer improvement on its own.
+
+**Spec gates verified** (`cargo test -p tv-rs-rag`, 12 tests):
+`combined_query_retrieves_sicp_chunk_and_videowall_template_submillisecond`
+(both tiers from one query, < 1 ms) and
+`combined_query_carries_empirical_weights_for_reranking` (WoL-failure vs
+serial-success history re-ranks serial first, end-to-end through the
+one-shot query and the bridge).
+
+**Exit — met:** the three gates from the approval spec (lexical protocol
+retrieval, episodic re-ranking, CI gates) all hold; `--workspace` tests,
+clippy `-D warnings`, rustdoc and fmt are clean; zero tokio/cloud deps in
+`crates/rag/Cargo.toml`.
+
 ## 3. `tv-rs-sim` — verify the hardware exits without hardware
 
 Every exit above that says "on a real TV" needs something that answers like one. This
