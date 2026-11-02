@@ -218,11 +218,25 @@ pub fn read_outer_message<S: Read>(stream: &mut S) -> Result<OuterMessage> {
 mod tests {
     use super::*;
 
+    /// A pure-Rust RSA key pair handed to rcgen for signing (mirrors
+    /// `generate_client_cert`; rcgen's own RSA keygen needs aws-lc-rs).
+    fn rsa_key_pair() -> rcgen::KeyPair {
+        use rsa::pkcs8::EncodePrivateKey;
+        let private_key = {
+            let mut rng = rand::thread_rng();
+            rsa::RsaPrivateKey::new(&mut rng, 2048).expect("rsa keygen")
+        };
+        let pkcs8 = private_key.to_pkcs8_der().expect("pkcs8");
+        rcgen::KeyPair::from_pkcs8_der_and_sign_algo(
+            &pki_types::PrivatePkcs8KeyDer::from(pkcs8.as_bytes()),
+            &rcgen::PKCS_RSA_SHA256,
+        )
+        .expect("key pair from pkcs8")
+    }
+
     /// Build an RSA self-signed cert with a `CN=atvremote/<cn>/<mac>` subject.
     fn rsa_cert(cn: &str) -> Vec<u8> {
-        let key_pair =
-            rcgen::KeyPair::generate_rsa_for(&rcgen::PKCS_RSA_SHA256, rcgen::RsaKeySize::_2048)
-                .expect("rsa keygen");
+        let key_pair = rsa_key_pair();
         let mut params = rcgen::CertificateParams::new(vec![]).expect("params");
         params
             .distinguished_name
@@ -281,9 +295,7 @@ mod tests {
     #[test]
     fn parse_device_identity_nexus_player_style() {
         // Nexus Player: name in dnQualifier, CN = atvremote/MAC.
-        let key_pair =
-            rcgen::KeyPair::generate_rsa_for(&rcgen::PKCS_RSA_SHA256, rcgen::RsaKeySize::_2048)
-                .expect("rsa keygen");
+        let key_pair = rsa_key_pair();
         let mut params = rcgen::CertificateParams::new(vec![]).expect("params");
         params.distinguished_name.push(
             rcgen::DnType::CustomDnType(vec![2, 5, 4, 46]),

@@ -7,6 +7,7 @@ use crate::proto::polo::{
     options, outer_message, Configuration, Options, OuterMessage, PairingRequest, PairingRequestAck,
 };
 use prost::Message;
+use rsa::pkcs8::EncodePrivateKey;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{ClientConfig, ClientConnection, StreamOwned};
@@ -86,10 +87,23 @@ fn build_tls_config(client_cert: Vec<u8>, client_key: Vec<u8>) -> Result<Arc<Cli
 /// Returns `(cert_der, key_der)` in DER format.
 pub fn generate_client_cert() -> Result<(Vec<u8>, Vec<u8>)> {
     // Polo's secret is computed from the RSA modulus/exponent of both certs,
-    // so the client key must be RSA (the TV's is always RSA).
-    let key_pair =
-        rcgen::KeyPair::generate_rsa_for(&rcgen::PKCS_RSA_SHA256, rcgen::RsaKeySize::_2048)
-            .map_err(|e| AtrError::PairingRejected(format!("key generation failed: {e}")))?;
+    // so the client key must be RSA (the TV's is always RSA). The `rsa` crate
+    // generates it in pure Rust: rcgen's own RSA keygen needs aws-lc-rs (and a
+    // NASM toolchain on Windows), while ring can sign an RSA key it did not
+    // generate.
+    let private_key = {
+        let mut rng = rand::thread_rng();
+        rsa::RsaPrivateKey::new(&mut rng, 2048)
+            .map_err(|e| AtrError::PairingRejected(format!("key generation failed: {e}")))?
+    };
+    let pkcs8 = private_key
+        .to_pkcs8_der()
+        .map_err(|e| AtrError::PairingRejected(format!("pkcs8 encode: {e}")))?;
+    let key_pair = rcgen::KeyPair::from_pkcs8_der_and_sign_algo(
+        &pki_types::PrivatePkcs8KeyDer::from(pkcs8.as_bytes()),
+        &rcgen::PKCS_RSA_SHA256,
+    )
+    .map_err(|e| AtrError::PairingRejected(format!("key pair from pkcs8: {e}")))?;
     let params = rcgen::CertificateParams::new(vec!["tv-rs-androidtv".into()])
         .map_err(|e| AtrError::PairingRejected(format!("cert params: {e}")))?;
     let cert = params
