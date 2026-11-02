@@ -15,8 +15,8 @@
 //!   token — the playbook's "present that token next time and the TV does
 //!   not prompt".
 //! - **A stale or forged token is a denial, not a hang.** The reply is the
-//!   recorded `ms.channel.unauthorized` event, which the client maps to
-//!   [`tv_rs_tizen::TizenError::Unauthorized`].
+//!   recorded `ms.channel.unauthorized` event — the shape the client maps to
+//!   `TizenError::Unauthorized`.
 //! - **Key presses are recorded, never answered.** The real channel sends no
 //!   per-command reply for `ms.remote.control` frames; a mock that invented
 //!   one would be a shape the playbook does not have.
@@ -121,14 +121,11 @@ impl MockTizenServer {
                                     match tls {
                                         Some(materials) => {
                                             let acceptor = materials.acceptor;
-                                            match acceptor.accept(socket).await {
-                                                Ok(stream) => {
-                                                    let ws = tokio_tungstenite::accept_async(stream).await;
-                                                    if let Ok(ws) = ws {
-                                                        serve_connection(ws, recorder).await;
-                                                    }
+                                            if let Ok(stream) = acceptor.accept(socket).await {
+                                                let ws = tokio_tungstenite::accept_async(stream).await;
+                                                if let Ok(ws) = ws {
+                                                    serve_connection(ws, recorder).await;
                                                 }
-                                                Err(_) => {}
                                             }
                                         }
                                         None => {

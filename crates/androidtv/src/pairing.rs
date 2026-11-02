@@ -115,11 +115,11 @@ pub fn compute_pairing_secret(
 
     let mut hasher = Sha256::new();
     hasher.update(&client_mod);
-    hasher.update(&[0x00]);
+    hasher.update([0x00]);
     hasher.update(&client_exp);
-    hasher.update(&[0x00]);
+    hasher.update([0x00]);
     hasher.update(&server_mod);
-    hasher.update(&[0x00]);
+    hasher.update([0x00]);
     hasher.update(&server_exp);
     hasher.update(&salt_bytes);
     let hash = hasher.finalize();

@@ -106,8 +106,11 @@ A5/C1 in the host layer).
 
 The crate exists and is tested — `tv-rs-androidtv` on branch `spec/atr-v2-spike`:
 
-- **Wire**: `polo.proto` (verbatim AOSP) + `remotemessage.proto` compiled via
-  `prost-build`; varint framing per the reference client's `_DecodeVarint` contract.
+- **Wire**: `polo.proto` (verbatim AOSP) + `remotemessage.proto`; the prost
+  bindings are **pre-generated and committed** (`src/proto/polo.rs`, `remote.rs` —
+  the same pattern `tv-rs-cast` uses), so no CI job or contributor checkout needs
+  `protoc`. Regenerate when a `.proto` changes and commit the diff in the same
+  commit. Varint framing per the reference client's `_DecodeVarint` contract.
 - **Pairing**: full 8-step Polo handshake in `client.rs` (`pair()`), the secret
   math (`compute_pairing_secret`: SHA-256 over both RSA moduli/exponents + the code
   salt, first hash byte must equal `pairing_code[0:2]`), and device identity from the

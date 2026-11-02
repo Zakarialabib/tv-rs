@@ -80,7 +80,7 @@ async fn subscribe_notify_loop_surfaces_the_event() {
     // The renderer delivers a NOTIFY to the registered callback URL.
     let body = playing_notify_body();
     let delivered = renderer
-        .deliver_notify(&format!("uuid:mock-sid-1"), &body)
+        .deliver_notify("uuid:mock-sid-1", &body)
         .await;
     assert!(delivered, "the NOTIFY reached the callback sink");
 
