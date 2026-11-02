@@ -72,6 +72,9 @@ pub struct Reconciler {
     quarantined: HashSet<DeviceId>,
     /// Active control leases, one per device at most.
     leases: Mutex<HashMap<DeviceId, MaintenanceLease>>,
+    /// Episodic remediation ledger (Tier B): fed at remedy time when present,
+    /// read by `remedy_weights` for empirical re-ranking.
+    ledger: Option<Mutex<tv_rs_rag::EpisodicLedger>>,
     /// The imperative relay: lease-holder "do this now" traffic.
     relay: Option<mpsc::Receiver<(DeviceId, ImperativeCommand)>>,
 }
@@ -98,8 +101,18 @@ impl Reconciler {
             policy,
             quarantined: HashSet::new(),
             leases: Mutex::new(HashMap::new()),
+            ledger: None,
             relay: None,
         }
+    }
+
+    /// Feeds an episodic remediation ledger: every remedy attempt records an
+    /// episode, and [`Self::remedy_weights`] reads empirical success rates
+    /// back. See [`tv_rs_rag::EpisodicLedger`].
+    #[must_use]
+    pub fn with_ledger(mut self, ledger: tv_rs_rag::EpisodicLedger) -> Self {
+        self.ledger = Some(Mutex::new(ledger));
+        self
     }
 
     /// Records every action to `log`.
@@ -392,6 +405,7 @@ impl Reconciler {
             lease,
             now_unix_ms(),
         )?;
+        let started = std::time::Instant::now();
         let outcome = match step {
             RemedyStep::DimBacklight { to } => match handle.as_brightness() {
                 Some(brightness) => brightness.set_brightness(to, CommandId::new()).await,
@@ -409,7 +423,79 @@ impl Reconciler {
                 None => Err(tv_rs_core::TvError::Unsupported(Capability::Reboot)),
             },
         };
+        self.record_episode(
+            handle,
+            step.as_str(),
+            match &outcome {
+                Ok(()) => Ok(()),
+                Err(error) => Err(error),
+            },
+            started,
+        );
         Some((step, outcome))
+    }
+
+    /// Feeds the episodic ledger with one remedy attempt (the Tier A→B bridge).
+    ///
+    /// A failure here must never affect healing: the ledger is memory-only and
+    /// the lock cannot be poisoned across a panic in this crate, but even so
+    /// every error path degrades to "no episode recorded".
+    fn record_episode(
+        &self,
+        handle: &dyn DeviceHandle,
+        remedy: &str,
+        outcome: Result<(), &tv_rs_core::TvError>,
+        started: std::time::Instant,
+    ) {
+        let Some(ledger) = &self.ledger else {
+            return;
+        };
+        let descriptor = handle.descriptor();
+        let result = match outcome {
+            Ok(()) => "ok",
+            Err(_) => "failed",
+        };
+        let error_taxonomy = match outcome {
+            Ok(()) => String::new(),
+            Err(error) => error.to_string(),
+        };
+        let episode = tv_rs_rag::EpisodicLedger::episode_from_audit(tv_rs_rag::AuditFacts {
+            device_id: handle.id().as_str().to_string(),
+            result: result.to_string(),
+            remedy_attempted: remedy.to_string(),
+            duration_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            timestamp_ms: now_unix_ms(),
+            vendor: descriptor.os.as_str().to_string(),
+            model: descriptor.model.clone(),
+            firmware: descriptor.firmware.clone(),
+            error_taxonomy,
+        });
+        if let Ok(mut guard) = ledger.lock() {
+            guard.record(episode);
+        }
+    }
+
+    /// Empirical success weights per remedy for this device's platform and
+    /// model, from the ledger when one is attached. The healer's re-ranker
+    /// consumes these; an absent ledger means no history and neutral ranking.
+    #[must_use]
+    pub fn remedy_weights(
+        &self,
+        handle: &dyn DeviceHandle,
+    ) -> std::collections::HashMap<String, tv_rs_rag::EmpiricalWeight> {
+        let Some(ledger) = &self.ledger else {
+            return std::collections::HashMap::new();
+        };
+        let descriptor = handle.descriptor();
+        match ledger.lock() {
+            Ok(guard) => guard.compute_weights(
+                descriptor.os.as_str(),
+                descriptor.model.as_deref(),
+                None,
+                None,
+            ),
+            Err(_) => std::collections::HashMap::new(),
+        }
     }
 
     async fn reconcile_one(&self, handle: &dyn DeviceHandle) -> Outcome {
@@ -1009,6 +1095,41 @@ mod tests {
         tokio::fs::remove_dir_all(dir).await.unwrap();
     }
 
+    #[tokio::test]
+    async fn remedy_attempts_feed_the_episodic_ledger() {
+        let (provider, dir) = provider_for(r#"{"tv-hot":{"power":"on","app":"netflix"}}"#).await;
+        let mock =
+            Arc::new(MockBackend::new(descriptor("tv-hot")).with_telemetry(telemetry_at(70)));
+        let mut reconciler = Reconciler::new(vec![mock.clone()], provider)
+            .with_ledger(tv_rs_rag::EpisodicLedger::new(100));
+
+        let outcomes = reconciler.tick().await;
+        assert_eq!(outcomes[0].result, "deferred", "{outcomes:?}");
+
+        // The remedy attempt landed in the ledger with the platform label,
+        // the step name, and the outcome.
+        let weights = {
+            let descriptor = descriptor("tv-hot");
+            let guard = reconciler
+                .ledger
+                .as_ref()
+                .expect("ledger attached")
+                .lock()
+                .unwrap();
+            guard.compute_weights(descriptor.os.as_str(), None, None, None)
+        };
+        let dim = weights
+            .get("dim_backlight")
+            .expect("dim_backlight recorded");
+        assert_eq!(dim.attempts, 1, "one dim attempt recorded: {weights:?}");
+        assert_eq!(dim.success_rate, 1.0, "the dim succeeded");
+
+        // And the reconciler's own reader returns the same weights.
+        let weights = reconciler.remedy_weights(mock.as_ref());
+        assert!(weights.contains_key("dim_backlight"));
+
+        tokio::fs::remove_dir_all(dir).await.unwrap();
+    }
     #[tokio::test]
     async fn a_hot_panel_that_cannot_dim_is_deferred_without_a_command() {
         let (provider, dir) = provider_for(r#"{"tv-plain":{"power":"on","app":"netflix"}}"#).await;

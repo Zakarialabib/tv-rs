@@ -3093,6 +3093,7 @@ dependencies = [
  "tv-rs-ir",
  "tv-rs-mdc",
  "tv-rs-power",
+ "tv-rs-rag",
  "tv-rs-roku",
  "tv-rs-sicp",
  "tv-rs-sim",
@@ -3115,6 +3116,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tv-rs-core",
+ "tv-rs-rag",
  "wiremock",
 ]
 
@@ -3317,6 +3319,18 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tv-rs-transport",
+]
+
+[[package]]
+name = "tv-rs-rag"
+version = "0.6.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml",
+ "tv-rs-core",
+ "tv-rs-rules",
 ]
 
 [[package]]
