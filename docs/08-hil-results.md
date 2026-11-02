@@ -13,7 +13,13 @@ currently documentation-derived.
 
 | Date | Vendor | Model | Year | Firmware | Discover | Pair | Key | Launch | Power read | Power off | Wake | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2026-10-24 | Samsung | tv-rs-mdc | not run | not run | not run | not run | not run | not run | not run | not run | not run | UNVERIFIED (no hardware run yet) |
+| 2026-10-24 | Samsung | tv-rs-mdc | not run | not run | not run | not run | not run | not run | not run | not run | UNVERIFIED (no hardware run yet) |
 
-Leave a cell **not run** rather than guessing. A row with gaps is more useful than a
-row with assumptions.
+## In progress (headless)
+
+- **ATR v2 (plan item 2.4)** — protocol facts verified offline against the
+  reference client (`androidtvremote2`); the 9 ordered probes and the verdict
+  row are pending a real panel. See [`06-plan.md` §2.4](06-plan.md#headless-verification—​in-progress).
+
+Leave a cell **not run** rather than guessing. A row with gaps is more useful than
+a row with assumptions.
