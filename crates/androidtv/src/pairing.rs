@@ -78,10 +78,13 @@ pub fn parse_device_identity(server_cert_der: &[u8]) -> Result<DeviceIdentity> {
 pub fn cert_modulus_exponent(cert_der: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
     let (_, cert) = x509_parser::parse_x509_certificate(cert_der)
         .map_err(|e| AtrError::PairingRejected(format!("bad cert: {e}")))?;
-    let pubkey = cert.public_key();
-    match pubkey {
+    let spki = cert.public_key();
+    let pk = spki
+        .parsed()
+        .map_err(|e| AtrError::PairingRejected(format!("bad public key: {e}")))?;
+    match pk {
         x509_parser::public_key::PublicKey::RSA(rsa) => {
-            Ok((rsa.modulus.to_bytes_be(), rsa.exponent.to_bytes_be()))
+            Ok((rsa.modulus.to_vec(), rsa.exponent.to_vec()))
         }
         _ => Err(AtrError::PairingRejected("public key is not RSA".into())),
     }
