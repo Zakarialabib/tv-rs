@@ -1,5 +1,5 @@
 //! webOS SSAP pairing exits (plan §3 slice 2) against the mock server.
-//!"
+//!
 //! The A2 exit wants pairing proven without hardware: first pairing through
 //! the prompt, a stored `client-key` pairing silently, command round-trips on
 //! the paired session, and the prompt being dismissed. The mock speaks the

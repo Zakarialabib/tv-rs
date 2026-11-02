@@ -370,6 +370,16 @@ transcripts are checked against the protocol facts in
 [`02-playbook.md`](02-playbook.md); a doc records which exits are now CI-verified and
 which still need a panel.
 
+**WebOS slice — in progress.** The A2 pairing exit is now CI-verified with no panel:
+`crates/tv-rs/tests/webos_pairing_sim.rs` drives the mock in `crates/sim/src/webos_server.rs`
+(the real client against the real SSAP wire shapes) and runs under
+`cargo test -p tv-rs --test webos_pairing_sim`, covering first pairing through the
+prompt with key issue, stored-key pairing without a prompt, command round-trip on the
+paired session, rejected-prompt failure, the prompt-delay contract, and no-leak of a
+presented key. The mock had to stop stringifying SSAP `id` values (it was echoing
+JSON-encoded strings, so the client's correlation match always failed); that bug is
+fixed. Tizen and DLNA slices remain queued.
+
 ## 4. `tv-rs-sony` — Future work
 
 **Removed at the owner's instruction** ("certainly not sony"). It is not deferred and not
