@@ -1,65 +1,93 @@
 //! Remote key codes and the TvKeys catalog.
 
-use crate::proto::remote::{RemoteDirection, RemoteKeyCode};
+use crate::proto::remote::RemoteDirection;
 
 /// A remote key code (the `RemoteKeyCode` enum from `remotemessage.proto`).
 ///
-/// The subset below matches `TvKeys.txt` from the reference client; the
-/// full enum (0..=304) is available via [`RemoteKeyCode::from_raw`].
+/// The variants below are the subset from `TvKeys.txt` in the reference
+/// client; arbitrary raw codes are available via [`Key::from_raw`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i32)]
 pub enum Key {
-    /// Unknown / no key.
+    /// Unknown / no key (`KEYCODE_UNKNOWN`).
     Unknown = 0,
-    /// Home key.
+    /// Home key (`KEYCODE_HOME`).
     Home = 3,
-    /// Back key.
+    /// Back key (`KEYCODE_BACK`).
     Back = 4,
-    /// '0'..'9' keys.
+    /// '0' key (`KEYCODE_0`).
     Num0 = 7,
+    /// '1' key (`KEYCODE_1`).
     Num1 = 8,
+    /// '2' key (`KEYCODE_2`).
     Num2 = 9,
+    /// '3' key (`KEYCODE_3`).
     Num3 = 10,
+    /// '4' key (`KEYCODE_4`).
     Num4 = 11,
+    /// '5' key (`KEYCODE_5`).
     Num5 = 12,
+    /// '6' key (`KEYCODE_6`).
     Num6 = 13,
+    /// '7' key (`KEYCODE_7`).
     Num7 = 14,
+    /// '8' key (`KEYCODE_8`).
     Num8 = 15,
+    /// '9' key (`KEYCODE_9`).
     Num9 = 16,
-    /// D-pad.
+    /// D-pad up (`KEYCODE_DPAD_UP`).
     DpadUp = 19,
+    /// D-pad down (`KEYCODE_DPAD_DOWN`).
     DpadDown = 20,
+    /// D-pad left (`KEYCODE_DPAD_LEFT`).
     DpadLeft = 21,
+    /// D-pad right (`KEYCODE_DPAD_RIGHT`).
     DpadRight = 22,
+    /// D-pad center (`KEYCODE_DPAD_CENTER`).
     DpadCenter = 23,
-    /// Volume.
+    /// Volume up (`KEYCODE_VOLUME_UP`).
     VolumeUp = 24,
+    /// Volume down (`KEYCODE_VOLUME_DOWN`).
     VolumeDown = 25,
-    VolumeMute = 165,
-    /// Power.
+    /// Power key (`KEYCODE_POWER`).
     Power = 26,
-    /// Media.
-    MediaPlayPause = 85,
-    MediaPlay = 126,
-    MediaPause = 127,
-    MediaNext = 87,
-    MediaPrevious = 88,
-    MediaStop = 86,
-    MediaRewind = 89,
-    MediaFastForward = 90,
-    /// Channel.
-    ChannelUp = 166,
-    ChannelDown = 167,
-    /// Menu / info.
+    /// Menu key (`KEYCODE_MENU`).
     Menu = 82,
-    Settings = 176,
-    /// Red / green / yellow / blue.
-    ProgRed = 168,
-    ProgGreen = 169,
-    ProgYellow = 170,
-    ProgBlue = 171,
-    /// Search / assist.
+    /// Search key (`KEYCODE_SEARCH`).
     Search = 84,
+    /// Play/pause toggle (`KEYCODE_MEDIA_PLAY_PAUSE`).
+    MediaPlayPause = 85,
+    /// Stop (`KEYCODE_MEDIA_STOP`).
+    MediaStop = 86,
+    /// Next track (`KEYCODE_MEDIA_NEXT`).
+    MediaNext = 87,
+    /// Previous track (`KEYCODE_MEDIA_PREVIOUS`).
+    MediaPrevious = 88,
+    /// Rewind (`KEYCODE_MEDIA_REWIND`).
+    MediaRewind = 89,
+    /// Fast forward (`KEYCODE_MEDIA_FAST_FORWARD`).
+    MediaFastForward = 90,
+    /// Play (`KEYCODE_MEDIA_PLAY`).
+    MediaPlay = 126,
+    /// Pause (`KEYCODE_MEDIA_PAUSE`).
+    MediaPause = 127,
+    /// Volume mute (`KEYCODE_VOLUME_MUTE`).
+    VolumeMute = 165,
+    /// Channel up (`KEYCODE_CHANNEL_UP`).
+    ChannelUp = 166,
+    /// Channel down (`KEYCODE_CHANNEL_DOWN`).
+    ChannelDown = 167,
+    /// Red color key (`KEYCODE_PROG_RED`).
+    ProgRed = 168,
+    /// Green color key (`KEYCODE_PROG_GREEN`).
+    ProgGreen = 169,
+    /// Yellow color key (`KEYCODE_PROG_YELLOW`).
+    ProgYellow = 170,
+    /// Blue color key (`KEYCODE_PROG_BLUE`).
+    ProgBlue = 171,
+    /// Settings key (`KEYCODE_SETTINGS`).
+    Settings = 176,
+    /// Voice assist key (`KEYCODE_ASSIST`).
     Assist = 219,
 }
 
@@ -122,15 +150,15 @@ impl Key {
 /// A key press direction (the `RemoteDirection` enum).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
-    /// Key down.
+    /// Key down (`UNKNOWN_DIRECTION`, the default).
     Down,
     /// Key up.
     Up,
-    /// Long press start.
+    /// Long press start (`START_LONG`).
     StartLong,
-    /// Long press end.
+    /// Long press end (`END_LONG`).
     EndLong,
-    /// Short press (tap).
+    /// Short press / tap (`SHORT`).
     Short,
 }
 
@@ -138,8 +166,7 @@ impl Direction {
     /// The raw `RemoteDirection` value.
     pub fn as_raw(self) -> i32 {
         match self {
-            Self::Down => 0,
-            Self::Up => 0,
+            Self::Down | Self::Up => RemoteDirection::UnknownDirection as i32,
             Self::StartLong => RemoteDirection::StartLong as i32,
             Self::EndLong => RemoteDirection::EndLong as i32,
             Self::Short => RemoteDirection::Short as i32,

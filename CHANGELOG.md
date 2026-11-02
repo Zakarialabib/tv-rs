@@ -24,6 +24,51 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   MDC — so the push surface is a handle over `subscribe_renderer`, exactly the
   decision the plan recorded.
 
+- **webOS SSAP pairing exit (A2) verified without hardware** (`tv-rs`): the
+  `tv-rs-sim` mock (`MockWebOsServer`) answers the real SSAP frames, and the
+  `tv-rs` crate's `tests/webos_pairing_sim.rs` covers the full A2 exit with no
+  panel — first pairing through the prompt with key issue, stored `client-key`
+  pairing without a prompt, command round-trip on the paired session, rejected-
+  prompt failure, the prompt-delay contract, and no-leak of a presented key.
+  Runs under `cargo test -p tv-rs --test webos_pairing_sim`.
+
+- **MDC + SICP mock control** (`tv-rs-sim`): the commercial-display slices in
+  `MockMdcServer` and `MockSicpServer` are wired through `commercial_sim.rs` and
+  run in the `tv-rs` test suite.
+
+- **Tizen remote-channel mock** (`tv-rs-sim`): `MockTizenServer` answers the real
+  `ms.channel` wire — first pairing through the PIN prompt with token issue, stored
+  tokens echoed without a prompt, forged tokens denied with the recorded
+  `ms.channel.unauthorized` event, key presses recorded (the real channel sends no
+  per-command reply), and the Tizen ≤4 `ed.installedApp.get` enumeration shape from
+  the playbook. A TLS variant serves a self-signed certificate, so the
+  `TrustOnFirstUse`/`Pinned` trust model is proven end-to-end
+  (`tv-rs/tests/tizen_pairing_sim.rs`, 6 tests). Note: the client hard-wires
+  "TLS iff port == 8002", so a TLS mock must bind that port.
+
+- **GENA event-push loop closed** (`tv-rs-sim` + `tv-rs/tests/dlna_gena_sim.rs`):
+  `MockGenaRenderer` answers the recorded SUBSCRIBE/renew/UNSUBSCRIBE verb table
+  (including the `400` for a renew that carries `CALLBACK`) and then acts as the HTTP
+  client, delivering real NOTIFYs to the subscriber's callback URL;
+  `MockNotifySink` is the minimal caller-owned endpoint. The new tests close the
+  loop no earlier test closed — subscribe over real HTTP, NOTIFY delivered in the
+  opposite direction, `RendererEvent::Transport` surfacing with
+  `TransportState::Playing` parsed from the doubly-encoded `LastChange` body, and
+  shutdown UNSUBSCRIBEs the live subscription.
+
+- **ATR v2 probe runner** (`tv-rs-androidtv`): `cargo run -p tv-rs-androidtv
+  --example probe -- <host> [pairing-code]` runs the 9 ordered probes of
+  `docs/04-androidtv-remote-v2-spike.md` §3 against one panel and prints
+  ready-made `08-hil-results.md` rows. Client certificates are RSA-2048 generated
+  with the `rsa` crate (pure Rust — rcgen's own RSA keygen needs aws-lc-rs/NASM);
+  the Polo secret requires RSA.
+
+- **Android TV / Google TV remote v2 spike** (`docs/04-androidtv-remote-v2-spike.md`,
+  branch `spec/atr-v2-spike`): the ATR v2 protocol facts (mTLS pairing on 6467
+  with the Polo handshake, protobuf control on 6466, name+MAC from the server
+  cert), the 9-probe plan, and the verdict criteria are written down. Research
+  done headless; probe run needs a real TV panel.
+
 ## [0.6.0] - 2026-10-31
 
 ### Added

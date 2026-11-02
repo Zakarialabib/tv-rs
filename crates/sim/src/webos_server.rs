@@ -1,7 +1,7 @@
 //! LG webOS SSAP hardware mock server for integration testing.
 //!
 //! Speaks the real SSAP framing from the client side's recorded shapes
-//! ([`tv_rs_webos`] parses `register` / `registered` / `error` frames and the
+//! (the `tv_rs_webos` crate parses `register` / `registered` / `error` frames and the
 //! `response` envelope its `SsapResponse` struct captures), so the pairing
 //! exit the plan calls A2 can be exercised with no panel:
 //!

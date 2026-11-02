@@ -12,6 +12,12 @@ ignore = [
     "RUSTSEC-2026-0099", # rustls-webpki advisory from rumqttc dependency
     "RUSTSEC-2026-0104", # rustls-webpki advisory from rumqttc dependency
     "RUSTSEC-2026-0382", # rustls-webpki advisory from rumqttc dependency
+    # Marvin Attack (RUSTSEC-2023-0071) on `rsa` 0.9 — pulled by `tv-rs-androidtv`
+    # for RSA-2048 *key generation only* (the Polo pairing client cert). The
+    # attack targets RSA *decryption* timing; this workspace never decrypts with
+    # the generated key. The patched fix is `rsa` 0.10 (currently RC); revisit
+    # when it stabilizes.
+    "RUSTSEC-2023-0071",
 ]
 
 [licenses]
