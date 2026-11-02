@@ -4,9 +4,8 @@ use crate::control::ControlSession;
 use crate::error::{AtrError, Result};
 use crate::pairing::{parse_device_identity, DeviceIdentity};
 use crate::proto::polo::{
-    outer_message, Configuration, Options, OuterMessage, PairingRequest, PairingRequestAck,
+    options, outer_message, Configuration, Options, OuterMessage, PairingRequest, PairingRequestAck,
 };
-use hex;
 use prost::Message;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
@@ -86,8 +85,11 @@ fn build_tls_config(client_cert: Vec<u8>, client_key: Vec<u8>) -> Result<Arc<Cli
 ///
 /// Returns `(cert_der, key_der)` in DER format.
 pub fn generate_client_cert() -> Result<(Vec<u8>, Vec<u8>)> {
-    let key_pair = rcgen::KeyPair::generate()
-        .map_err(|e| AtrError::PairingRejected(format!("key generation failed: {e}")))?;
+    // Polo's secret is computed from the RSA modulus/exponent of both certs,
+    // so the client key must be RSA (the TV's is always RSA).
+    let key_pair =
+        rcgen::KeyPair::generate_rsa_for(&rcgen::PKCS_RSA_SHA256, rcgen::RsaKeySize::_2048)
+            .map_err(|e| AtrError::PairingRejected(format!("key generation failed: {e}")))?;
     let params = rcgen::CertificateParams::new(vec!["tv-rs-androidtv".into()])
         .map_err(|e| AtrError::PairingRejected(format!("cert params: {e}")))?;
     let cert = params
@@ -102,14 +104,14 @@ pub fn generate_client_cert() -> Result<(Vec<u8>, Vec<u8>)> {
 /// # Example
 ///
 /// ```no_run
-/// use tv_rs_androidtv::AtrClient;
+/// use tv_rs_androidtv::{AtrClient, Key};
 ///
-/// # async fn run() -> tv_rs_androidtv::Result<()> {
+/// # fn run() -> tv_rs_androidtv::Result<()> {
 /// let mut client = AtrClient::new("192.168.1.20");
-/// let identity = client.pair("tv-rs", "123456").await?;
+/// let identity = client.pair("tv-rs", "123456")?;
 /// println!("Paired with {} ({})", identity.name, identity.mac);
-/// let mut control = client.connect_control().await?;
-/// control.press_key(tv_rs_androidtv::keys::Key::Home)?;
+/// let mut control = client.connect_control()?;
+/// control.press_key(Key::Home)?;
 /// # Ok(())
 /// # }
 /// ```
@@ -152,7 +154,7 @@ impl AtrClient {
     ///
     /// `pairing_code` is the 6-hex code the device displays on screen.
     /// Returns the device identity (name + MAC from the server cert).
-    pub async fn pair(&mut self, client_name: &str, pairing_code: &str) -> Result<DeviceIdentity> {
+    pub fn pair(&mut self, client_name: &str, pairing_code: &str) -> Result<DeviceIdentity> {
         let addr = format!("{}:{}", self.host, self.pair_port);
         let stream = TcpStream::connect(&addr).map_err(AtrError::Tls)?;
         stream.set_nodelay(true).ok();
@@ -210,7 +212,7 @@ impl AtrClient {
 
 /// Run the Polo pairing handshake over a TLS stream (blocking).
 fn run_handshake_blocking<S>(
-    tls: &mut S,
+    mut tls: S,
     client_cert_der: &[u8],
     server_cert_der: &[u8],
     client_name: &str,
@@ -219,7 +221,7 @@ fn run_handshake_blocking<S>(
 where
     S: Read + Write,
 {
-    use crate::pairing::{decode_varint_prefix, encode_varint_frame};
+    use crate::pairing::encode_varint_frame;
 
     // Step 1: send pairing request.
     let request = OuterMessage {
@@ -252,7 +254,7 @@ where
         protocol_version: 2,
         status: outer_message::Status::Ok as i32,
         options: Some(Options {
-            preferred_role: options::RoleType::Input as i32,
+            preferred_role: Some(options::RoleType::Input as i32),
             input_encodings: vec![options::Encoding {
                 r#type: options::encoding::EncodingType::Hexadecimal as i32,
                 symbol_length: 6,
@@ -282,10 +284,10 @@ where
         protocol_version: 2,
         status: outer_message::Status::Ok as i32,
         configuration: Some(Configuration {
-            encoding: Some(options::Encoding {
+            encoding: options::Encoding {
                 r#type: options::encoding::EncodingType::Hexadecimal as i32,
                 symbol_length: 6,
-            }),
+            },
             client_role: options::RoleType::Input as i32,
         }),
         ..Default::default()

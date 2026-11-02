@@ -1,8 +1,8 @@
 use crate::error::{AtrError, Result};
 use crate::keys::{key_inject, Direction, Key};
 use crate::proto::remote::{
-    RemoteAppInfo, RemoteAppLinkLaunchRequest, RemoteImeKeyInject, RemoteMessage, RemotePingRequest,
-    RemoteSetVolumeLevel, RemoteStart,
+    RemoteAppInfo, RemoteAppLinkLaunchRequest, RemoteImeKeyInject, RemoteMessage,
+    RemotePingRequest, RemoteSetVolumeLevel, RemoteStart,
 };
 use prost::Message;
 use std::io::{Read, Write};
@@ -31,7 +31,8 @@ fn encode_frame(msg: &RemoteMessage) -> Vec<u8> {
     let mut buf = Vec::new();
     let len = msg.encoded_len();
     crate::pairing::encode_varint(len as u64, &mut buf);
-    msg.encode(&mut buf).expect("prost encode into Vec cannot fail");
+    msg.encode(&mut buf)
+        .expect("prost encode into Vec cannot fail");
     buf
 }
 
@@ -69,10 +70,12 @@ impl<S> ControlSession<S>
 where
     S: Read + Write,
 {
+    /// Create a new control session over an existing TLS stream.
     pub fn new(stream: S) -> Self {
         Self { stream }
     }
 
+    /// Send a raw `RemoteMessage` and read the device's response.
     pub fn send_raw(&mut self, msg: RemoteMessage) -> Result<RemoteMessage> {
         let frame = encode_frame(&msg);
         self.stream.write_all(&frame).map_err(AtrError::Tls)?;
@@ -80,10 +83,12 @@ where
         read_frame(&mut self.stream)
     }
 
+    /// Send a short key press (tap).
     pub fn press_key(&mut self, key: Key) -> Result<ControlResponse> {
         self.send_key(key, Direction::Short)
     }
 
+    /// Send a key with a specific press direction.
     pub fn send_key(&mut self, key: Key, direction: Direction) -> Result<ControlResponse> {
         let inject = key_inject(key, direction);
         let msg = RemoteMessage {
@@ -94,6 +99,7 @@ where
         Ok(ControlResponse::KeyInject)
     }
 
+    /// Read the current volume state.
     pub fn get_volume(&mut self) -> Result<ControlResponse> {
         let msg = RemoteMessage {
             remote_set_volume_level: Some(RemoteSetVolumeLevel::default()),
@@ -107,6 +113,7 @@ where
         }
     }
 
+    /// Set the volume level.
     pub fn set_volume(&mut self, level: u32) -> Result<ControlResponse> {
         let msg = RemoteMessage {
             remote_set_volume_level: Some(RemoteSetVolumeLevel {
@@ -123,6 +130,7 @@ where
         }
     }
 
+    /// Read the current foreground app info.
     pub fn get_app_info(&mut self) -> Result<ControlResponse> {
         let msg = RemoteMessage {
             remote_ime_key_inject: Some(RemoteImeKeyInject {
@@ -143,6 +151,7 @@ where
         }
     }
 
+    /// Launch an app via a deep-link URI.
     pub fn launch_app_link(&mut self, app_link: &str) -> Result<ControlResponse> {
         let msg = RemoteMessage {
             remote_app_link_launch_request: Some(RemoteAppLinkLaunchRequest {
@@ -154,6 +163,7 @@ where
         Ok(ControlResponse::Unknown)
     }
 
+    /// Send a start/stop command.
     pub fn start(&mut self, started: bool) -> Result<ControlResponse> {
         let msg = RemoteMessage {
             remote_start: Some(RemoteStart { started }),
@@ -167,6 +177,7 @@ where
         }
     }
 
+    /// Send a ping and read the response.
     pub fn ping(&mut self) -> Result<ControlResponse> {
         let msg = RemoteMessage {
             remote_ping_request: Some(RemotePingRequest { val1: 0, val2: 0 }),

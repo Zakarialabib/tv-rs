@@ -24,6 +24,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   MDC — so the push surface is a handle over `subscribe_renderer`, exactly the
   decision the plan recorded.
 
+- **webOS SSAP pairing exit (A2) verified without hardware** (`tv-rs`): the
+  `tv-rs-sim` mock (`MockWebOsServer`) answers the real SSAP frames, and the
+  `tv-rs` crate's `tests/webos_pairing_sim.rs` covers the full A2 exit with no
+  panel — first pairing through the prompt with key issue, stored `client-key`
+  pairing without a prompt, command round-trip on the paired session, rejected-
+  prompt failure, the prompt-delay contract, and no-leak of a presented key.
+  Runs under `cargo test -p tv-rs --test webos_pairing_sim`.
+
+- **MDC + SICP mock control** (`tv-rs-sim`): the commercial-display slices in
+  `MockMdcServer` and `MockSicpServer` are wired through `commercial_sim.rs` and
+  run in the `tv-rs` test suite.
+
+- **Android TV / Google TV remote v2 spike** (`docs/04-androidtv-remote-v2-spike.md`,
+  branch `spec/atr-v2-spike`): the ATR v2 protocol facts (mTLS pairing on 6467
+  with the Polo handshake, protobuf control on 6466, name+MAC from the server
+  cert), the 9-probe plan, and the verdict criteria are written down. Research
+  done headless; probe run needs a real TV panel.
+
 ## [0.6.0] - 2026-10-31
 
 ### Added
