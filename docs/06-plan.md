@@ -279,31 +279,15 @@ and three of the four were already done:
 - **G17 — DLNA transport info: DONE.** `get_transport_info` and `get_position_info` exist
   as free functions (`crates/dlna/src/soap.rs:292`/`301`) *and* as `AvTransport` trait
   methods (lines 394/396). The audit's "neither action appears in the crate" was false.
-- **G18 — event push: open, but smaller than the audit said.** The audit claimed "the only
-  `subscribe` in the tree is the agent's MQTT transport". False: `tv-rs-dlna` carries a
-  complete GENA surface — `subscribe_renderer`, `renew`, `unsubscribe`, a
-  `SubscriptionRegistry` with renew-failure accounting, `parse_notify_body`, and
-  `TransportEvent`/`TransportState`. What is genuinely missing is the **facade** push API,
-  and a design question sits in front of it: DLNA renderers are not part of `TvClient`
-  (which holds Tizen/webOS/Roku plus the erased MDC handle), so a push surface must decide
-  whether a renderer becomes a fourth arm or a separate subscription handle. **That
-  decision is the work, not the plumbing — and it is now decided: a separate handle.**
-
-  **Decision: a renderer does not become a `TvClient` arm.** The precedent is G10e, which
-  hit the identical question for MDC and answered it the same way: `TvVendor` has no MDC
-  variant and the facade exposes `mdc_handle()` returning an erased handle, because a
-  panel that is not a television should not be smuggled into the television enum. A DLNA
-  MediaRenderer is not a television either — it is a device you cast *to*, with no power,
-  no input and no key surface — so the push API is a subscription handle over
-  `gena_client::subscribe_renderer`, not a fourth arm. Two further reasons this is the
-  cheaper answer: `TvClient`'s arms each carry a vendor client *and* a connection pool,
-  neither of which a renderer has, and `DeviceHandle` already exists for the
-  many-devices case the companion cares about.
-
-  **What that leaves to build:** a `SubscriptionHandle` (or equivalent) that owns a
-  `SubscriptionRegistry` tick loop, surfaces `TransportEvent`s to a caller as they arrive
-  rather than on poll, and renews before expiry — the registry already tracks the
-  renew-failure budget, so the missing part is the delivery side, not the bookkeeping.
+- **G18 — event push: DONE.** The audit both over- and under-claimed. The GENA plumbing
+  (`subscribe_renderer`, `renew`, `unsubscribe`, the `SubscriptionRegistry` with its
+  renew-failure budget, `parse_notify_body`) was already in the tree — "the only
+  `subscribe` is the agent's MQTT transport" was false — and what was genuinely missing,
+  the *delivery side*, now exists as `tv-rs-dlna`'s `SubscriptionHandle`: a ticking loop
+  that executes the registry's plan over the network and an `ingest_notify` point that
+  routes a NOTIFY (SID → UDN → parsed `LastChange`) straight onto the caller's event
+  stream. The decision the plan recorded — a renderer is not a `TvClient` arm, the
+  precedent being G10e's `mdc_handle()` — lives on as the handle module's own rationale.
 
 **The pattern is now four for four, and it is the most useful thing this page has
 produced.** G15, G16 and G17 were all reported open and all three were already
@@ -386,7 +370,17 @@ transcripts are checked against the protocol facts in
 [`02-playbook.md`](02-playbook.md); a doc records which exits are now CI-verified and
 which still need a panel.
 
-## 4. `tv-rs-sony` — DROPPED
+**WebOS slice — in progress.** The A2 pairing exit is now CI-verified with no panel:
+`crates/tv-rs/tests/webos_pairing_sim.rs` drives the mock in `crates/sim/src/webos_server.rs`
+(the real client against the real SSAP wire shapes) and runs under
+`cargo test -p tv-rs --test webos_pairing_sim`, covering first pairing through the
+prompt with key issue, stored-key pairing without a prompt, command round-trip on the
+paired session, rejected-prompt failure, the prompt-delay contract, and no-leak of a
+presented key. The mock had to stop stringifying SSAP `id` values (it was echoing
+JSON-encoded strings, so the client's correlation match always failed); that bug is
+fixed. Tizen and DLNA slices remain queued.
+
+## 4. `tv-rs-sony` — Future work
 
 **Removed at the owner's instruction** ("certainly not sony"). It is not deferred and not
 queued: it is out of scope for this workspace. Recorded rather than deleted so the next

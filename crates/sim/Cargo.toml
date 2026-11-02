@@ -11,14 +11,16 @@ keywords = ["tv", "mock", "simulator", "mdc", "sicp"]
 categories = ["development-tools", "network-programming"]
 
 [dependencies]
+futures-util.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
+tokio-tungstenite.workspace = true
 tv-rs-mdc.workspace = true
 tv-rs-sicp.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
-tv-rs-core.workspace = true
 
 [lints]
 workspace = true
