@@ -1556,6 +1556,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "multimap"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
+
+[[package]]
 name = "native-tls"
 version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1831,6 +1837,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
+name = "petgraph"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3672b37090dbd86368a4145bc067582552b29c27377cad4e0a306c97f9bd7772"
+dependencies = [
+ "fixedbitset",
+ "indexmap",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1867,6 +1883,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "prettyplease"
+version = "0.2.37"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
+dependencies = [
+ "proc-macro2",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1886,6 +1912,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "prost-build"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
+dependencies = [
+ "heck",
+ "itertools",
+ "log",
+ "multimap",
+ "once_cell",
+ "petgraph",
+ "prettyplease",
+ "prost",
+ "prost-types",
+ "regex",
+ "syn 2.0.119",
+ "tempfile",
+]
+
+[[package]]
 name = "prost-derive"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1896,6 +1942,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "prost-types"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52c2c1bf36ddb1a1c396b3601a3cec27c2462e45f07c386894ec3ccf5332bd16"
+dependencies = [
+ "prost",
 ]
 
 [[package]]
@@ -3010,8 +3065,10 @@ version = "0.6.0"
 dependencies = [
  "async-trait",
  "serde",
+ "serde_json",
  "thiserror 2.0.21",
  "tokio",
+ "tokio-tungstenite",
  "tv-rs-cast",
  "tv-rs-cec",
  "tv-rs-core",
@@ -3042,6 +3099,25 @@ dependencies = [
  "tokio",
  "tv-rs-core",
  "wiremock",
+]
+
+[[package]]
+name = "tv-rs-androidtv"
+version = "0.6.0"
+dependencies = [
+ "bytes",
+ "hex",
+ "prost",
+ "prost-build",
+ "rand 0.8.8",
+ "rcgen",
+ "rustls",
+ "rustls-pki-types",
+ "sha2",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-rustls",
+ "x509-parser",
 ]
 
 [[package]]
@@ -3226,6 +3302,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tv-rs-rag"
+version = "0.6.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml",
+ "tv-rs-core",
+ "tv-rs-rules",
+]
+
+[[package]]
 name = "tv-rs-roku"
 version = "0.6.0"
 dependencies = [
@@ -3269,9 +3357,11 @@ dependencies = [
 name = "tv-rs-sim"
 version = "0.6.0"
 dependencies = [
+ "futures-util",
+ "serde_json",
  "tokio",
+ "tokio-tungstenite",
  "tracing",
- "tv-rs-core",
  "tv-rs-mdc",
  "tv-rs-sicp",
 ]

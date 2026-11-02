@@ -1,8 +1,8 @@
 use crate::error::{AtrError, Result};
 use crate::keys::{key_inject, Direction, Key};
 use crate::proto::remote::{
-    RemoteAppInfo, RemoteAppLinkLaunchRequest, RemoteImeKeyInject, RemoteMessage, RemotePingRequest,
-    RemoteSetVolumeLevel, RemoteStart,
+    RemoteAppInfo, RemoteAppLinkLaunchRequest, RemoteImeKeyInject, RemoteMessage,
+    RemotePingRequest, RemoteSetVolumeLevel, RemoteStart,
 };
 use prost::Message;
 use std::io::{Read, Write};
@@ -31,7 +31,8 @@ fn encode_frame(msg: &RemoteMessage) -> Vec<u8> {
     let mut buf = Vec::new();
     let len = msg.encoded_len();
     crate::pairing::encode_varint(len as u64, &mut buf);
-    msg.encode(&mut buf).expect("prost encode into Vec cannot fail");
+    msg.encode(&mut buf)
+        .expect("prost encode into Vec cannot fail");
     buf
 }
 

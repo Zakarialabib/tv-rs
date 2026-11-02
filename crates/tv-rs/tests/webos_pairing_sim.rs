@@ -14,7 +14,9 @@ use tv_rs_sim::{MockWebOsServer, PromptAcceptance};
 use tv_rs_webos::{SsapUri, WebosClient, WebosError};
 
 async fn start_mock() -> (MockWebOsServer, String, u16) {
-    let server = MockWebOsServer::start("127.0.0.1:0").await.expect("mock binds");
+    let server = MockWebOsServer::start("127.0.0.1:0")
+        .await
+        .expect("mock binds");
     let address = server.local_addr();
     let host = address.ip().to_string();
     (server, host, address.port())
@@ -31,7 +33,10 @@ async fn first_pairing_goes_through_the_prompt_and_issues_a_key() {
         .expect("first pairing: the prompt is accepted");
 
     assert_eq!(pairing.client_key.as_deref(), Some("mock-client-key"));
-    assert_eq!(pairing.device_name, "tv-rs", "the prompt name is the default");
+    assert_eq!(
+        pairing.device_name, "tv-rs",
+        "the prompt name is the default"
+    );
     assert_eq!(server.prompts_shown(), 1, "the prompt was shown once");
     assert!(
         server.presented_client_keys().is_empty(),
@@ -48,19 +53,13 @@ async fn a_stored_client_key_pairs_without_the_prompt() {
         .pinned_port(port)
         .with_client_key("already-paired");
 
-    let pairing = client
-        .pair()
-        .await
-        .expect("a presented key pairs silently");
+    let pairing = client.pair().await.expect("a presented key pairs silently");
 
     // The playbook's contract: same key confirmed back, no prompt.
     assert_eq!(pairing.client_key.as_deref(), Some("already-paired"));
     assert_eq!(server.prompts_shown(), 0, "a stored key never prompts");
     assert_eq!(server.presented_client_keys(), vec!["already-paired"]);
-    assert!(
-        server.issued_client_keys().is_empty(),
-        "nothing was issued"
-    );
+    assert!(server.issued_client_keys().is_empty(), "nothing was issued");
 
     server.shutdown().await;
 }
@@ -72,10 +71,7 @@ async fn commands_round_trip_on_the_paired_session() {
         .pinned_port(port)
         .with_client_key("already-paired");
 
-    let mut session = client
-        .connect()
-        .await
-        .expect("paired connect");
+    let mut session = client.connect().await.expect("paired connect");
     let payload = session
         .request(SsapUri::AudioSetVolume, Some(json!({ "volume": 33 })))
         .await
@@ -101,7 +97,10 @@ async fn a_dismissed_prompt_is_a_registration_failure_not_a_hang() {
     let port = deny.local_addr().port();
     let client = WebosClient::new(&host).pinned_port(port);
 
-    let error = client.pair().await.expect_err("a denied prompt fails pairing");
+    let error = client
+        .pair()
+        .await
+        .expect_err("a denied prompt fails pairing");
     match error {
         WebosError::RegistrationFailed {
             detail,
@@ -155,10 +154,7 @@ async fn the_client_key_is_never_leaked_to_the_prompt_path() {
         .pinned_port(port)
         .with_client_key("presented-only");
 
-    let pairing = client
-        .pair()
-        .await
-        .expect("a presented key pairs silently");
+    let pairing = client.pair().await.expect("a presented key pairs silently");
 
     assert_eq!(pairing.client_key.as_deref(), Some("presented-only"));
     assert_eq!(server.prompts_shown(), 0);

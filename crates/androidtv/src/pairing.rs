@@ -80,7 +80,9 @@ pub fn cert_modulus_exponent(cert_der: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
         .map_err(|e| AtrError::PairingRejected(format!("bad cert: {e}")))?;
     let pubkey = cert.public_key();
     match pubkey {
-        x509_parser::public_key::PublicKey::RSA(rsa) => Ok((rsa.modulus.to_bytes_be(), rsa.exponent.to_bytes_be())),
+        x509_parser::public_key::PublicKey::RSA(rsa) => {
+            Ok((rsa.modulus.to_bytes_be(), rsa.exponent.to_bytes_be()))
+        }
         _ => Err(AtrError::PairingRejected("public key is not RSA".into())),
     }
 }
