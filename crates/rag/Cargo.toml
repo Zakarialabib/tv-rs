@@ -1,0 +1,23 @@
+[package]
+name = "tv-rs-rag"
+description = "In-memory RAG module for hardware quirks, protocol specs, episodic remediation ledger, and rule grammar grounding."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["rag", "quirks", "diagnostics", "rules", "remediation"]
+categories = ["api-bindings", "hardware-support"]
+
+[dependencies]
+tv-rs-core = { workspace = true, features = ["quirks"] }
+tv-rs-rules.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+
+[lints]
+workspace = true

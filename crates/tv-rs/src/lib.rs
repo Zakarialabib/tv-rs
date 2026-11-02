@@ -76,6 +76,10 @@ pub use tv_rs_mdc as mdc;
 /// Wake-on-LAN and power-state probing: [`power::WolSender`].
 pub use tv_rs_power as power;
 pub use tv_rs_power::PowerState;
+/// In-memory RAG grounding: vendor-quirks corpus, episodic remediation ledger and
+/// rule-grammar templates for the agent's healer and the rules compiler:
+/// [`rag::HybridRetriever`].
+pub use tv_rs_rag as rag;
 pub use tv_rs_roku as roku;
 /// Philips SICP commercial display protocol client: [`sicp::SicpClient`].
 pub use tv_rs_sicp as sicp;
