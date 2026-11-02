@@ -1986,7 +1986,6 @@ version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e058c7de0b26af77780c769414d6257830bb240f3c38477dbc2c16e5f54d6d4c"
 dependencies = [
- "libc",
  "rand_chacha",
  "rand_core 0.6.4",
 ]
@@ -3076,7 +3075,7 @@ dependencies = [
  "hex",
  "pkcs8",
  "prost",
- "rand 0.8.8",
+ "rand 0.10.3",
  "rcgen",
  "rsa",
  "rustls",
@@ -3119,7 +3118,7 @@ dependencies = [
  "hmac 0.12.1",
  "pbkdf2",
  "prost",
- "rand 0.8.8",
+ "rand 0.10.3",
  "reqwest",
  "rustls",
  "rustls-pki-types",
@@ -3275,7 +3274,7 @@ version = "0.6.0"
 dependencies = [
  "serde",
  "serde_json",
- "thiserror 2.0.21",
+ "thiserror",
  "toml",
  "tv-rs-core",
  "tv-rs-rules",
