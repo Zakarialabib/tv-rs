@@ -265,7 +265,10 @@ async fn handle_register<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
 {
-    let id = frame.get("id").cloned().map(|id| id.to_string());
+    // The client always sends `id` as a JSON string (e.g. `"1"`). Keep the
+    // reply's id in the same shape so the client's correlation match holds.
+    let id = frame.get("id").and_then(Value::as_str).map(String::from);
+
     let presented_key = frame
         .pointer("/payload/client-key")
         .and_then(Value::as_str)
@@ -331,7 +334,9 @@ async fn handle_request<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
 {
-    let id = frame.get("id").cloned().map(|id| id.to_string());
+    // The client always sends `id` as a JSON string (e.g. `"2"`). Keep the
+    // reply's id in the same shape so the client's correlation match holds.
+    let id = frame.get("id").and_then(Value::as_str).map(String::from);
     let uri = frame
         .get("uri")
         .and_then(Value::as_str)
@@ -353,5 +358,6 @@ where
     });
 
     ws.send(Message::text(reply.to_string())).await?;
+
     Ok(())
 }

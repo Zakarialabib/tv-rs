@@ -36,8 +36,10 @@ thiserror.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true
-tv-rs-sim.workspace = true
+tokio = { workspace = true }
+tv-rs-sim = { workspace = true }
+serde_json = { workspace = true }
+tokio-tungstenite = { workspace = true }
 
 [features]
 # Hardware-in-the-loop tests. Off by default so `cargo test` never touches a
