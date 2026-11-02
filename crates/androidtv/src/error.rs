@@ -22,7 +22,10 @@ pub enum AtrError {
 
     /// The device sent a status other than STATUS_OK.
     #[error("device returned status {status}")]
-    DeviceStatus { status: i32 },
+    DeviceStatus {
+        /// The raw `OuterMessage::Status` value the device returned.
+        status: i32,
+    },
 
     /// The protobuf frame could not be decoded.
     #[error("protobuf decode: {0}")]

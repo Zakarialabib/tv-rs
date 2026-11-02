@@ -18,9 +18,14 @@ tokio-tungstenite.workspace = true
 tv-rs-mdc.workspace = true
 tv-rs-sicp.workspace = true
 tracing.workspace = true
+rcgen.workspace = true
+rustls.workspace = true
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+reqwest.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
+tv-rs-transport.workspace = true
 
 [lints]
 workspace = true

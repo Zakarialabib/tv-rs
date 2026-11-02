@@ -22,12 +22,10 @@
 //! 9. Device replies `secret_ack` — pairing complete.
 
 use crate::error::{AtrError, Result};
-use crate::proto::polo::{
-    options, outer_message, Configuration, Options, OuterMessage, PairingRequest, PairingRequestAck,
-};
+use crate::proto::polo::OuterMessage;
 use prost::Message;
 use sha2::{Digest, Sha256};
-use std::io::{Read, Write};
+use std::io::Read;
 
 /// A parsed device identity from the server certificate subject.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,15 +47,17 @@ pub fn parse_device_identity(server_cert_der: &[u8]) -> Result<DeviceIdentity> {
     let common_name = cert
         .subject()
         .iter_attributes()
-        .find(|a| a.oid() == x509_parser::oid_registry::OID_X509_COMMON_NAME)
-        .map(|a| a.value().as_str().unwrap_or("").to_string())
-        .unwrap_or_default();
+        .find(|a| a.attr_type() == &x509_parser::oid_registry::OID_X509_COMMON_NAME)
+        .and_then(|a| a.as_str().ok())
+        .unwrap_or_default()
+        .to_string();
     let dn_qualifier = cert
         .subject()
         .iter_attributes()
-        .find(|a| a.oid() == x509_parser::oid_registry::OID_X509_DN_QUALIFIER)
-        .map(|a| a.value().as_str().unwrap_or("").to_string())
-        .unwrap_or_default();
+        .find(|a| a.attr_type() == &x509_parser::oid_registry::OID_X509_DN_QUALIFIER)
+        .and_then(|a| a.as_str().ok())
+        .unwrap_or_default()
+        .to_string();
 
     let cn_parts: Vec<&str> = common_name.split('/').collect();
     let dn_parts: Vec<&str> = dn_qualifier.split('/').collect();
@@ -78,9 +78,14 @@ pub fn parse_device_identity(server_cert_der: &[u8]) -> Result<DeviceIdentity> {
 pub fn cert_modulus_exponent(cert_der: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
     let (_, cert) = x509_parser::parse_x509_certificate(cert_der)
         .map_err(|e| AtrError::PairingRejected(format!("bad cert: {e}")))?;
-    let pubkey = cert.public_key();
-    match pubkey {
-        x509_parser::public_key::PublicKey::RSA(rsa) => Ok((rsa.modulus.to_bytes_be(), rsa.exponent.to_bytes_be())),
+    let spki = cert.public_key();
+    let pk = spki
+        .parsed()
+        .map_err(|e| AtrError::PairingRejected(format!("bad public key: {e}")))?;
+    match pk {
+        x509_parser::public_key::PublicKey::RSA(rsa) => {
+            Ok((rsa.modulus.to_vec(), rsa.exponent.to_vec()))
+        }
         _ => Err(AtrError::PairingRejected("public key is not RSA".into())),
     }
 }
@@ -110,11 +115,11 @@ pub fn compute_pairing_secret(
 
     let mut hasher = Sha256::new();
     hasher.update(&client_mod);
-    hasher.update(&[0x00]);
+    hasher.update([0x00]);
     hasher.update(&client_exp);
-    hasher.update(&[0x00]);
+    hasher.update([0x00]);
     hasher.update(&server_mod);
-    hasher.update(&[0x00]);
+    hasher.update([0x00]);
     hasher.update(&server_exp);
     hasher.update(&salt_bytes);
     let hash = hasher.finalize();
@@ -207,4 +212,136 @@ pub fn read_outer_message<S: Read>(stream: &mut S) -> Result<OuterMessage> {
     let mut msg_buf = vec![0u8; len as usize];
     stream.read_exact(&mut msg_buf).map_err(AtrError::Tls)?;
     OuterMessage::decode(&msg_buf[..]).map_err(AtrError::Decode)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A pure-Rust RSA key pair handed to rcgen for signing (mirrors
+    /// `generate_client_cert`; rcgen's own RSA keygen needs aws-lc-rs).
+    fn rsa_key_pair() -> rcgen::KeyPair {
+        use rsa::pkcs8::EncodePrivateKey;
+        let private_key = {
+            let mut rng = rand::thread_rng();
+            rsa::RsaPrivateKey::new(&mut rng, 2048).expect("rsa keygen")
+        };
+        let pkcs8 = private_key.to_pkcs8_der().expect("pkcs8");
+        rcgen::KeyPair::from_pkcs8_der_and_sign_algo(
+            &pki_types::PrivatePkcs8KeyDer::from(pkcs8.as_bytes()),
+            &rcgen::PKCS_RSA_SHA256,
+        )
+        .expect("key pair from pkcs8")
+    }
+
+    /// Build an RSA self-signed cert with a `CN=atvremote/<cn>/<mac>` subject.
+    fn rsa_cert(cn: &str) -> Vec<u8> {
+        let key_pair = rsa_key_pair();
+        let mut params = rcgen::CertificateParams::new(vec![]).expect("params");
+        params
+            .distinguished_name
+            .push(rcgen::DnType::CommonName, cn);
+        let cert = params.self_signed(&key_pair).expect("self-sign");
+        cert.der().to_vec()
+    }
+
+    #[test]
+    fn encode_varint_shapes() {
+        let mut buf = Vec::new();
+        encode_varint(0, &mut buf);
+        assert_eq!(buf, vec![0x00]);
+
+        buf.clear();
+        encode_varint(127, &mut buf);
+        assert_eq!(buf, vec![0x7F]);
+
+        buf.clear();
+        encode_varint(128, &mut buf);
+        assert_eq!(buf, vec![0x80, 0x01]);
+
+        buf.clear();
+        encode_varint(300, &mut buf);
+        assert_eq!(buf, vec![0xAC, 0x02]);
+    }
+
+    #[test]
+    fn varint_round_trip() {
+        for value in [0u64, 1, 127, 128, 300, u32::MAX as u64, 1 << 40] {
+            let mut buf = Vec::new();
+            encode_varint(value, &mut buf);
+            let (decoded, consumed) = decode_varint_prefix(&buf).expect("varint decodes");
+            assert_eq!(decoded, value as usize);
+            assert_eq!(consumed, buf.len());
+        }
+    }
+
+    #[test]
+    fn decode_varint_prefix_incomplete() {
+        // 0x80 alone is an incomplete varint (continuation bit set, no follow-up).
+        assert_eq!(decode_varint_prefix(&[0x80]), None);
+    }
+
+    #[test]
+    fn parse_device_identity_shield_style() {
+        let cert = rsa_cert("atvremote/darcy/darcy/SHIELD Android TV/AA:BB:CC:DD:EE:FF");
+        let identity = parse_device_identity(&cert).expect("identity");
+        // The reference client takes common_name_parts[-2]: here that is
+        // "SHIELD Android TV" (the human-readable device name), not the
+        // client label "darcy" repeated earlier in the CN.
+        assert_eq!(identity.name, "SHIELD Android TV");
+        assert_eq!(identity.mac, "AA:BB:CC:DD:EE:FF");
+    }
+
+    #[test]
+    fn parse_device_identity_nexus_player_style() {
+        // Nexus Player: name in dnQualifier, CN = atvremote/MAC.
+        let key_pair = rsa_key_pair();
+        let mut params = rcgen::CertificateParams::new(vec![]).expect("params");
+        params.distinguished_name.push(
+            rcgen::DnType::CustomDnType(vec![2, 5, 4, 46]),
+            "fugu/fugu/Nexus Player",
+        );
+        params
+            .distinguished_name
+            .push(rcgen::DnType::CommonName, "atvremote/11:22:33:44:55:66");
+        let cert = params.self_signed(&key_pair).expect("self-sign");
+        let identity = parse_device_identity(cert.der()).expect("identity");
+        assert_eq!(identity.name, "Nexus Player");
+        assert_eq!(identity.mac, "11:22:33:44:55:66");
+    }
+
+    #[test]
+    fn pairing_secret_round_trip() {
+        let client = rsa_cert("atvremote/tv-rs");
+        let server = rsa_cert("atvremote/panel/panel/Test TV/11:22:33:44:55:66");
+
+        // The secret depends on the code, so compute a hash and then pick a
+        // code whose first byte matches it: the protocol's own validation is
+        // "hash[0] == code[0:2]". We test compute + validate agreement by
+        // brute-forcing the first code byte.
+        let mut found = None;
+        for hi in 0x00..=0xFFu8 {
+            let code = format!("{hi:02X}0000");
+            if let Ok(secret) = compute_pairing_secret(&client, &server, &code) {
+                if secret[0] == hi {
+                    found = Some((code, secret));
+                    break;
+                }
+            }
+        }
+        let (code, secret) = found.expect("a matching code exists");
+        validate_pairing_code(&code, &secret).expect("validate accepts the matching code");
+
+        // A wrong code (different first byte) must be rejected.
+        let wrong: String = format!("{:02X}0000", (secret[0] ^ 0xFF) as u32).to_lowercase();
+        assert!(validate_pairing_code(&wrong, &secret).is_err());
+    }
+
+    #[test]
+    fn pairing_secret_rejects_short_codes() {
+        let client = rsa_cert("atvremote/tv-rs");
+        let server = rsa_cert("atvremote/panel/panel/Test TV/11:22:33:44:55:66");
+        assert!(compute_pairing_secret(&client, &server, "12345").is_err());
+        assert!(validate_pairing_code("12", &[0u8; 32]).is_err());
+    }
 }

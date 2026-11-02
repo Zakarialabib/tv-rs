@@ -27,6 +27,7 @@ tv-rs-cast = { path = "../cast", version = "0.6.0", optional = true }
 tv-rs-cec.workspace = true
 tv-rs-ir.workspace = true
 tv-rs-mdc.workspace = true
+tv-rs-dlna = { path = "../dlna", version = "0.6.0" }
 tv-rs-sicp.workspace = true
 tv-rs-spatial-audio.workspace = true
 
