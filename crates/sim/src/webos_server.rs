@@ -146,12 +146,20 @@ impl MockWebOsServer {
 
     /// Every `client-key` a register frame presented, in arrival order.
     pub fn presented_client_keys(&self) -> Vec<String> {
-        self.recorder.lock().expect("recorder lock").presented_keys.clone()
+        self.recorder
+            .lock()
+            .expect("recorder lock")
+            .presented_keys
+            .clone()
     }
 
     /// Every `client-key` the mock issued through an acceptance.
     pub fn issued_client_keys(&self) -> Vec<String> {
-        self.recorder.lock().expect("recorder lock").issued_keys.clone()
+        self.recorder
+            .lock()
+            .expect("recorder lock")
+            .issued_keys
+            .clone()
     }
 
     /// How many register frames took the prompt path (no presented key).
@@ -161,7 +169,11 @@ impl MockWebOsServer {
 
     /// Command URIs received from any session, in arrival order.
     pub fn commands(&self) -> Vec<String> {
-        self.recorder.lock().expect("recorder lock").commands.clone()
+        self.recorder
+            .lock()
+            .expect("recorder lock")
+            .commands
+            .clone()
     }
 
     /// Stops the server, waiting for the accept loop to exit.
