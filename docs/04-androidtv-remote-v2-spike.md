@@ -109,3 +109,38 @@ A5/C1 in the host layer).
   remaining pre-probe step; the wire shapes above are consistent with the
   reference client and the 02-playbook.md shapes.
 - The probe run itself requires a real Android TV panel in this workspace.
+
+## 6. Adjacent tooling assessed (2026-11-02)
+
+**REA (RE/analysis MCP) — not used for this spike, by plan.** The decision in
+§2.4 of [`06-plan.md`](06-plan.md) stands: the wire protocol is fully known
+(AOSP `polo.proto`, the reference client's `remotemessage.proto`, and a working
+Python client), so a static RE session would re-derive facts already pinned
+above. The residual unknowns (does a second pairing displace the first? does
+the panel rate-limit pairings?) are firmware-runtime behaviors no decompile
+answers. Where REA *does* earn a session — all requiring the panel present:
+
+- **Vendor deviation triage.** If a probe fails on a specific panel
+  (Xiaomi/Hisense/TCL), pull the panel's `RemoteService` APK over ADB and
+  decompile it to find what the vendor changed (field order, extra handshake
+  step, custom status codes).
+- **HIL debugging.** Frida on the panel's remote service to observe the real
+  exchange when a probe behaves unexpectedly.
+
+**CleanYourTV (`Gathin23/cleanyourtv`) — not a protocol source for ATR v2.**
+It works entirely over ADB (`pm disable-user` lists per brand) plus a
+replacement launcher APK; it never speaks the Remote protocol v2. Its value to
+this workspace is *data and validation for the ADB fallback path* (plan §2.4:
+"ADB as privileged fallback"):
+
+- Per-brand debloat lists (416 models / 106 brands) are behavior knowledge:
+  which vendor packages own the remote's shortcut keys, CEC input reporting
+  quirks (`inputs_cec_state_only`), tracking services. That feeds the quirks
+  file, not the ATR v2 client.
+- Its Discussions are a defect stream for vendor-specific breakage — the same
+  stream the plan says to route through the quirks file rather than code
+  branches.
+
+Conclusion: cite it as a reference implementation of the ADB fallback's
+discovery/disable surface if/when the ADB slice is built; do not mine it for
+the ATR v2 wire.
