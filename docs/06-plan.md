@@ -370,7 +370,7 @@ transcripts are checked against the protocol facts in
 [`02-playbook.md`](02-playbook.md); a doc records which exits are now CI-verified and
 which still need a panel.
 
-## 4. `tv-rs-sony` — DROPPED
+## 4. `tv-rs-sony` — Future work
 
 **Removed at the owner's instruction** ("certainly not sony"). It is not deferred and not
 queued: it is out of scope for this workspace. Recorded rather than deleted so the next
