@@ -12,3 +12,7 @@ pub mod client;
 pub mod dial;
 pub mod payload;
 pub mod transport;
+
+pub use client::CastClient;
+pub use error::{CastError, Result};
+pub use payload::MediaStatusDto;

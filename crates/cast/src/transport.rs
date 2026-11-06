@@ -24,7 +24,12 @@ impl CastTransport {
     /// Connects to a Cast device and performs the TLS handshake.
     /// The Cast device uses a self-signed throwaway certificate, so we must accept any cert.
     pub async fn connect(ip: &str) -> Result<Self> {
-        let addr = format!("{}:{}", ip, CAST_PORT);
+        Self::connect_port(ip, CAST_PORT).await
+    }
+
+    /// Connects to a Cast device on a custom port and performs the TLS handshake.
+    pub async fn connect_port(ip: &str, port: u16) -> Result<Self> {
+        let addr = format!("{}:{}", ip, port);
         let stream = TcpStream::connect(addr).await?;
 
         // Disable certificate verification (Cast devices use self-signed certificates).
