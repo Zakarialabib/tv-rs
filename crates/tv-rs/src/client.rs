@@ -13,7 +13,7 @@ use crate::map;
 use crate::types::{DiscoveredTv, TvVendor};
 use tv_rs_core::ProvisioningBundleV1;
 use tv_rs_core::{Capability, DeviceDescriptor, DeviceHandle, DeviceId, DeviceOs, ObservedField};
-use tv_rs_discovery::{SsdpDeviceDescriptor, SsdpMsearchResponse, SsdpScanner};
+use tv_rs_discovery::{DiscoverySource, SsdpDeviceDescriptor, SsdpMsearchResponse, SsdpScanner};
 use tv_rs_mdc::{MdcClient, MdcDevice};
 use tv_rs_power::PowerState;
 use tv_rs_roku::{RokuClient, RokuPowerMode};
@@ -118,6 +118,56 @@ pub async fn discover_with(scanner: &SsdpScanner) -> Result<Vec<DiscoveredTv>> {
 ///
 /// # Errors
 ///
+/// Discover displays across one or more [`DiscoverySource`] implementations.
+///
+/// Composes discovery sources (SSDP, WOL power probe, vendor-specific probes)
+/// behind a unified abstraction.
+pub async fn discover_from_sources(source: &dyn DiscoverySource) -> Result<Vec<DiscoveredTv>> {
+    let devices = source
+        .discover()
+        .await
+        .map_err(|error| map::discovery(&error))?;
+
+    let mut tvs = Vec::new();
+    for dev in devices {
+        let vendor = match dev.kind {
+            tv_rs_discovery::types::DiscoveredDeviceKind::TvBrand(ref name) => {
+                let n = name.to_ascii_lowercase();
+                if n.contains("samsung") || n.contains("tizen") {
+                    TvVendor::Samsung
+                } else if n.contains("lg") || n.contains("webos") {
+                    TvVendor::Lg
+                } else if n.contains("roku") {
+                    TvVendor::Roku
+                } else if n.contains("philips") {
+                    TvVendor::Philips
+                } else {
+                    TvVendor::Unknown
+                }
+            }
+            tv_rs_discovery::types::DiscoveredDeviceKind::CommercialPanel(ref name) => {
+                let n = name.to_ascii_lowercase();
+                if n.contains("sicp") || n.contains("philips") {
+                    TvVendor::Philips
+                } else if n.contains("samsung") || n.contains("mdc") {
+                    TvVendor::Samsung
+                } else {
+                    TvVendor::Unknown
+                }
+            }
+            tv_rs_discovery::types::DiscoveredDeviceKind::ChromecastLike(_) => TvVendor::GoogleCast,
+            _ => TvVendor::Unknown,
+        };
+
+        let ip_str = dev.ip.map(|i| i.to_string()).unwrap_or_default();
+        let mut tv = DiscoveredTv::probed(vendor, &ip_str);
+        tv.friendly_name = Some(dev.friendly_name);
+        tvs.push(tv);
+    }
+
+    Ok(tvs)
+}
+
 /// Same taxonomy as [`discover_with`].
 pub async fn discover_stream<F>(scanner: &SsdpScanner, mut on_found: F) -> Result<Vec<DiscoveredTv>>
 where
@@ -1317,6 +1367,61 @@ mod tests {
             "observe ticker should have notified at least once"
         );
         server.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn discover_from_sources_maps_discovered_devices_to_clients() {
+        use std::net::Ipv4Addr;
+        use tv_rs_discovery::types::DiscoveredDeviceKind;
+        use tv_rs_discovery::{
+            CompositeDiscoverySource, DeviceFingerprint, DiscoveredDevice, DiscoveryMethod,
+            DiscoverySource,
+        };
+
+        #[derive(Debug)]
+        struct DummySource;
+
+        #[async_trait::async_trait]
+        impl DiscoverySource for DummySource {
+            fn name(&self) -> &'static str {
+                "dummy"
+            }
+            fn method(&self) -> DiscoveryMethod {
+                DiscoveryMethod::LocalHttp
+            }
+            async fn discover(&self) -> tv_rs_discovery::Result<Vec<DiscoveredDevice>> {
+                Ok(vec![
+                    DiscoveredDevice {
+                        id: "samsung-mock".to_string(),
+                        friendly_name: "Mock Samsung Tizen".to_string(),
+                        ip: Some(Ipv4Addr::new(192, 168, 1, 10)),
+                        kind: DiscoveredDeviceKind::TvBrand("Samsung Tizen TV".to_string()),
+                        fingerprint: DeviceFingerprint::new().with_open_ports([8001]),
+                        discovery_methods: vec![DiscoveryMethod::LocalHttp],
+                    },
+                    DiscoveredDevice {
+                        id: "lg-mock".to_string(),
+                        friendly_name: "Mock LG webOS".to_string(),
+                        ip: Some(Ipv4Addr::new(192, 168, 1, 20)),
+                        kind: DiscoveredDeviceKind::TvBrand("LG webOS TV".to_string()),
+                        fingerprint: DeviceFingerprint::new().with_open_ports([3000]),
+                        discovery_methods: vec![DiscoveryMethod::LocalHttp],
+                    },
+                ])
+            }
+        }
+
+        let composite =
+            CompositeDiscoverySource::new().with_source(std::sync::Arc::new(DummySource));
+
+        let tvs = discover_from_sources(&composite)
+            .await
+            .expect("discovery succeeds");
+        assert_eq!(tvs.len(), 2);
+        assert_eq!(tvs[0].vendor, TvVendor::Samsung);
+        assert_eq!(tvs[0].ip, "192.168.1.10");
+        assert_eq!(tvs[1].vendor, TvVendor::Lg);
+        assert_eq!(tvs[1].ip, "192.168.1.20");
     }
 
     #[test]
