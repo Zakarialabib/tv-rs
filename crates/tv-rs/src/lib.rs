@@ -51,10 +51,14 @@ mod handle;
 mod types;
 
 pub use client::{
-    discover, discover_stream, discover_with, identify_vendor, mdc_handle, probe, sicp_handle,
-    TvClient,
+    discover, discover_from_sources, discover_stream, discover_with, identify_vendor, mdc_handle,
+    probe, sicp_handle, TvClient,
 };
 pub use error::{Result, TvError};
+pub use tv_rs_discovery::{
+    CompositeDiscoverySource, DiscoverySource, LgDiscoverySource, RokuDiscoverySource,
+    SamsungDiscoverySource, SsdpDiscoverySource, WolDiscoverySource,
+};
 pub use types::{DiscoveredTv, TvVendor};
 
 /// The one home of vendor-error → [`TvError`] mapping.
