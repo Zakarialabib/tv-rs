@@ -709,7 +709,8 @@ The phone talks to the edge host, the host drives displays through protocol and 
 - `tv-rs-companion`: a pure-Rust core with no UI, exposed to Swift and Kotlin through `uniffi`.
 - It handles discovery (mDNS plus SSDP), pairing flows for each vendor, remote keys, power and input, and talking to `tv-rs-hostd`.
 - `tv-rs-provision`: first-boot setup over BLE using Improv, then QR-code pairing between phone and host.
-- Platform constraints to design around: iOS needs the multicast networking entitlement, and Android needs a multicast lock for SSDP and mDNS.
+- Platform constraints to design around: iOS needs the multicast networking entitlement, and Android needs a multicast lock for SSDP and mDNS (`tv_rs_core::caps::MulticastLockRequired`). Android 16+ requires `ACCESS_LOCAL_NETWORK` runtime permission.
+- Capability matrix for companion app (`tv_rs_core::caps`): unioning `tv.*`, `host.*`, and `phone.*` sets, Hello updates on power/permission/addon shifts, and UI tile gating (e.g. Remote tile withheld when Roku has no input channel and Linux host lacks uinput).
 
 No layer adds a database. Desired state, pins, tokens and caches stay as files, matching how tv-rs already stores pairing tokens and quirks.
 

@@ -36,6 +36,7 @@
 #![warn(missing_docs)]
 
 pub mod capability;
+pub mod caps;
 pub mod command;
 #[cfg(feature = "conformance")]
 pub mod conformance;
@@ -62,6 +63,10 @@ pub use capability::{
 };
 #[cfg(feature = "supporting")]
 pub use capability::{FrameFormat, PanelHoursProvider, ScreenCapturer, ScreenFrame};
+pub use caps::{
+    CapabilityId, CapabilityMatrix, EndpointCapabilities, HelloUpdate, MulticastLockRequired,
+    PermissionStatus, UiTile,
+};
 pub use command::CommandId;
 pub use descriptor::{DeviceDescriptor, DeviceId, DeviceOs, PowerState};
 pub use error::{AuthError, ProtocolError, QuirkId, Remedy, StateError, TransportError, TvError};
