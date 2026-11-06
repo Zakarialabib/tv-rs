@@ -13,14 +13,16 @@
 //! dependency of the agent by default, and compiles to a thin library when the
 //! `client` feature is off.
 //!
-//! It also does not link `libcec`. It shells out to an existing `cec-client` binary
-//! instead: no `unsafe`, no native build step, and the failure mode when the tool is
-//! missing is a clear error rather than a link failure.
+//! It also does not link `libcec` by default. It shells out to an existing `cec-client` binary
+//! instead: safe Rust by default, no native build step, and the failure mode when the tool is
+//! missing is a clear error rather than a link failure. An optional `cec-native` feature is
+//! available for native bindings wrapping libcec with `unsafe` confined to `native.rs`.
 //!
 //! ```no_run
 //! use tv_rs_cec::{CecAddress, CecClient, CecError, CecTransport};
 //!
 //! // With `--features client`, `T` is `ClientTransport::new("cec-client")`;
+//! // with `--features cec-native`, `T` can be `NativeTransport::try_new()`;
 //! // anything implementing `CecTransport` works, which is how the tests run it
 //! // without an adapter.
 //! async fn power_on<T: CecTransport>(cec: &CecClient<T>) -> Result<String, CecError> {
@@ -28,12 +30,18 @@
 //! }
 //! ```
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 #![warn(missing_docs)]
 
 use std::fmt;
 
 use async_trait::async_trait;
+
+#[cfg(feature = "cec-native")]
+pub mod native;
+
+#[cfg(feature = "cec-native")]
+pub use native::NativeTransport;
 
 #[cfg(feature = "client")]
 pub mod transport;

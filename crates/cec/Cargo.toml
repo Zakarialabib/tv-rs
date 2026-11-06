@@ -16,8 +16,12 @@ default = []
 # safe Rust and free of a native library dependency that most build machines lack.
 client = ["dep:tokio"]
 
+# Native bindings wrapping libcec / cec-rs FFI, confined strictly to one module.
+cec-native = ["dep:libc"]
+
 [dependencies]
 async-trait.workspace = true
+libc = { version = "0.2", optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["process"], optional = true }
 
