@@ -11,6 +11,8 @@ use std::sync::Arc;
 use crate::error::{Result, TvError};
 use crate::map;
 use crate::types::{DiscoveredTv, TvVendor};
+use tv_rs_cast::dial::DialClient;
+use tv_rs_cec::{CecAddress, CecClient, ClientTransport};
 use tv_rs_core::ProvisioningBundleV1;
 use tv_rs_core::{Capability, DeviceDescriptor, DeviceHandle, DeviceId, DeviceOs, ObservedField};
 use tv_rs_discovery::{DiscoverySource, SsdpDeviceDescriptor, SsdpMsearchResponse, SsdpScanner};
@@ -337,6 +339,22 @@ pub enum TvClient {
         /// Hardware address, when known.
         mac: Option<String>,
     },
+    /// Google Cast or Chromecast.
+    GoogleCast {
+        /// Target host or IP address.
+        address: String,
+        /// DIAL HTTP client for launching/stopping apps.
+        dial: Arc<DialClient>,
+        /// Hardware address, when known.
+        mac: Option<String>,
+    },
+    /// HDMI-CEC control via cec-client.
+    Cec {
+        /// Target logical address.
+        address: CecAddress,
+        /// Client binary / adapter identifier.
+        adapter: String,
+    },
 }
 
 /// The pools hold live sockets and have no useful `Debug` form, so the handle
@@ -354,6 +372,12 @@ impl fmt::Debug for TvClient {
                 .finish_non_exhaustive(),
             Self::Roku { client, .. } => f.debug_tuple("Roku").field(client).finish(),
             Self::Philips { client, .. } => f.debug_tuple("Philips").field(client).finish(),
+            Self::GoogleCast { address, .. } => f.debug_tuple("GoogleCast").field(address).finish(),
+            Self::Cec { address, adapter } => f
+                .debug_struct("Cec")
+                .field("address", address)
+                .field("adapter", adapter)
+                .finish(),
         }
     }
 }
@@ -438,14 +462,24 @@ impl TvClient {
                 };
                 Ok(Self::Philips { client, mac: None })
             }
-            TvVendor::GoogleCast => Err(TvError::UnsupportedDevice {
+            TvVendor::GoogleCast => Ok(Self::GoogleCast {
                 address: tv.ip.clone(),
-                reason: "cast connection unsupported via generic client".to_string(),
+                dial: Arc::new(DialClient::new(&tv.ip)),
+                mac: tv.mac.clone(),
             }),
+            TvVendor::Cec => Ok(Self::cec(CecAddress::Tv)),
             TvVendor::Unknown => Err(TvError::UnsupportedDevice {
                 address: tv.ip.clone(),
                 reason: "device did not advertise a known vendor signature".to_string(),
             }),
+        }
+    }
+
+    /// Build a [`TvClient`] targeting an HDMI-CEC device via `cec-client`.
+    pub fn cec(address: CecAddress) -> Self {
+        Self::Cec {
+            address,
+            adapter: "cec-client".to_string(),
         }
     }
 
@@ -499,10 +533,12 @@ impl TvClient {
                 client: SicpClient::new(tv.ip.clone()),
                 mac: None,
             }),
-            TvVendor::GoogleCast => Err(TvError::UnsupportedDevice {
+            TvVendor::GoogleCast => Ok(Self::GoogleCast {
                 address: tv.ip.clone(),
-                reason: "cast connection unsupported via generic client".to_string(),
+                dial: Arc::new(DialClient::new(&tv.ip)),
+                mac: tv.mac.clone(),
             }),
+            TvVendor::Cec => Ok(Self::cec(CecAddress::Tv)),
             TvVendor::Unknown => Err(TvError::UnsupportedDevice {
                 address: tv.ip.clone(),
                 reason: "device did not advertise a known vendor signature".to_string(),
@@ -544,6 +580,8 @@ impl TvClient {
             DeviceOs::WebOs => TvVendor::Lg,
             DeviceOs::Roku => TvVendor::Roku,
             DeviceOs::PhilipsSicp => TvVendor::Philips,
+            DeviceOs::GoogleCast => TvVendor::GoogleCast,
+            DeviceOs::Cec => TvVendor::Cec,
             DeviceOs::SamsungMdc => {
                 return Err(TvError::UnsupportedDevice {
                     address: bundle
@@ -554,16 +592,6 @@ impl TvClient {
                     reason: "MDC walls have no TvClient backend; drive them through \
                              tv_rs::mdc_handle with the bundle's mdc_topology display id"
                         .to_string(),
-                });
-            }
-            DeviceOs::GoogleCast => {
-                return Err(TvError::UnsupportedDevice {
-                    address: bundle
-                        .network_target
-                        .as_ref()
-                        .map(|target| target.ip.clone())
-                        .unwrap_or_default(),
-                    reason: "cast connection unsupported via generic client".to_string(),
                 });
             }
             DeviceOs::Unknown => {
@@ -623,7 +651,10 @@ impl TvClient {
             }
             // Roku ECP is unauthenticated and SICP's credentials are per-site
             // wiring, not a pairing credential: nothing to apply.
-            Self::Roku { .. } | Self::Philips { .. } => {}
+            Self::Roku { .. }
+            | Self::Philips { .. }
+            | Self::GoogleCast { .. }
+            | Self::Cec { .. } => {}
         }
 
         if let Some(identity) = bundle.client_identity_override.as_deref() {
@@ -670,6 +701,14 @@ impl TvClient {
                 vendor: "philips",
                 operation: "open_url",
             }),
+            Self::GoogleCast { .. } => Err(TvError::UnsupportedOperation {
+                vendor: "googlecast",
+                operation: "open_url",
+            }),
+            Self::Cec { .. } => Err(TvError::UnsupportedOperation {
+                vendor: "cec",
+                operation: "open_url",
+            }),
         }
     }
 
@@ -680,6 +719,8 @@ impl TvClient {
             Self::Webos { .. } => TvVendor::Lg,
             Self::Roku { .. } => TvVendor::Roku,
             Self::Philips { .. } => TvVendor::Philips,
+            Self::GoogleCast { .. } => TvVendor::GoogleCast,
+            Self::Cec { .. } => TvVendor::Cec,
         }
     }
 
@@ -694,6 +735,8 @@ impl TvClient {
             Self::Webos { client, .. } => client.host(),
             Self::Roku { client, .. } => client.base_url(),
             Self::Philips { client, .. } => client.host(),
+            Self::GoogleCast { address, .. } => address.as_str(),
+            Self::Cec { adapter, .. } => adapter.as_str(),
         }
     }
 
@@ -701,6 +744,22 @@ impl TvClient {
     pub fn as_tizen(&self) -> Option<&TizenClient> {
         match self {
             Self::Tizen { client, .. } => Some(client),
+            _ => None,
+        }
+    }
+
+    /// The DIAL client, when this handle targets a Google Cast device.
+    pub fn as_cast(&self) -> Option<&DialClient> {
+        match self {
+            Self::GoogleCast { dial, .. } => Some(dial),
+            _ => None,
+        }
+    }
+
+    /// The CEC logical address, when this handle targets an HDMI-CEC device.
+    pub fn as_cec(&self) -> Option<CecAddress> {
+        match self {
+            Self::Cec { address, .. } => Some(*address),
             _ => None,
         }
     }
@@ -762,6 +821,21 @@ impl TvClient {
             Self::Philips { client, .. } => {
                 client
                     .power_off()
+                    .await
+                    .map_err(|error| TvError::protocol(error.to_string()))?;
+                Ok(())
+            }
+            Self::GoogleCast { dial, .. } => {
+                dial.stop("CC1AD845")
+                    .await
+                    .map_err(|error| TvError::protocol(error.to_string()))?;
+                Ok(())
+            }
+            Self::Cec { address, adapter } => {
+                let transport = ClientTransport::new(adapter);
+                let client = CecClient::new(transport);
+                client
+                    .standby(*address)
                     .await
                     .map_err(|error| TvError::protocol(error.to_string()))?;
                 Ok(())
@@ -843,6 +917,15 @@ impl TvClient {
                 };
                 Ok(ObservedField::from_read(state))
             }
+            Self::GoogleCast { address, .. } => {
+                let probe = format!("{}:8009", address);
+                Ok(ObservedField::from_inference(
+                    tv_rs_power::poll_power_state(&probe)
+                        .await
+                        .map_err(|error| map::power(&error))?,
+                ))
+            }
+            Self::Cec { .. } => Ok(ObservedField::from_read(PowerState::Unknown)),
         }
     }
 
@@ -881,8 +964,18 @@ impl TvClient {
                     .map_err(|error| map::roku(&error, Capability::AppLaunch))?;
                 Ok(())
             }
+            Self::GoogleCast { dial, .. } => {
+                dial.launch(app_id)
+                    .await
+                    .map_err(|error| TvError::protocol(error.to_string()))?;
+                Ok(())
+            }
             Self::Philips { .. } => Err(TvError::UnsupportedOperation {
                 vendor: "philips",
+                operation: "launch_app",
+            }),
+            Self::Cec { .. } => Err(TvError::UnsupportedOperation {
+                vendor: "cec",
                 operation: "launch_app",
             }),
         }

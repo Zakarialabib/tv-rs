@@ -70,7 +70,8 @@ pub use types::{DiscoveredTv, TvVendor};
 /// variant is a compile error here until someone names its remedy.
 pub mod map;
 
-/// SSDP & mDNS discovery, UPnP descriptor parsing, and signage pairing: [`discovery::SsdpScanner`], [`discovery::MdnsScanner`].
+/// Google Cast client and DIAL fallback: [`cast::dial::DialClient`].
+pub use tv_rs_cast as cast;
 pub use tv_rs_cec as cec;
 pub use tv_rs_core as core;
 pub use tv_rs_discovery as discovery;
