@@ -79,6 +79,9 @@ pub enum DeviceOs {
     /// Google Cast or Chromecast.
     #[cfg_attr(feature = "serde", serde(rename = "googlecast"))]
     GoogleCast,
+    /// HDMI-CEC device.
+    #[cfg_attr(feature = "serde", serde(rename = "cec"))]
+    Cec,
     /// Discovered, not identified.
     #[default]
     #[cfg_attr(feature = "serde", serde(rename = "unknown"))]
@@ -97,6 +100,7 @@ impl DeviceOs {
             Self::PhilipsSicp => "philips_sicp",
             Self::Unknown => "unknown",
             Self::GoogleCast => "googlecast",
+            Self::Cec => "cec",
         }
     }
 }

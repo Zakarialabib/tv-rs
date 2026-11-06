@@ -29,6 +29,8 @@ pub enum TvVendor {
     Philips,
     /// Google Cast or Chromecast.
     GoogleCast,
+    /// HDMI-CEC device.
+    Cec,
     /// The device answered SSDP but matched no known vendor signature.
     Unknown,
 }
@@ -42,6 +44,7 @@ impl TvVendor {
             Self::Roku => "roku",
             Self::Philips => "philips",
             Self::GoogleCast => "googlecast",
+            Self::Cec => "cec",
             Self::Unknown => "unknown",
         }
     }
@@ -61,7 +64,7 @@ impl TvVendor {
             Self::Roku => Some(ROKU_ECP_PORT),
             Self::Philips => Some(SICP_TCP_PORT),
             Self::GoogleCast => Some(8009),
-            Self::Unknown => None,
+            Self::Cec | Self::Unknown => None,
         }
     }
 }
@@ -224,6 +227,8 @@ mod tests {
         assert_eq!(TvVendor::Lg.control_port(), Some(3000));
         assert_eq!(TvVendor::Roku.control_port(), Some(8060));
         assert_eq!(TvVendor::Philips.control_port(), Some(5000));
+        assert_eq!(TvVendor::GoogleCast.control_port(), Some(8009));
+        assert_eq!(TvVendor::Cec.control_port(), None);
         assert_eq!(TvVendor::Unknown.control_port(), None);
     }
 

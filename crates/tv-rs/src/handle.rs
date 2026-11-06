@@ -34,6 +34,7 @@
 
 use async_trait::async_trait;
 
+use tv_rs_cec::{CecAddress, CecClient, ClientTransport};
 use tv_rs_core::ProtocolError;
 use tv_rs_core::{
     AppLaunch, AppRef, Capability, CapabilitySet, CommandId, DeviceDescriptor, DeviceHandle,
@@ -90,6 +91,15 @@ impl TvClient {
             Self::Philips { .. } => {
                 // Philips SICP provides power control.
             }
+            Self::GoogleCast { .. } => {
+                set.insert(Capability::AppLaunch);
+                set.insert(Capability::ScreenCast);
+            }
+            Self::Cec { .. } => {
+                set.insert(Capability::Wake);
+                set.insert(Capability::Key);
+                set.insert(Capability::InputSelect);
+            }
         }
         // The other two drop their network stack when they sleep, so a magic
         // packet is the only path — a capability only once there is an address to
@@ -107,7 +117,9 @@ impl TvClient {
             Self::Tizen { mac, .. }
             | Self::Webos { mac, .. }
             | Self::Roku { mac, .. }
-            | Self::Philips { mac, .. } => mac.as_deref(),
+            | Self::Philips { mac, .. }
+            | Self::GoogleCast { mac, .. } => mac.as_deref(),
+            Self::Cec { .. } => None,
         }
     }
 
@@ -125,7 +137,9 @@ impl TvClient {
             Self::Tizen { mac: slot, .. }
             | Self::Webos { mac: slot, .. }
             | Self::Roku { mac: slot, .. }
-            | Self::Philips { mac: slot, .. } => *slot = Some(mac),
+            | Self::Philips { mac: slot, .. }
+            | Self::GoogleCast { mac: slot, .. } => *slot = Some(mac),
+            Self::Cec { .. } => {}
         }
         self
     }
@@ -158,7 +172,10 @@ impl TvClient {
                     next.with_client_identity(identity)
                 };
             }
-            Self::Roku { .. } | Self::Philips { .. } => {}
+            Self::Roku { .. }
+            | Self::Philips { .. }
+            | Self::GoogleCast { .. }
+            | Self::Cec { .. } => {}
         }
         self
     }
@@ -211,6 +228,14 @@ impl TvClient {
                 vendor: "philips",
                 operation: "learn_mac",
             }),
+            Self::GoogleCast { .. } => Err(TvError::UnsupportedOperation {
+                vendor: "googlecast",
+                operation: "learn_mac",
+            }),
+            Self::Cec { .. } => Err(TvError::UnsupportedOperation {
+                vendor: "cec",
+                operation: "learn_mac",
+            }),
         }
     }
 
@@ -228,7 +253,10 @@ impl TvClient {
         match self {
             Self::Tizen { pool, .. } => pool.clear().await,
             Self::Webos { pool, .. } => pool.clear().await,
-            Self::Roku { .. } | Self::Philips { .. } => 0,
+            Self::Roku { .. }
+            | Self::Philips { .. }
+            | Self::GoogleCast { .. }
+            | Self::Cec { .. } => 0,
         }
     }
 }
@@ -353,10 +381,22 @@ impl PowerControl for TvClient {
             // Tizen, webOS, and Philips SICP drop their network stack when they sleep, so the
             // broadcast packet is the only path — and it needs the address the
             // caller supplied. Without one this is a refusal, not a guess.
-            Self::Tizen { .. } | Self::Webos { .. } | Self::Philips { .. } => match self.mac() {
+            Self::Tizen { .. }
+            | Self::Webos { .. }
+            | Self::Philips { .. }
+            | Self::GoogleCast { .. } => match self.mac() {
                 Some(mac) => wake_with_packet(mac).await,
                 None => Err(TvError::Unsupported(Capability::Wake)),
             },
+            Self::Cec { address, adapter } => {
+                let transport = ClientTransport::new(adapter);
+                let client = CecClient::new(transport);
+                client
+                    .power_on(*address)
+                    .await
+                    .map_err(|error| TvError::protocol(error.to_string()))?;
+                Ok(())
+            }
         }
     }
 
@@ -393,7 +433,19 @@ impl KeyInput for TvClient {
                             .await
                             .map_err(|error| map::roku(&error, Capability::Key))
                     }
-                    Self::Philips { .. } => Err(TvError::Unsupported(Capability::Key)),
+                    Self::Philips { .. } | Self::GoogleCast { .. } => {
+                        Err(TvError::Unsupported(Capability::Key))
+                    }
+                    Self::Cec { address, adapter } => {
+                        let transport = ClientTransport::new(adapter);
+                        let client = CecClient::new(transport);
+                        let cmd_str = cec_key_command(*address, key)?;
+                        client
+                            .send(&cmd_str)
+                            .await
+                            .map_err(|error| TvError::protocol(error.to_string()))?;
+                        Ok(())
+                    }
                 }
             })
             .await
@@ -428,9 +480,10 @@ impl AppLaunch for TvClient {
                     .map_err(|error| map::roku(&error, Capability::Foreground))?;
                 Ok(active.app_id.map(AppRef::new))
             }
-            Self::Tizen { .. } | Self::Philips { .. } => {
-                Err(TvError::Unsupported(Capability::Foreground))
-            }
+            Self::Tizen { .. }
+            | Self::Philips { .. }
+            | Self::GoogleCast { .. }
+            | Self::Cec { .. } => Err(TvError::Unsupported(Capability::Foreground)),
         }
     }
 
@@ -497,9 +550,10 @@ impl AppLaunch for TvClient {
             // Listing is its own capability, so the refusal names `AppList`: Tizen
             // launches what it cannot enumerate, and saying `AppLaunch` here would
             // claim the wrong thing.
-            Self::Tizen { .. } | Self::Philips { .. } => {
-                Err(TvError::Unsupported(Capability::AppList))
-            }
+            Self::Tizen { .. }
+            | Self::Philips { .. }
+            | Self::GoogleCast { .. }
+            | Self::Cec { .. } => Err(TvError::Unsupported(Capability::AppList)),
         }
     }
 }
@@ -532,7 +586,9 @@ impl TextInput for TvClient {
                         .send_text(client, text)
                         .await
                         .map_err(|error| map::tizen(&error, Capability::TextInput)),
-                    Self::Philips { .. } => Err(TvError::Unsupported(Capability::TextInput)),
+                    Self::Philips { .. } | Self::GoogleCast { .. } | Self::Cec { .. } => {
+                        Err(TvError::Unsupported(Capability::TextInput))
+                    }
                 }
             })
             .await
@@ -550,7 +606,7 @@ impl InputSelect for TvClient {
         }
     }
 
-    /// webOS switches with `ssap://tv/switchInput`.
+    /// webOS switches with `ssap://tv/switchInput`. CEC switches active source.
     async fn select_input(&self, input: Input, cmd: tv_rs_core::CommandId) -> Result<(), TvError> {
         dedupe::global()
             .call(host_of(self.address()), cmd, async move {
@@ -560,6 +616,19 @@ impl InputSelect for TvClient {
                         pool.switch_input(client, &input_id)
                             .await
                             .map_err(|error| map::webos(&error, Capability::InputSelect))
+                    }
+                    Self::Cec { adapter, .. } => {
+                        let transport = ClientTransport::new(adapter);
+                        let client = CecClient::new(transport);
+                        let phys = match input {
+                            Input::Hdmi(port) if port >= 1 => (port as u16) << 12,
+                            _ => return Err(TvError::Unsupported(Capability::InputSelect)),
+                        };
+                        client
+                            .set_active_source(phys)
+                            .await
+                            .map_err(|error| TvError::protocol(error.to_string()))?;
+                        Ok(())
                     }
                     _ => Err(TvError::Unsupported(Capability::InputSelect)),
                 }
@@ -662,7 +731,36 @@ fn device_os(vendor: TvVendor) -> DeviceOs {
         TvVendor::Philips => DeviceOs::PhilipsSicp,
         TvVendor::Unknown => DeviceOs::Unknown,
         TvVendor::GoogleCast => DeviceOs::GoogleCast,
+        TvVendor::Cec => DeviceOs::Cec,
     }
+}
+
+/// Maps a core key onto CEC command / user control code.
+fn cec_key_command(target: CecAddress, key: Key) -> Result<String, TvError> {
+    let code: u8 = match key {
+        Key::Select | Key::Enter => 0x00,
+        Key::Up => 0x01,
+        Key::Down => 0x02,
+        Key::Left => 0x03,
+        Key::Right => 0x04,
+        Key::Home => 0x09,
+        Key::Back => 0x0D,
+        Key::VolumeUp => 0x41,
+        Key::VolumeDown => 0x42,
+        Key::Mute => 0x43,
+        Key::Play => 0x44,
+        Key::Stop => 0x45,
+        Key::Pause => 0x46,
+        Key::Rewind => 0x48,
+        Key::FastForward => 0x49,
+        Key::Power => 0x40,
+        Key::PowerOff => 0x6C,
+        _ => return Err(TvError::Unsupported(Capability::Key)),
+    };
+    // Format User Control Pressed (opcode 0x44) frame:
+    // Initiator 4 (Playback1) or 0 (Tv) to target with opcode 0x44 and key code.
+    let target_val = target.as_u8();
+    Ok(format!("tx 4{:X}:44:{:02X}", target_val, code))
 }
 
 /// Maps a core key onto the Tizen remote-key vocabulary.
