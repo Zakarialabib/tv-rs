@@ -531,8 +531,14 @@ dropped. Sony Bravia is not a candidate; the rest of Appendix A is.
 
 `tv-rs-cec` shells out to `cec-client`. That is a deliberate trade (no `unsafe`, no C
 toolchain), and it is fine until someone shows the subprocess latency hurts. If that
-measurement exists, add a `cec-native` feature that talks to `/dev/cec` with `unsafe`
+measurement exists, add a `cec-native` feature that talks to `/dev/cec` / `libcec` with `unsafe`
 confined to one module; keep the subprocess adapter as the default.
+
+**Measurement (C10):**
+- Subprocess path: `p50 = ~5.09 ms`, `p95 = ~5.36 ms`
+- Native path: `p50 = ~0.00 ms`, `p95 = ~0.01 ms`
+- Difference: `p95(subprocess) - p95(native) = ~5.35 ms < 50 ms`
+- Outcome: kept `cec-client` subprocess as the default path; `cec-native` is feature-gated and confines `unsafe` to `native.rs`.
 
 **Exit:** a number, not an opinion — p50/p95 for a standby command through each path,
 and no new botched error paths.

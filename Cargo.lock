@@ -3139,6 +3139,7 @@ name = "tv-rs-cec"
 version = "0.6.0"
 dependencies = [
  "async-trait",
+ "libc",
  "thiserror",
  "tokio",
 ]
