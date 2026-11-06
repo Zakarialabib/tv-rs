@@ -73,6 +73,8 @@ pub use tv_rs_discovery as discovery;
 pub use tv_rs_ir as ir;
 /// Samsung MDC commercial display protocol client: [`mdc::MdcClient`].
 pub use tv_rs_mdc as mdc;
+/// Screen mirroring session vocabulary and wire framing: [`mirror::MirrorStart`], [`mirror::StreamPacket`].
+pub use tv_rs_mirror as mirror;
 /// Wake-on-LAN and power-state probing: [`power::WolSender`].
 pub use tv_rs_power as power;
 pub use tv_rs_power::PowerState;

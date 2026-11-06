@@ -1,0 +1,23 @@
+[package]
+name = "tv-rs-mirror"
+description = "A video session vocabulary for screen mirroring based on NectarLink protocol v0"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["screen-mirror", "video-session", "signage", "display"]
+categories = ["multimedia::video", "network-programming"]
+
+[dependencies]
+bytes = "1"
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tv-rs-core.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true
