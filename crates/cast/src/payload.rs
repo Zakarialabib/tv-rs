@@ -126,6 +126,34 @@ pub enum ReceiverRequest {
     },
 }
 
+/// Data Transfer Object for media status.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct MediaStatusDto {
+    /// Current playback state (e.g. "PLAYING", "PAUSED", "IDLE", "BUFFERING").
+    pub state: String,
+    /// Current playback position in seconds.
+    pub position: f64,
+    /// Media duration in seconds, if available.
+    pub duration: Option<f64>,
+    /// Content or track identifier / URI, if available.
+    pub track: Option<String>,
+}
+
+/// Media info.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaInfo {
+    /// Content ID or URL.
+    pub content_id: String,
+    /// Content type (MIME).
+    pub content_type: String,
+    /// Stream type.
+    pub stream_type: String,
+    /// Media duration in seconds.
+    #[serde(default)]
+    pub duration: Option<f64>,
+}
+
 /// Media status.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -136,6 +164,25 @@ pub struct MediaStatus {
     pub player_state: String,
     /// Current time.
     pub current_time: f64,
+    /// Media details.
+    pub media: Option<MediaInfo>,
+}
+
+impl From<&MediaStatus> for MediaStatusDto {
+    fn from(status: &MediaStatus) -> Self {
+        Self {
+            state: status.player_state.clone(),
+            position: status.current_time,
+            duration: status.media.as_ref().and_then(|m| m.duration),
+            track: status.media.as_ref().map(|m| m.content_id.clone()),
+        }
+    }
+}
+
+impl From<MediaStatus> for MediaStatusDto {
+    fn from(status: MediaStatus) -> Self {
+        MediaStatusDto::from(&status)
+    }
 }
 
 /// Media response.
@@ -151,18 +198,6 @@ pub enum MediaResponse {
         /// List of statuses.
         status: Vec<MediaStatus>,
     },
-}
-
-/// Media info.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct MediaInfo {
-    /// Content ID or URL.
-    pub content_id: String,
-    /// Content type (MIME).
-    pub content_type: String,
-    /// Stream type.
-    pub stream_type: String,
 }
 
 /// Media request.

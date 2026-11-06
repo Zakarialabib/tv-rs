@@ -3121,6 +3121,7 @@ dependencies = [
  "pbkdf2",
  "prost",
  "rand 0.8.8",
+ "rcgen",
  "reqwest",
  "rustls",
  "rustls-pki-types",
