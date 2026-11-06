@@ -8,6 +8,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Native CEC bindings (C10)** (`tv-rs-cec`): platform-native CEC measurement
+  behind the `measurement` feature gate — Windows (`dwmapi`/`SetMonitorBrightness`),
+  Linux (`ddcutil` FFI), macOS (`IOKit`/`IODisplayControl`). Benchmarks validate
+  sub-100ms round-trips per platform.
+- **`tv-rs-mirror` crate** (new): video-session vocabulary for the companion
+  mirror protocol — `Session`, `Input`, `Message`, `Packet` types with full
+  round-trip tests. Lays the groundwork for the commissioning mirror feature.
+
+### Changed
+
+- Dependency bumps: `btleplug` 0.11.8 → 0.13.5, `pbkdf2` 0.12.2 → 0.13.0.
+
+### Fixed
+
+- **Android TV prost bindings**: pre-generated prost bindings committed; `protoc`
+  no longer required at build time.
+- CI clippy, rustdoc, and cargo-deny warnings resolved.
+
+---
+
+## [0.4.0] - 2026-11-01
+
+### Added
+
 - **`tv-rs-rag`**: the in-memory grounding module — a static vendor-quirks corpus
   (Tier A: MDC `0x84`, SICP `0x56`, webOS SSAP, Tizen channel, EDID strings parsed
   from `quirks/default.toml`), an episodic remediation ledger (Tier B: bounded
