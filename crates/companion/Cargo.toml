@@ -1,0 +1,34 @@
+[package]
+name = "tv-rs-companion"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Mobile companion core library with no_std+alloc support, UniFFI Swift/Kotlin bindings, mDNS/SSDP discovery gating, QR+SAS pairing, and tv-rs-hostd control"
+
+[lints]
+workspace = true
+
+[dependencies]
+tv-rs-core.workspace = true
+tv-rs-provision = { path = "../provision", version = "0.6.0", default-features = false, features = ["serde"] }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror.workspace = true
+sha2.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+spin = { version = "0.9", default-features = false, features = ["spin_mutex"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tv-rs-core = { workspace = true, features = ["conformance", "mock-backend"] }
+serde_json.workspace = true
+
+[features]
+default = ["std", "serde"]
+std = ["tv-rs-provision/std"]
+serde = ["dep:serde", "dep:serde_json", "tv-rs-core/serde", "tv-rs-provision/serde"]
+uniffi-bindings = []
+conformance = ["tv-rs-core/conformance"]

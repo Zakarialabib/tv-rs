@@ -706,10 +706,13 @@ The phone talks to the edge host, the host drives displays through protocol and 
 
 ### 4. Companion layer: the phone app's core
 
-- `tv-rs-companion`: a pure-Rust core with no UI, exposed to Swift and Kotlin through `uniffi`.
-- It handles discovery (mDNS plus SSDP), pairing flows for each vendor, remote keys, power and input, and talking to `tv-rs-hostd`.
-- `tv-rs-provision`: first-boot setup over BLE using Improv, then QR-code pairing between phone and host.
-- Platform constraints to design around: iOS needs the multicast networking entitlement, and Android needs a multicast lock for SSDP and mDNS.
+- `tv-rs-companion` (Done): `no_std`+`alloc` pure-Rust core with no UI, exposed to Swift and Kotlin through UniFFI bridge.
+  Handles discovery (mDNS + SSDP with multicast-lock / entitlement gating), QR+SAS ceremony, remote keys, power and input,
+  talking to `tv-rs-hostd`, and implements `DeviceHandle` passing `tv-rs-core` conformance.
+- `tv-rs-provision` (Done): first-boot setup over BLE using Improv Wi-Fi, QR-code pairing (`tvrs-companion://`) between phone and host,
+  6-digit SAS derivation, and platform multicast lock/entitlement verification.
+- Platform constraints handled: iOS verifies multicast networking entitlement; Android verifies `WifiManager.MulticastLock` before scanning,
+  with automatic fallback to direct unicast/QR pairing on filtered networks.
 
 No layer adds a database. Desired state, pins, tokens and caches stay as files, matching how tv-rs already stores pairing tokens and quirks.
 

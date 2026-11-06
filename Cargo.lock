@@ -3157,6 +3157,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "tv-rs-companion"
+version = "0.6.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "sha2",
+ "spin",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tv-rs-core",
+ "tv-rs-provision",
+]
+
+[[package]]
 name = "tv-rs-core"
 version = "0.6.0"
 dependencies = [
@@ -3281,6 +3297,20 @@ dependencies = [
  "thiserror",
  "tokio",
  "tv-rs-transport",
+]
+
+[[package]]
+name = "tv-rs-provision"
+version = "0.6.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tv-rs-core",
+ "uuid",
 ]
 
 [[package]]
