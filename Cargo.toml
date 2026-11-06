@@ -40,6 +40,8 @@ tv-rs-media = { path = "crates/media", version = "0.6.0" }
 tv-rs-vision = { path = "crates/vision", version = "0.6.0" }
 tv-rs-rules = { path = "crates/rules", version = "0.6.0" }
 tv-rs-rag = { path = "crates/rag", version = "0.6.0" }
+tv-rs-companion = { path = "crates/companion", version = "0.6.0" }
+tv-rs-provision = { path = "crates/provision", version = "0.6.0" }
 
 # --- runtime / async ---
 tokio = { version = "1", features = ["net", "time", "io-util", "fs", "macros", "rt-multi-thread", "sync", "signal"] }
