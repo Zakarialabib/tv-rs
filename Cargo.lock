@@ -3040,6 +3040,7 @@ dependencies = [
  "tv-rs-dlna",
  "tv-rs-ir",
  "tv-rs-mdc",
+ "tv-rs-mirror",
  "tv-rs-power",
  "tv-rs-rag",
  "tv-rs-roku",
@@ -3257,6 +3258,18 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+]
+
+[[package]]
+name = "tv-rs-mirror"
+version = "0.6.0"
+dependencies = [
+ "bytes",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tv-rs-core",
 ]
 
 [[package]]
