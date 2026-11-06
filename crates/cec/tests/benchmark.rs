@@ -6,10 +6,6 @@
 
 #![allow(missing_docs)]
 
-use std::fs::File;
-use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use tv_rs_cec::{CecAddress, CecClient, CecCommand, CecError, CecTransport};
@@ -62,7 +58,11 @@ pub async fn benchmark_standby<T: CecTransport>(
 
 /// Creates a mock mock_cec_client executable shell script in a temp directory.
 #[cfg(unix)]
-pub fn create_mock_cec_client(script_dir: &std::path::Path) -> PathBuf {
+pub fn create_mock_cec_client(script_dir: &std::path::Path) -> std::path::PathBuf {
+    use std::fs::File;
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+
     let script_path = script_dir.join("mock_cec_client.sh");
     let script_content = r#"#!/usr/bin/env sh
 # Simulates cec-client -s
@@ -76,6 +76,22 @@ echo "TRAFFIC: command executed"
     let mut perms = f.metadata().unwrap().permissions();
     perms.set_mode(0o755);
     f.set_permissions(perms).unwrap();
+    f.sync_all().unwrap();
+    drop(f);
+    script_path
+}
+
+/// Creates a mock mock_cec_client batch script in a temp directory for Windows.
+#[cfg(windows)]
+pub fn create_mock_cec_client_cmd(script_dir: &std::path::Path) -> std::path::PathBuf {
+    use std::fs::File;
+    use std::io::Write;
+
+    let script_path = script_dir.join("mock_cec_client.cmd");
+    let script_content =
+        "@echo off\r\necho TRAFFIC: [ 10 ] >> 0F:36\r\necho TRAFFIC: command executed\r\n";
+    let mut f = File::create(&script_path).expect("failed to create mock cec-client cmd script");
+    f.write_all(script_content.as_bytes()).unwrap();
     f.sync_all().unwrap();
     drop(f);
     script_path
@@ -105,15 +121,19 @@ impl CecTransport for MockNativeTransport {
 #[cfg(all(test, feature = "client"))]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use tv_rs_cec::ClientTransport;
 
     #[tokio::test]
-    #[cfg(unix)]
     async fn benchmark_harness_evaluates_p50_p95_and_exit_criteria() {
         let tmp_dir = std::env::var_os("CARGO_TARGET_TMPDIR")
             .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir);
+
+        #[cfg(unix)]
         let mock_client_path = create_mock_cec_client(&tmp_dir);
+        #[cfg(windows)]
+        let mock_client_path = create_mock_cec_client_cmd(&tmp_dir);
 
         let subprocess_transport = ClientTransport::new(mock_client_path.to_str().unwrap());
         let subprocess_client = CecClient::new(subprocess_transport);
