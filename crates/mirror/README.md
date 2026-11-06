@@ -6,7 +6,6 @@ As stated in the tv-rs README:
 
 > Does not decode video, render anything, or transcode. It returns URLs and issues commands; what you do with the picture is your call.
 
-`tv-rs-mirror` adopts NectarLink's `docs/protocol/mirror.md` specification as the session contract:
 - **Numbered sessions**: `0` represents the primary screen; any `n > 0` represents an app window. A missing session defaults to `0` for backwards compatibility with older peers.
 - **Control messages**:
   - `mirror.start`: `{ max_size, fps, bitrate, audio?, session?, app?, stay_awake?, screen_off?, watch?, sound_only? }`
