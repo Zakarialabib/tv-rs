@@ -1,8 +1,10 @@
 //! Cast client implementation mirroring other vendor adapters.
 
+use crate::error::CastError;
 use crate::error::Result;
 use crate::payload::{
-    ConnectionRequest, MediaInfo, MediaRequest, ReceiverRequest, ReceiverStatus, Volume,
+    ConnectionRequest, MediaInfo, MediaRequest, MediaResponse, MediaStatusDto, ReceiverRequest,
+    ReceiverStatus, Volume,
 };
 use crate::proto::cast_channel::{cast_message, CastMessage};
 use crate::transport::CastTransport;
@@ -23,7 +25,12 @@ pub struct CastClient {
 impl CastClient {
     /// Connects to the Cast device at the given IP address.
     pub async fn connect(ip: &str) -> Result<Self> {
-        let mut transport = CastTransport::connect(ip).await?;
+        Self::connect_port(ip, crate::transport::CAST_PORT).await
+    }
+
+    /// Connects to the Cast device at the given IP address and port.
+    pub async fn connect_port(ip: &str, port: u16) -> Result<Self> {
+        let mut transport = CastTransport::connect_port(ip, port).await?;
 
         // Send connection request
         let connect_req = ConnectionRequest::Connect;
@@ -119,6 +126,7 @@ impl CastClient {
                 content_id: url.to_string(),
                 content_type: content_type.to_string(),
                 stream_type: "BUFFERED".to_string(), // or LIVE/NONE
+                duration: None,
             },
             autoplay: true,
         };
@@ -130,6 +138,112 @@ impl CastClient {
             namespace: "urn:x-cast:com.google.cast.media".to_string(),
             payload_type: cast_message::PayloadType::String as i32,
             payload_utf8: Some(serde_json::to_string(&load_req)?),
+            payload_binary: None,
+        };
+        self.transport.write_message(&msg).await?;
+        Ok(())
+    }
+
+    /// Fetches media status for the given media session/transport id.
+    pub async fn media_status(&mut self, session_id: &str) -> Result<MediaStatusDto> {
+        let req_id = self.next_request_id();
+        let get_status = MediaRequest::GetStatus { request_id: req_id };
+
+        let msg = CastMessage {
+            protocol_version: cast_message::ProtocolVersion::Castv210 as i32,
+            source_id: SENDER_ID.to_string(),
+            destination_id: session_id.to_string(),
+            namespace: "urn:x-cast:com.google.cast.media".to_string(),
+            payload_type: cast_message::PayloadType::String as i32,
+            payload_utf8: Some(serde_json::to_string(&get_status)?),
+            payload_binary: None,
+        };
+        self.transport.write_message(&msg).await?;
+
+        // Read until MEDIA_STATUS response is found
+        loop {
+            let reply = self.transport.read_message().await?;
+            if reply.namespace == "urn:x-cast:com.google.cast.media" {
+                if let Some(payload_str) = reply.payload_utf8 {
+                    let resp: MediaResponse = serde_json::from_str(&payload_str)?;
+                    match resp {
+                        MediaResponse::MediaStatus { status, .. } => {
+                            if let Some(first) = status.first() {
+                                return Ok(MediaStatusDto::from(first));
+                            }
+                            return Err(CastError::Json(serde::de::Error::custom(
+                                "MEDIA_STATUS contains empty status list",
+                            )));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Resumes media playback.
+    pub async fn play(&mut self, session_id: &str, media_session_id: i32) -> Result<()> {
+        let req_id = self.next_request_id();
+        let req = MediaRequest::Play {
+            request_id: req_id,
+            media_session_id,
+        };
+
+        let msg = CastMessage {
+            protocol_version: cast_message::ProtocolVersion::Castv210 as i32,
+            source_id: SENDER_ID.to_string(),
+            destination_id: session_id.to_string(),
+            namespace: "urn:x-cast:com.google.cast.media".to_string(),
+            payload_type: cast_message::PayloadType::String as i32,
+            payload_utf8: Some(serde_json::to_string(&req)?),
+            payload_binary: None,
+        };
+        self.transport.write_message(&msg).await?;
+        Ok(())
+    }
+
+    /// Pauses media playback.
+    pub async fn pause(&mut self, session_id: &str, media_session_id: i32) -> Result<()> {
+        let req_id = self.next_request_id();
+        let req = MediaRequest::Pause {
+            request_id: req_id,
+            media_session_id,
+        };
+
+        let msg = CastMessage {
+            protocol_version: cast_message::ProtocolVersion::Castv210 as i32,
+            source_id: SENDER_ID.to_string(),
+            destination_id: session_id.to_string(),
+            namespace: "urn:x-cast:com.google.cast.media".to_string(),
+            payload_type: cast_message::PayloadType::String as i32,
+            payload_utf8: Some(serde_json::to_string(&req)?),
+            payload_binary: None,
+        };
+        self.transport.write_message(&msg).await?;
+        Ok(())
+    }
+
+    /// Seeks to a specific timestamp in seconds.
+    pub async fn seek(
+        &mut self,
+        session_id: &str,
+        media_session_id: i32,
+        current_time: f64,
+    ) -> Result<()> {
+        let req_id = self.next_request_id();
+        let req = MediaRequest::Seek {
+            request_id: req_id,
+            media_session_id,
+            current_time,
+        };
+
+        let msg = CastMessage {
+            protocol_version: cast_message::ProtocolVersion::Castv210 as i32,
+            source_id: SENDER_ID.to_string(),
+            destination_id: session_id.to_string(),
+            namespace: "urn:x-cast:com.google.cast.media".to_string(),
+            payload_type: cast_message::PayloadType::String as i32,
+            payload_utf8: Some(serde_json::to_string(&req)?),
             payload_binary: None,
         };
         self.transport.write_message(&msg).await?;

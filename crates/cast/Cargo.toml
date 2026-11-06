@@ -28,6 +28,7 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["ring",
 pki-types = { package = "rustls-pki-types", version = "1.7" }
 
 [dev-dependencies]
+rcgen = { workspace = true }
 tokio.workspace = true
 wiremock.workspace = true
 

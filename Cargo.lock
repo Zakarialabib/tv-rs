@@ -3121,6 +3121,7 @@ dependencies = [
  "pbkdf2",
  "prost",
  "rand 0.8.8",
+ "rcgen",
  "reqwest",
  "rustls",
  "rustls-pki-types",
@@ -3154,6 +3155,22 @@ dependencies = [
  "tv-rs",
  "tv-rs-agent",
  "tv-rs-core",
+]
+
+[[package]]
+name = "tv-rs-companion"
+version = "0.6.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "sha2",
+ "spin",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tv-rs-core",
+ "tv-rs-provision",
 ]
 
 [[package]]
@@ -3281,6 +3298,20 @@ dependencies = [
  "thiserror",
  "tokio",
  "tv-rs-transport",
+]
+
+[[package]]
+name = "tv-rs-provision"
+version = "0.6.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tv-rs-core",
+ "uuid",
 ]
 
 [[package]]
