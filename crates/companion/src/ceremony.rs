@@ -1,7 +1,7 @@
 //! QR and SAS pairing ceremony.
 //!
 //! Handshake workflow:
-//! 1. Companion scans QR code (or receives handover) yielding [`QrPairingPayload`].
+//! 1. Companion scans QR code (or receives handover) yielding [`tv_rs_provision::qr::QrPairingPayload`].
 //! 2. Companion derives the 6-digit Short Authentication String (SAS) matching client identifier.
 //! 3. Companion verifies SAS with user on display (or confirms auto-match).
 //! 4. Paired session token is established for authenticated control commands.

@@ -1,9 +1,9 @@
 //! Device handle implementation for the companion.
 //!
 //! Bridges [`CompanionDevice`] to `tv_rs_core::DeviceHandle`, implementing:
-//! - [`PowerControl`] (wake, sleep)
-//! - [`KeyInput`] (remote keys)
-//! - [`InputSelect`] (HDMI / custom input selection)
+//! - [`tv_rs_core::PowerControl`] (wake, sleep)
+//! - [`tv_rs_core::KeyInput`] (remote keys)
+//! - [`tv_rs_core::InputSelect`] (HDMI / custom input selection)
 //!
 //! Fully satisfies `tv_rs_core::conformance::run`.
 
