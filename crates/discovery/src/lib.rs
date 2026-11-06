@@ -56,6 +56,7 @@ pub mod payload;
 pub mod probe;
 pub mod protocol;
 pub mod registry;
+pub mod source;
 pub mod types;
 pub mod universal;
 
@@ -85,6 +86,10 @@ pub use probe::{
     ROKU_ECP_PORT, TIZEN_API_PORT, WEBOS_SSAP_PORT,
 };
 pub use protocol::{DiscoveryDiagnostics, DiscoveryOutcome, SsdpDiscovery};
+pub use source::{
+    CompositeDiscoverySource, DiscoverySource, LgDiscoverySource, RokuDiscoverySource,
+    SamsungDiscoverySource, SsdpDiscoverySource, WolDiscoverySource,
+};
 pub use types::{
     DiscoveryMethod, MDNS_MULTICAST_IP, MDNS_UDP_PORT, SSDP_ALL_DEVICES, SSDP_MULTICAST_IP,
     SSDP_ROOT_DEVICE, SSDP_UDP_PORT,
