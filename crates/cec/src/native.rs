@@ -15,8 +15,15 @@ use crate::{CecCommand, CecError, CecTransport};
 /// The maximum parameter bytes attached to a CEC frame.
 pub const CEC_MAX_DATA_PACKET_SIZE: usize = 64;
 
-/// Size of OSD device name buffer in libcec_configuration.
+/// Size of OSD device name buffer in libcec_configuration (including null terminator).
+/// Libcec configuration allows at most 14 characters + null terminator = 15 bytes.
 pub const LIBCEC_OSD_NAME_SIZE: usize = 15;
+
+/// Maximum length of OSD name characters according to HDMI-CEC specification (14 bytes).
+pub const CEC_MAX_OSD_NAME_LEN: usize = 14;
+
+/// CEC Opcode for SET_OSD_NAME (0x47 = 71).
+pub const CEC_OPCODE_SET_OSD_NAME: u8 = 0x47;
 
 /// Opaque libcec connection pointer.
 pub type LibcecConnectionT = *mut c_void;
@@ -259,10 +266,101 @@ impl Drop for NativeConnection {
 unsafe impl Send for NativeConnection {}
 unsafe impl Sync for NativeConnection {}
 
+/// Validates raw CEC frame bytes for protocol compliance and security bounds before FFI transmission.
+///
+/// Ensures:
+/// 1. Logical addresses (initiator and destination) are valid 4-bit values (0..=15).
+/// 2. Payload does not exceed standard CEC frame parameters (`CEC_MAX_DATA_PACKET_SIZE`, typically 14 or 64).
+/// 3. Specifically guards against CVE-related buffer overflows via `SET_OSD_NAME` (opcode 0x47):
+///    OSD names must be 1..=14 ASCII displayable characters and must not overflow buffers.
+pub fn validate_cec_frame(bytes: &[u8]) -> Result<(), CecError> {
+    if bytes.is_empty() {
+        return Err(CecError::Rejected("empty cec frame".to_string()));
+    }
+
+    let header = bytes[0];
+    let initiator = header >> 4;
+    let destination = header & 0x0F;
+
+    if initiator > 15 || destination > 15 {
+        return Err(CecError::Rejected(format!(
+            "invalid cec logical address in header: initiator={initiator}, destination={destination}"
+        )));
+    }
+
+    if bytes.len() > 1 {
+        let opcode = bytes[1];
+        let parameters = &bytes[2..];
+
+        if parameters.len() > CEC_MAX_DATA_PACKET_SIZE {
+            return Err(CecError::Rejected(format!(
+                "cec frame parameters exceed max size (got {} bytes, max {})",
+                parameters.len(),
+                CEC_MAX_DATA_PACKET_SIZE
+            )));
+        }
+
+        // Validate SET_OSD_NAME (0x47 / 71)
+        if opcode == CEC_OPCODE_SET_OSD_NAME {
+            if parameters.is_empty() {
+                return Err(CecError::Rejected(
+                    "malformed SET_OSD_NAME: missing OSD name payload".to_string(),
+                ));
+            }
+            if parameters.len() > CEC_MAX_OSD_NAME_LEN {
+                return Err(CecError::Rejected(format!(
+                    "malformed SET_OSD_NAME: length {} exceeds maximum allowed length of {} characters",
+                    parameters.len(),
+                    CEC_MAX_OSD_NAME_LEN
+                )));
+            }
+            // Ensure characters are valid ASCII displayable / text
+            if !parameters.iter().all(|&b| (0x20..=0x7E).contains(&b)) {
+                return Err(CecError::Rejected(
+                    "malformed SET_OSD_NAME: contains non-displayable characters".to_string(),
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Safely formats an OSD device name into a fixed buffer ensuring null-termination.
+pub fn format_osd_name(name: &str) -> Result<[c_char; LIBCEC_OSD_NAME_SIZE], CecError> {
+    if name.is_empty() {
+        return Err(CecError::Rejected(
+            "device name cannot be empty".to_string(),
+        ));
+    }
+    let name_bytes = name.as_bytes();
+    if name_bytes.len() > CEC_MAX_OSD_NAME_LEN {
+        return Err(CecError::Rejected(format!(
+            "device name '{}' is too long ({} bytes, max {})",
+            name,
+            name_bytes.len(),
+            CEC_MAX_OSD_NAME_LEN
+        )));
+    }
+    if !name_bytes.iter().all(|&b| (0x20..=0x7E).contains(&b)) {
+        return Err(CecError::Rejected(format!(
+            "device name '{name}' contains illegal characters"
+        )));
+    }
+
+    let mut buf = [0 as c_char; LIBCEC_OSD_NAME_SIZE];
+    for (i, &b) in name_bytes.iter().enumerate() {
+        buf[i] = b as c_char;
+    }
+    buf[name_bytes.len()] = 0; // Explicit null terminator
+    Ok(buf)
+}
+
 /// Native CEC transport wrapping libcec via dynamic FFI binding.
 pub struct NativeTransport {
     symbols: Result<Arc<LibcecSymbols>, CecError>,
     port: Option<String>,
+    device_name: String,
     connection: Mutex<Option<NativeConnection>>,
 }
 
@@ -270,6 +368,7 @@ impl std::fmt::Debug for NativeTransport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("NativeTransport")
             .field("port", &self.port)
+            .field("device_name", &self.device_name)
             .field("available", &self.symbols.is_ok())
             .finish()
     }
@@ -289,6 +388,7 @@ impl NativeTransport {
         Self {
             symbols,
             port: None,
+            device_name: "tv-rs-cec".to_string(),
             connection: Mutex::new(None),
         }
     }
@@ -297,6 +397,13 @@ impl NativeTransport {
     #[must_use]
     pub fn with_port(mut self, port: impl Into<String>) -> Self {
         self.port = Some(port.into());
+        self
+    }
+
+    /// Sets the OSD device name for this adapter.
+    #[must_use]
+    pub fn with_device_name(mut self, name: impl Into<String>) -> Self {
+        self.device_name = name.into();
         self
     }
 
@@ -310,11 +417,7 @@ impl NativeTransport {
             .map_err(|e| CecError::Unavailable(e.to_string()))?;
 
         if guard.is_none() {
-            let mut str_device_name = [0 as c_char; LIBCEC_OSD_NAME_SIZE];
-            let name = b"tv-rs-cec\0";
-            for (dest, &src) in str_device_name.iter_mut().zip(name.iter()) {
-                *dest = src as c_char;
-            }
+            let str_device_name = format_osd_name(&self.device_name)?;
             let mut device_types = CecDeviceTypeListRaw::default();
             device_types.types[0] = 1; // RecordingDevice
 
@@ -322,6 +425,7 @@ impl NativeTransport {
                 client_version: 0x80000, // v8.0.0
                 str_device_name,
                 device_types,
+                b_monitor_only: 0,
                 ..Default::default()
             };
 
@@ -431,9 +535,8 @@ impl CecTransport for NativeTransport {
                     bytes.push(b);
                 }
 
-                if bytes.is_empty() {
-                    return Err(CecError::Rejected("empty hex payload".to_string()));
-                }
+                // Strictly validate frame before reaching unsafe code
+                validate_cec_frame(&bytes)?;
 
                 let header = bytes[0];
                 let initiator = (header >> 4) as c_int;
@@ -441,9 +544,6 @@ impl CecTransport for NativeTransport {
 
                 let (opcode, opcode_set, parameters) = if bytes.len() > 1 {
                     let param_bytes = &bytes[2..];
-                    if param_bytes.len() > CEC_MAX_DATA_PACKET_SIZE {
-                        return Err(CecError::Rejected("frame parameters too long".to_string()));
-                    }
                     let mut data = [0u8; CEC_MAX_DATA_PACKET_SIZE];
                     data[..param_bytes.len()].copy_from_slice(param_bytes);
                     (
@@ -496,5 +596,68 @@ mod tests {
         );
         let err = transport.symbols.as_ref().err().unwrap();
         assert!(matches!(err, CecError::Unavailable(_)));
+    }
+
+    #[test]
+    fn test_format_osd_name_bounds() {
+        // Valid name
+        let buf = format_osd_name("TestDisplay").unwrap();
+        assert_eq!(buf[0], b'T' as c_char);
+        assert_eq!(buf[11], 0);
+
+        // Max length (14 chars)
+        let exact14 = "12345678901234";
+        let buf14 = format_osd_name(exact14).unwrap();
+        assert_eq!(buf14[14], 0);
+
+        // Empty name
+        assert!(format_osd_name("").is_err());
+
+        // Oversized name (> 14 chars)
+        let too_long = "123456789012345";
+        let err = format_osd_name(too_long).unwrap_err();
+        assert!(matches!(err, CecError::Rejected(_)));
+
+        // Non-displayable characters
+        assert!(format_osd_name("bad\x00name").is_err());
+        assert!(format_osd_name("bad\nname").is_err());
+    }
+
+    #[test]
+    fn test_validate_cec_frame_set_osd_name() {
+        // Valid SET_OSD_NAME frame: header (0x10 = from 1 to 0), opcode (0x47), payload "TV"
+        let valid_frame = [0x10, CEC_OPCODE_SET_OSD_NAME, b'T', b'V'];
+        assert!(validate_cec_frame(&valid_frame).is_ok());
+
+        // Max 14 characters OSD name
+        let mut max_frame = vec![0x10, CEC_OPCODE_SET_OSD_NAME];
+        max_frame.extend_from_slice(b"12345678901234");
+        assert!(validate_cec_frame(&max_frame).is_ok());
+
+        // Malformed SET_OSD_NAME: empty payload
+        let empty_payload = [0x10, CEC_OPCODE_SET_OSD_NAME];
+        let err = validate_cec_frame(&empty_payload).unwrap_err();
+        assert!(matches!(err, CecError::Rejected(_)));
+
+        // Malformed SET_OSD_NAME: 15 characters (buffer overflow attempt)
+        let mut overflow_frame = vec![0x10, CEC_OPCODE_SET_OSD_NAME];
+        overflow_frame.extend_from_slice(b"123456789012345");
+        let err = validate_cec_frame(&overflow_frame).unwrap_err();
+        assert!(matches!(err, CecError::Rejected(_)));
+        assert!(err.to_string().contains("exceeds maximum allowed length"));
+
+        // Malformed SET_OSD_NAME: control characters / non-ASCII
+        let bad_char_frame = [0x10, CEC_OPCODE_SET_OSD_NAME, b'T', 0x1B, b'V'];
+        let err = validate_cec_frame(&bad_char_frame).unwrap_err();
+        assert!(matches!(err, CecError::Rejected(_)));
+    }
+
+    #[test]
+    fn test_validate_cec_frame_oversized_payload() {
+        // Exceeding CEC_MAX_DATA_PACKET_SIZE
+        let mut huge_frame = vec![0x10, 0x00];
+        huge_frame.resize(2 + CEC_MAX_DATA_PACKET_SIZE + 1, 0xAA);
+        let err = validate_cec_frame(&huge_frame).unwrap_err();
+        assert!(matches!(err, CecError::Rejected(_)));
     }
 }
