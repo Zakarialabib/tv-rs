@@ -40,6 +40,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+          targets: thumbv7em-none-eabihf
       - uses: Swatinem/rust-cache@v2
       # The device model must stay embeddable by consumers that never link tokio.
       # This is the compile-time guarantee the spec makes, so CI has to hold it.
@@ -50,6 +51,8 @@ jobs:
             echo "::error::tv-rs-core must not depend on tokio"
             exit 1
           fi
+      - name: Core compiles without default features with alloc
+        run: cargo check -p tv-rs-core --no-default-features --features alloc
       - run: cargo test -p tv-rs-core --features "mock-backend conformance quirks"
       - run: cargo clippy -p tv-rs-core --all-targets --features "mock-backend conformance quirks"
         env:

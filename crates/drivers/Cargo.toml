@@ -1,0 +1,34 @@
+[package]
+name = "tv-rs-drivers"
+description = "Consolidated protocol-vendor drivers for tv-rs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["smart-tv", "driver", "tizen", "webos", "roku"]
+categories = ["api-bindings", "hardware-support"]
+
+[features]
+default = ["discovery", "power"]
+discovery = []
+power = []
+tizen = []
+webos = []
+roku = []
+mdc = []
+sicp = []
+ir = []
+cec = []
+cast = []
+all = [
+    "tizen", "webos", "roku", "mdc", "sicp",
+    "ir", "cec", "cast", "discovery", "power",
+]
+
+[dependencies]
+tv-rs-core = { workspace = true }
+async-trait = { workspace = true }
+
+[lints]
+workspace = true

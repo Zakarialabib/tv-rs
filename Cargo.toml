@@ -13,6 +13,7 @@ repository = "https://github.com/Zakarialabib/tv-rs"
 [workspace.dependencies]
 # --- protocol crates (path + version: `path` is stripped at publish time) ---
 tv-rs-core = { path = "crates/core", version = "0.7.1" }
+tv-rs-drivers = { path = "crates/drivers", version = "0.7.1" }
 tv-rs-discovery = { path = "crates/discovery", version = "0.7.1" }
 tv-rs-power = { path = "crates/power", version = "0.7.1" }
 tv-rs-roku = { path = "crates/roku", version = "0.7.1" }

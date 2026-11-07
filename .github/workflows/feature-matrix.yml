@@ -1,0 +1,82 @@
+name: Feature Matrix
+
+on:
+  push:
+    branches: ["main"]
+    tags:
+      - "v*.*.*"
+      - "tv-rs-drivers-v*.*.*"
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Feature matrix: verifies compilation of each individual driver and umbrella 'all' in strict isolation
+  feature-matrix:
+    name: feature-matrix (${{ matrix.feature }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        feature:
+          - tizen
+          - webos
+          - roku
+          - mdc
+          - sicp
+          - ir
+          - cec
+          - cast
+          - discovery
+          - power
+          - all
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.feature }}
+      - name: Cargo check tv-rs-drivers feature ${{ matrix.feature }}
+        run: cargo check -p tv-rs-drivers --no-default-features --features ${{ matrix.feature }}
+
+  # Baseline check: verifies zero-feature minimal build and default-features configuration
+  baseline:
+    name: baseline (${{ matrix.target.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - name: no-default-features
+            args: --no-default-features
+          - name: default-features
+            args: ""
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target.name }}
+      - name: Cargo check ${{ matrix.target.name }}
+        run: cargo check -p tv-rs-drivers ${{ matrix.target.args }}
+
+  # Release tag check: validates packageability and publishing dry-run with all features on release tags
+  release-dry-run:
+    name: publish dry-run (tv-rs-drivers)
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    needs: [feature-matrix]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: publish-dry-run
+      - name: Verify LICENSE exists
+        run: test -f LICENSE || (echo "LICENSE file missing — cargo publish requires it" && exit 1)
+      - name: Dry run cargo publish for tv-rs-drivers
+        run: cargo publish --dry-run -p tv-rs-drivers --features all
