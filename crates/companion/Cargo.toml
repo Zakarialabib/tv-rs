@@ -12,7 +12,7 @@ workspace = true
 
 [dependencies]
 tv-rs-core.workspace = true
-tv-rs-provision = { path = "../provision", version = "0.6.0", default-features = false, features = ["serde"] }
+tv-rs-provision = { workspace = true, features = ["serde"] }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror.workspace = true
