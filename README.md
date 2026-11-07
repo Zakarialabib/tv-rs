@@ -9,11 +9,11 @@
 Find the televisions on your LAN and drive them from Rust — discovery, power,
 remote control, fleet reconciliation and media serving, behind one small facade.
 
-> **Version check.** `0.2.0` is on crates.io for thirteen crates; `tv-rs-mdc` is
-> merged in this repository but not yet published. The surface this page describes —
-> `power_observation()`, the `quirks` feature, `TizenRemote`, `tv-rs-local`,
-> `tv-rs-dlna` — first appears in `0.2.0`; if you pin an older version, check
-> [docs.rs](https://docs.rs/tv-rs) for what that version actually has.
+> **Version check.** `0.7.1` is on crates.io for all 28 workspace crates (with 17 sub-crates
+> re-exported behind the unified `tv-rs` facade). The surface this page describes —
+> `TvClient` (with Google Cast and HDMI-CEC support), `power_observation()`, the `quirks` feature,
+> `TizenRemote`, `tv-rs-companion`, `tv-rs-provision`, `tv-rs-dlna`, and transport controls —
+> is published on [docs.rs](https://docs.rs/tv-rs).
 
 ```rust
 use tv_rs::discover;
@@ -256,13 +256,16 @@ resolves, not a target chosen for reach).
 
 ## Publishing
 
-Fourteen crates go out in dependency order because `cargo publish` is not atomic — a
+Twenty-eight crates go out in topological dependency order because `cargo publish` is not atomic — a
 partial release burns the version:
 
 ```
 tv-rs-core → tv-rs-transport → tv-rs-discovery → tv-rs-power → tv-rs-local
-  → tv-rs-dlna → tv-rs-roku → tv-rs-mdc → tv-rs-tizen → tv-rs-webos → tv-rs
-  → tv-rs-media → tv-rs-agent → tv-rs-cec
+  → tv-rs-dlna → tv-rs-cast → tv-rs-roku → tv-rs-mdc → tv-rs-sicp
+  → tv-rs-lgcmd → tv-rs-sim → tv-rs-tizen → tv-rs-webos → tv-rs-app
+  → tv-rs-cec → tv-rs-ir → tv-rs-mirror → tv-rs-spatial-audio → tv-rs-vision
+  → tv-rs-rules → tv-rs-rag → tv-rs-provision → tv-rs-companion → tv-rs
+  → tv-rs-media → tv-rs-agent → tv-rs-bluetooth
 ```
 
 `core` leads because every backend depends on its vocabulary; `local`, `media`,
