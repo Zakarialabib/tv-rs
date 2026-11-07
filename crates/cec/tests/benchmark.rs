@@ -89,7 +89,7 @@ pub fn create_mock_cec_client_cmd(script_dir: &std::path::Path) -> std::path::Pa
 
     let script_path = script_dir.join("mock_cec_client.cmd");
     let script_content =
-        "@echo off\r\necho TRAFFIC: [ 10 ] >> 0F:36\r\necho TRAFFIC: command executed\r\n";
+        "@echo off\r\necho TRAFFIC: [ 10 ] ^>^> 0F:36\r\necho TRAFFIC: command executed\r\n";
     let mut f = File::create(&script_path).expect("failed to create mock cec-client cmd script");
     f.write_all(script_content.as_bytes()).unwrap();
     f.sync_all().unwrap();
