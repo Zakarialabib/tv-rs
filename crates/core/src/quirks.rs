@@ -182,7 +182,7 @@ impl Quirks {
     /// Returns a parse error only if the bundled file is broken, which the crate's
     /// own tests prevent.
     pub fn bundled() -> Result<Self, QuirkError> {
-        Self::parse(include_str!("../../../quirks/default.toml"))
+        Self::parse(include_str!("../quirks/default.toml"))
     }
 
     /// The rows, in file order.

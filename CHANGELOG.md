@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-07
+
+### Fixed
+
+- **Bundle quirks table inside `tv-rs-core` package** (`tv-rs-core`): copy `quirks/default.toml`
+  into `crates/core/quirks/default.toml` and update path to `../quirks/default.toml` so
+  `include_str!` compiles cleanly when consumed as an unpacked dependency from crates.io with
+  `features = ["quirks"]`.
+- **CEC Windows mock test batch script** (`tv-rs-cec`): escape `>>` in `mock_cec_client.cmd` to
+  prevent Windows cmd redirection from creating untracked `0F` files during workspace test execution.
+
+
 ## [0.7.0] - 2026-11-07
 
 ### Added
