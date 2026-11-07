@@ -1,7 +1,12 @@
 //! Capability vocabulary and the erased device handle.
 
-use std::fmt;
-use std::time::Duration;
+use core::fmt;
+use core::time::Duration;
+
+use alloc::boxed::Box;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 use async_trait::async_trait;
 

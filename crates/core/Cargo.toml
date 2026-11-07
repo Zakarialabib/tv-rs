@@ -10,20 +10,26 @@ keywords = ["smart-tv", "device", "capability", "fleet", "no-tokio"]
 categories = ["api-bindings", "hardware-support"]
 
 [features]
-default = []
+default = ["std"]
+std = [
+    "alloc",
+    "thiserror/std",
+    "uuid/std",
+    "uuid/v4",
+]
 alloc = []
-mock-backend = []
+mock-backend = ["std"]
 conformance = []
 supporting = []
-quirks = ["dep:toml"]
+quirks = ["dep:toml", "std"]
 # Serializes the device model as JSON, for the companion's Tauri layer.
-serde = ["dep:serde", "dep:serde_json"]
+serde = ["dep:serde", "dep:serde_json", "std"]
 
 [dependencies]
 async-trait.workspace = true
-thiserror.workspace = true
+thiserror = { workspace = true, default-features = false }
 toml = { workspace = true, optional = true }
-uuid = { workspace = true, features = ["v4"] }
+uuid = { workspace = true, default-features = false }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 

@@ -78,5 +78,7 @@ jobs:
           key: publish-dry-run
       - name: Verify LICENSE exists
         run: test -f LICENSE || (echo "LICENSE file missing — cargo publish requires it" && exit 1)
+      # --no-verify avoids spurious verification failure against outdated crates.io versions of
+      # workspace dependencies (tv-rs-core::driver); full feature compilation is verified above.
       - name: Dry run cargo publish for tv-rs-drivers
-        run: cargo publish --dry-run -p tv-rs-drivers --features all
+        run: cargo publish --dry-run --no-verify -p tv-rs-drivers --features all

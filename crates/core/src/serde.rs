@@ -36,13 +36,11 @@
 //! 2. Override the wire shape of `Key` and `ObservedField` above.
 //! 3. Add a test case here.
 
-use std::time::Instant;
-
 use serde::ser::SerializeMap;
 use serde::{Serialize, Serializer};
 
 use crate::capability::{Input, Key};
-use crate::state::{ObservedField, ObservedState};
+use crate::state::{Instant, ObservedField, ObservedState};
 
 impl Serialize for Key {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

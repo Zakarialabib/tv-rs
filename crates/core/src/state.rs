@@ -1,6 +1,32 @@
 //! Observed state and the confidence attached to it.
 
-use std::time::{Duration, Instant};
+use core::time::Duration;
+
+#[cfg(feature = "std")]
+pub use std::time::Instant;
+
+#[cfg(not(feature = "std"))]
+/// Monotonic timestamp placeholder for `no_std` environments.
+///
+/// An `alloc`-only build that stamps a wall-clock time with 0 is a documented
+/// degradation. Callers requiring real elapsed time tracking must record timestamps externally.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct Instant(pub u64);
+
+#[cfg(not(feature = "std"))]
+impl Instant {
+    /// In `no_std`, returns a zero-baseline instant.
+    #[must_use]
+    pub fn now() -> Self {
+        Self(0)
+    }
+
+    /// In `no_std`, returns zero duration elapsed.
+    #[must_use]
+    pub fn elapsed(&self) -> Duration {
+        Duration::ZERO
+    }
+}
 
 use crate::capability::{AppRef, Input};
 use crate::descriptor::PowerState;
@@ -193,7 +219,7 @@ impl ObservedState {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use core::time::Duration;
 
     use super::{Confidence, ObservedField, ObservedState};
 

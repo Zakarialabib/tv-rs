@@ -21,6 +21,9 @@
 //! (`try_from`, see below), so there is no configuration in which a bad bundle
 //! reaches the wire.
 
+use alloc::format;
+use alloc::string::String;
+
 use crate::capability::PanelHealth;
 use crate::descriptor::{DeviceId, DeviceOs};
 use crate::error::TvError;

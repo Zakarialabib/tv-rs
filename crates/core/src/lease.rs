@@ -10,6 +10,8 @@
 //! from the caller, the same way [`crate::state`] takes confidence. The crate
 //! keeps no clock — the agent runner and the HTTP surface each supply theirs.
 
+use alloc::string::String;
+
 use crate::descriptor::DeviceId;
 
 /// How a lease holder expects the control plane to behave while they hold it.

@@ -1,7 +1,8 @@
 //! Command identity and the idempotency contract.
 
-use std::fmt;
+use core::fmt;
 
+use alloc::string::String;
 use uuid::Uuid;
 
 use crate::capability::{Input, Key};
@@ -24,15 +25,46 @@ pub struct CommandId(Uuid);
 
 impl CommandId {
     /// Generates a fresh identifier.
+    ///
+    /// In `std` mode, generates an RFC 9562 random UUID v4.
+    /// In `no_std` mode, generates a sequential monotonic UUID without OS entropy.
     #[must_use]
     pub fn new() -> Self {
-        Self(Uuid::new_v4())
+        #[cfg(feature = "std")]
+        {
+            Self(Uuid::new_v4())
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            use core::sync::atomic::{AtomicU32, Ordering};
+            static COUNTER: AtomicU32 = AtomicU32::new(1);
+            let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
+            Self(Uuid::from_u128(seq as u128))
+        }
     }
 
     /// Wraps an existing UUID, e.g. one that arrived from a queue.
     #[must_use]
     pub fn from_uuid(uuid: Uuid) -> Self {
         Self(uuid)
+    }
+
+    /// Creates a deterministic nil / zero identifier.
+    #[must_use]
+    pub fn nil() -> Self {
+        Self(Uuid::nil())
+    }
+
+    /// Constructs a command identifier from a 128-bit integer.
+    #[must_use]
+    pub fn from_u128(v: u128) -> Self {
+        Self(Uuid::from_u128(v))
+    }
+
+    /// Constructs a command identifier from raw 16-byte buffer.
+    #[must_use]
+    pub fn from_bytes(bytes: [u8; 16]) -> Self {
+        Self(Uuid::from_bytes(bytes))
     }
 
     /// The underlying UUID.
@@ -145,5 +177,20 @@ mod tests {
 
         let cmd = Command::Key(Key::Power);
         assert_eq!(cmd, Command::Key(Key::Power));
+    }
+
+    #[test]
+    fn constructors_and_nil() {
+        use uuid::Uuid;
+
+        let nil = CommandId::nil();
+        assert_eq!(nil.as_uuid(), Uuid::nil());
+
+        let from_int = CommandId::from_u128(42);
+        assert_eq!(from_int, CommandId::from_u128(42));
+
+        let bytes = [1u8; 16];
+        let from_b = CommandId::from_bytes(bytes);
+        assert_eq!(from_b, CommandId::from_bytes(bytes));
     }
 }

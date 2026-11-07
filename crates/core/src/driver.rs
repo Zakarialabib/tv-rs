@@ -4,6 +4,8 @@
 //! uniform connection, command dispatch, and event observation without vendor-specific
 //! pattern matching in client code.
 
+use alloc::boxed::Box;
+
 use async_trait::async_trait;
 
 use crate::capability::{CapabilitySet, DeviceHandle};

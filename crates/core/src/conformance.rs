@@ -22,6 +22,9 @@
 //!
 //! [`ObservedState`]: crate::ObservedState
 
+use alloc::string::String;
+use alloc::vec::Vec;
+
 use crate::capability::{AppRef, Capability, DeviceHandle, Input, Key, Orientation};
 use crate::command::CommandId;
 use crate::error::TvError;

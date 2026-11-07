@@ -18,7 +18,7 @@
 //! }
 //! ```
 
-use std::fmt;
+use core::fmt;
 
 /// One documented defect and its documented handling.
 #[derive(Debug, Clone, PartialEq, Eq)]

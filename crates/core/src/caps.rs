@@ -5,9 +5,12 @@
 //! with permission gating (A5/C1 `Blocked`/`RequestPermission`, Android 16 `ACCESS_LOCAL_NETWORK`,
 //! and Multicast Lock requirements).
 
-use std::collections::BTreeSet;
-use std::fmt;
-use std::str::FromStr;
+use alloc::collections::BTreeSet;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use core::fmt;
+use core::str::FromStr;
 
 use crate::descriptor::PowerState;
 use crate::error::{Remedy, TvError};

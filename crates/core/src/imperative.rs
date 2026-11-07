@@ -12,6 +12,8 @@
 //! verbs that must feel like a remote: sub-second, idempotent-by-caller, and
 //! never re-planned.
 
+use alloc::string::String;
+
 use crate::capability::{Capability, DeviceHandle, Key};
 use crate::command::CommandId;
 use crate::error::TvError;

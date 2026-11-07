@@ -83,9 +83,9 @@ quinn = { version = "0.11", default-features = false, features = ["rustls-ring",
 rcgen = "0.14"
 
 # --- errors / logging / cli ---
-thiserror = "2"
+thiserror = { version = "2", default-features = false }
 toml = "0.8"
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", default-features = false }
 anyhow = "1"
 tracing = "0.1"
 clap = { version = "4", features = ["derive", "env"] }

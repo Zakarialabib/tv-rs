@@ -1,6 +1,9 @@
 //! The error taxonomy, and why it is a routing table rather than a description.
 
-use std::fmt;
+use core::fmt;
+
+use alloc::format;
+use alloc::string::{String, ToString};
 
 use crate::capability::Capability;
 
@@ -211,6 +214,7 @@ impl TransportError {
     /// The check is compiled only where the condition exists: desktop sockets do
     /// not fail this way, so their classification is unchanged.
     #[must_use]
+    #[cfg(feature = "std")]
     pub fn from_io(error: &std::io::Error) -> Self {
         #[cfg(target_os = "android")]
         if error.raw_os_error() == Some(1) {

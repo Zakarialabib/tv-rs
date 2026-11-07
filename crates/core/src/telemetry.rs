@@ -9,7 +9,8 @@
 //! Every field is an [`ObservedField`], because a panel that
 //! stops answering is not cool and well-fed: the value is unknown.
 
-use std::time::Duration;
+use alloc::boxed::Box;
+use core::time::Duration;
 
 use async_trait::async_trait;
 

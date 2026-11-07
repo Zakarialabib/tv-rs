@@ -1,6 +1,9 @@
 //! Identity, operating system and power vocabulary.
 
-use std::fmt;
+use core::fmt;
+
+use alloc::borrow::ToOwned;
+use alloc::string::{String, ToString};
 
 use crate::error::TvError;
 use crate::types::TvVendor;
