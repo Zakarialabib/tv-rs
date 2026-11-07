@@ -6,8 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-07
+
 ### Added
 
+- **Google Cast & CEC facade routing** (`tv-rs`, `tv-rs-core`): fold Google Cast and
+  HDMI-CEC behind the unified `TvClient` facade (`TvClient::GoogleCast`, `TvClient::Cec`).
+- **Google Cast media status & transport controls (G24a)** (`tv-rs-cast`):
+  `MediaStatusDto`, `CastClient::media_status()`, and `play()`, `pause()`, `seek()`.
+- **Companion and provisioning crates** (`tv-rs-companion`, `tv-rs-provision`):
+  mobile companion core with `no_std`+`alloc`, UniFFI Swift/Kotlin bindings, SAS ceremony,
+  and first-boot BLE Improv Wi-Fi onboarding.
+- **CEC native FFI security & mirror fuzzing** (`tv-rs-cec`, `tv-rs-mirror`):
+  audited raw libcec wrappers with pre-FFI frame validation; fuzzing test harness for mirror protocol.
+- **Capability conformance & unified discovery** (`tv-rs-core`, `tv-rs-discovery`):
+  conformance test suite for device capability matrices and unified multi-source discovery.
 - **Native CEC bindings (C10)** (`tv-rs-cec`): platform-native CEC measurement
   behind the `measurement` feature gate — Windows (`dwmapi`/`SetMonitorBrightness`),
   Linux (`ddcutil` FFI), macOS (`IOKit`/`IODisplayControl`). Benchmarks validate
