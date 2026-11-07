@@ -66,14 +66,15 @@ The rules the code follows:
 | **Confidence**    | `power_observation()` reports the state _and_ how it was learned — read (`High`) or probed (`Inferred`)                                                                                                                                                          |
 | **Quirks**        | firmware/model defects as TOML; with the `quirks` feature a matching row removes a dead port from the ladder                                                                                                                                                     |
 | **Reconcile**     | desired state from a file, an HTTP manifest or MQTT; one pure decision function; healing ladder; JSONL audit log                                                                                                                                                 |
-| **HDMI-CEC**      | power on / standby / active source over the cable, for panels the network cannot reach (optional)                                                                                                                                                                |
+| **Google Cast**   | sender over TCP 8009 (TLS + EKE2, protobuf): app launch, volume, media_status query, transport controls (play/pause/seek), DIAL HTTP fallback (8008) |
+| **HDMI-CEC**      | power on / standby / active source over the cable (subprocess `cec-client` or platform-native FFI)                                                               |
 | **Serve media**   | HTTP `206 Partial Content` for seeking, plus HLS playlists — the two things TV players insist on                                                                                                                                                                 |
 
 ## What it does not do
 
 It does not decode video, render anything, or transcode. It returns URLs and issues
 commands; what you do with the picture is your call. There is no Android TV, Google
-Cast or AirPlay backend yet, no event subscriptions (the agent polls), and no
+Cast or AirPlay backend yet (Google Cast sender is implemented in `tv-rs-cast`), no event subscriptions (the agent polls), and no
 input switching on Tizen, webOS or Roku yet. See [`NON_GOALS.md`](NON_GOALS.md).
 
 Nothing here has been verified on hardware from the development host that produced

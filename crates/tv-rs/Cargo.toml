@@ -18,17 +18,17 @@ tv-rs-transport.workspace = true
 tv-rs-tizen.workspace = true
 tv-rs-webos.workspace = true
 tv-rs-roku.workspace = true
-tv-rs-cast = { path = "../cast", version = "0.6.0" }
+tv-rs-cast.workspace = true
 # MDC is a protocol crate like the others, but it is not reached through
 # `TvClient`: SSDP carries no authoritative vendor field, so a commercial panel
 # is never *classified* from a discovery reply. The facade re-exports it so a
 # caller that already knows (an operator adding a panel by address and display
 # id) can name its types and use its `DeviceHandle`.
-tv-rs-cec = { path = "../cec", version = "0.6.0", features = ["client"] }
+tv-rs-cec = { workspace = true, features = ["client"] }
 tv-rs-ir.workspace = true
 tv-rs-mdc.workspace = true
-tv-rs-dlna = { path = "../dlna", version = "0.6.0" }
-tv-rs-rag = { path = "../rag", version = "0.6.0" }
+tv-rs-dlna.workspace = true
+tv-rs-rag.workspace = true
 tv-rs-mirror.workspace = true
 tv-rs-sicp.workspace = true
 tv-rs-spatial-audio.workspace = true
