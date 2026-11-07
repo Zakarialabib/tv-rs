@@ -562,7 +562,7 @@ documented-and-mocked.
 what was commanded and what came back — or an explicit "not verified" line, which is
 also a result.
 
-## 8. Local media caching and multi-screen sync
+## 8. Local media caching and multi-screen sync (Next Priority)
 
 `tv-rs-media` serves a remote panel's stream. The same node should cache to local disk
 and drive several panels from one producer without pulling the source through the
@@ -571,7 +571,7 @@ network twice: a player-level cache plus a sync coordinator on `tv-rs-media`.
 **Exit:** a local cache hit is measurable and reportable; two-panel sync shows no double
 network transfer for a shared source; no regression in the existing `Media` traits.
 
-## 9. Release `0.4.0`
+## 9. Release `0.7.0`
 
 Every open item above, shipped in the order of this page: `tv-rs-core`, protocol
 crates, `tv-rs-mdc`, then the agent, media and facade. Under the policy in

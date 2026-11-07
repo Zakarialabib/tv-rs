@@ -1,6 +1,6 @@
 # Architecture
 
-The workspace is fifteen publishable crates plus a reference CLI and a task runner,
+The workspace is twenty-eight publishable crates plus a reference CLI, an Android TV spike, and a task runner,
 arranged in the layers below. The layering is a property of the dependency graph, not of
 folders — every package lives at `crates/<dir>` and the shape below is what makes the
 graph valid. Thirteen of the fifteen are on crates.io at `0.2.0`; `tv-rs-mdc` and
@@ -9,23 +9,25 @@ table in [`03-matrix.md`](03-matrix.md#published-cratesio-verified-2026-10-22-ag
 
 ## Layers
 
-<<<<<<< HEAD
+
 | Layer              | Crates                                                                                                 | Paths                                               | Responsibility                                                                                                                                                                                                                |
 | ------------------ | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Device model**   | `tv-rs-core`                                                                                           | `crates/core`                                       | capabilities (incl. the commercial LFD subset), `DeviceHandle`, `CommandId`, confidence-tagged state, the error taxonomy, the mock backend, the conformance suite, the quirks table. **No tokio, in any configuration.**      |
 | **Facade**         | `tv-rs`                                                                                                | `crates/tv-rs`                                      | the only multi-vendor-aware code: discovery orchestration, `identify_vendor`, `TvClient` dispatch (which implements `DeviceHandle`), quirk-driven port pinning                                                                |
-| **Protocol**       | `tv-rs-discovery`, `tv-rs-power`, `tv-rs-tizen`, `tv-rs-webos`, `tv-rs-roku`, `tv-rs-mdc`, `tv-rs-cec`, `tv-rs-bluetooth` | `crates/{discovery,power,tizen,webos,roku,mdc,cec,bluetooth}` | one wire protocol/emulation each: SSDP, Wake-on-LAN, Tizen remote channel, LG SSAP, Roku ECP, Samsung MDC, HDMI-CEC over `cec-client`, and Bluetooth HID emulation |
-=======
-| Layer              | Crates                                                                                                 | Paths                                               | Responsibility                                                                                                                                                                                                                                |
-| ------------------ | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Device model**   | `tv-rs-core`                                                                                           | `crates/core`                                       | capabilities (incl. the commercial LFD subset), `DeviceHandle`, `CommandId`, confidence-tagged state, the error taxonomy, the mock backend, the conformance suite, the quirks table. **No tokio, in any configuration.**                      |
-| **Facade**         | `tv-rs`                                                                                                | `crates/tv-rs`                                      | the only multi-vendor-aware code: discovery orchestration, `identify_vendor`, `TvClient` dispatch (which implements `DeviceHandle`), quirk-driven port pinning                                                                                |
-| **Protocol**       | `tv-rs-discovery`, `tv-rs-power`, `tv-rs-tizen`, `tv-rs-webos`, `tv-rs-roku`, `tv-rs-mdc`, `tv-rs-cec` | `crates/{discovery,power,tizen,webos,roku,mdc,cec,lgcmd}` | one wire protocol each: SSDP, Wake-on-LAN, Tizen remote channel, LG SSAP, Roku ECP, Samsung MDC over TCP 1515 or RS-232, and HDMI-CEC over `cec-client`                                                                                       |
->>>>>>> origin/fix/restore-merged-work-after-vision-pr
-| **Support**        | `tv-rs-transport`, `tv-rs-dlna`, `tv-rs-media`, `tv-rs-local`, `tv-rs-vision`                          | `crates/{transport,dlna,media,local,vision}`        | shared plumbing and host-side transports: TLS policy + WebSocket frame reader; DLNA MediaRenderer transport (SSDP + AVTransport SOAP + GENA); an independent HTTP `206`/HLS server; host display probe; RTSP computer vision & edge AI events |
+| **Protocol**       | `tv-rs-discovery`, `tv-rs-power`, `tv-rs-tizen`, `tv-rs-webos`, `tv-rs-roku`, `tv-rs-cast`, `tv-rs-mdc`, `tv-rs-sicp`, `tv-rs-lgcmd`, `tv-rs-cec`, `tv-rs-ir`, `tv-rs-bluetooth` | `crates/{discovery,power,tizen,webos,roku,cast,mdc,sicp,lgcmd,cec,ir,bluetooth}` | one wire protocol/emulation each: SSDP, Wake-on-LAN, Tizen remote channel, LG SSAP, Roku ECP, Google Cast sender, Samsung MDC over TCP 1515 or RS-232, Philips SICP, LG commercial serial, HDMI-CEC (subprocess/native FFI), IR, and Bluetooth HID emulation |
+
+
+
+
+
+
+
+| **Support**        | `tv-rs-transport`, `tv-rs-dlna`, `tv-rs-media`, `tv-rs-local`, `tv-rs-vision`, `tv-rs-mirror`, `tv-rs-spatial-audio`, `tv-rs-sim` | `crates/{transport,dlna,media,local,vision,mirror,spatial-audio,sim}` | shared plumbing and host-side transports: TLS policy + WebSocket frame reader; DLNA MediaRenderer transport (SSDP + AVTransport SOAP + GENA); an independent HTTP `206`/HLS server; host display probe; RTSP computer vision & edge AI events; video mirroring vocabulary; spatial audio orientation; mock hardware simulator |
+| **Grounding & Rules** | `tv-rs-rag`, `tv-rs-rules`                                                                          | `crates/{rag,rules}`                                | in-memory RAG grounding (vendor quirks corpus, episodic remediation ledger, rule AST templates) and declarative rule engine                                                                                                 |
+| **Companion & Provisioning** | `tv-rs-companion`, `tv-rs-provision`                                                                | `crates/{companion,provision}`                      | mobile companion core (no_std+alloc, UniFFI Swift/Kotlin bindings, SAS ceremony) and first-boot provisioning (BLE Improv, QR payload, multicast lock)                                                                       |
 | **App producer**   | `tv-rs-app`                                                                                            | `crates/app`                                        | a supplied web/wasm payload in, an installable TV app out: Tizen `.wgt`, webOS app directory, web bundle, manifests, D-pad key mapping. Depends on nothing in the workspace                                                                   |
 | **Reconciliation** | `tv-rs-agent`                                                                                          | `crates/agent`                                      | desired state in, fleet converged: providers, `decide()`, the healer ladder, the graduated remediation ladder (`remedy`), the JSONL audit log, the loop. Depends on `core` only                                                               |
-| **Tooling**        | `tv-rs-cli`, `xtask`                                                                                   | `crates/cli`, `xtask`                               | reference consumer (`publish = false`), workspace automation (`publish = false`)                                                                                                                                                              |
+| **Tooling**        | `tv-rs-cli`, `tv-rs-androidtv`, `xtask`                                                                | `crates/cli`, `crates/androidtv`, `xtask`           | reference consumer (`publish = false`), Android TV v2 spike (`publish = false`), workspace automation (`publish = false`)                                                                                                    |
 
 `discovery` and `power` are **protocol** crates, not support: SSDP and Wake-on-LAN
 are wire protocols with their own request/response shapes. A folder called `core/`
@@ -216,8 +218,12 @@ manifests:
 
 ```
 tv-rs-core → tv-rs-transport → tv-rs-discovery → tv-rs-power → tv-rs-local
-  → tv-rs-dlna → tv-rs-roku → tv-rs-mdc → tv-rs-sicp → tv-rs-tizen → tv-rs-webos
-  → tv-rs-app → tv-rs-vision → tv-rs → tv-rs-media → tv-rs-agent → tv-rs-cec
+  → tv-rs-dlna → tv-rs-cast → tv-rs-roku → tv-rs-mdc → tv-rs-sicp → tv-rs-lgcmd
+  → tv-rs-sim → tv-rs-tizen → tv-rs-webos → tv-rs-app → tv-rs-cec → tv-rs-ir
+  → tv-rs-mirror → tv-rs-spatial-audio → tv-rs-vision → tv-rs-rules → tv-rs-rag
+  → tv-rs-provision → tv-rs-companion
+
+  → tv-rs → tv-rs-media → tv-rs-agent
   → tv-rs-bluetooth
 ```
 
