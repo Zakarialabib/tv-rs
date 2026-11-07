@@ -813,6 +813,90 @@ pub trait DeviceHandle: Send + Sync {
     }
 }
 
+impl<T: ?Sized + DeviceHandle> DeviceHandle for Box<T> {
+    fn id(&self) -> DeviceId {
+        (**self).id()
+    }
+
+    fn descriptor(&self) -> DeviceDescriptor {
+        (**self).descriptor()
+    }
+
+    fn capabilities(&self) -> CapabilitySet {
+        (**self).capabilities()
+    }
+
+    fn as_power(&self) -> Option<&dyn PowerControl> {
+        (**self).as_power()
+    }
+
+    fn as_key(&self) -> Option<&dyn KeyInput> {
+        (**self).as_key()
+    }
+
+    fn as_app(&self) -> Option<&dyn AppLaunch> {
+        (**self).as_app()
+    }
+
+    fn as_text(&self) -> Option<&dyn TextInput> {
+        (**self).as_text()
+    }
+
+    fn as_input(&self) -> Option<&dyn InputSelect> {
+        (**self).as_input()
+    }
+
+    fn as_volume(&self) -> Option<&dyn VolumeControl> {
+        (**self).as_volume()
+    }
+
+    fn as_brightness(&self) -> Option<&dyn BrightnessControl> {
+        (**self).as_brightness()
+    }
+
+    fn as_reboot(&self) -> Option<&dyn Rebootable> {
+        (**self).as_reboot()
+    }
+
+    fn as_panel_lock(&self) -> Option<&dyn PanelLockControl> {
+        (**self).as_panel_lock()
+    }
+
+    fn as_orientation(&self) -> Option<&dyn OrientationControl> {
+        (**self).as_orientation()
+    }
+
+    fn as_panel_health(&self) -> Option<&dyn PanelHealthProvider> {
+        (**self).as_panel_health()
+    }
+
+    #[cfg(feature = "supporting")]
+    fn as_panel_hours(&self) -> Option<&dyn PanelHoursProvider> {
+        (**self).as_panel_hours()
+    }
+
+    #[cfg(feature = "supporting")]
+    fn as_screen_capturer(&self) -> Option<&dyn ScreenCapturer> {
+        (**self).as_screen_capturer()
+    }
+
+    fn as_screen_cast(&self) -> Option<&dyn ScreenCastProvider> {
+        (**self).as_screen_cast()
+    }
+
+    fn as_spatial_audio(&self) -> Option<&dyn SpatialAudioProvider> {
+        (**self).as_spatial_audio()
+    }
+
+    fn as_probe(&self) -> Option<&dyn Probe> {
+        (**self).as_probe()
+    }
+
+    fn as_telemetry(&self) -> Option<&dyn TelemetryProvider> {
+        (**self).as_telemetry()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

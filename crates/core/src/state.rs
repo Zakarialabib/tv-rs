@@ -36,7 +36,7 @@ impl Confidence {
 }
 
 /// A value plus when and how confidently it was established.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ObservedField<T> {
     /// The value, or `None` when nothing is known.
     pub value: Option<T>,
@@ -162,7 +162,7 @@ impl<T> Default for ObservedField<T> {
 }
 
 /// The state a fleet keeps per device.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ObservedState {
     /// Power.
     pub power: ObservedField<PowerState>,

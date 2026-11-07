@@ -4,6 +4,8 @@ use std::fmt;
 
 use uuid::Uuid;
 
+use crate::capability::{Input, Key};
+
 /// An identifier a caller attaches to a mutating command.
 ///
 /// # The contract
@@ -52,6 +54,58 @@ impl fmt::Display for CommandId {
     }
 }
 
+/// A command sent to a television through [`Driver::send`](crate::driver::Driver::send).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Command {
+    /// Press a remote key.
+    Key(Key),
+    /// Type text into an active input field.
+    Text(String),
+    /// Set power state.
+    Power(bool),
+    /// Launch an application by identifier.
+    LaunchApp(String),
+    /// Switch active input.
+    Input(Input),
+    /// Set absolute volume level (0-100).
+    Volume(u8),
+    /// Set audio mute.
+    Mute(bool),
+    /// Raw or vendor-specific command string.
+    Custom {
+        /// Verb or category name.
+        name: String,
+        /// Command payload.
+        payload: String,
+    },
+}
+
+/// Acknowledgement returned after sending a command to a driver.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CommandAck {
+    /// Associated command id, if provided.
+    pub id: Option<CommandId>,
+    /// Optional status or response message from the device.
+    pub message: Option<String>,
+}
+
+impl CommandAck {
+    /// Builds an acknowledgement without an attached command id.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Builds an acknowledgement tied to a specific [`CommandId`].
+    #[must_use]
+    pub fn with_id(id: CommandId) -> Self {
+        Self {
+            id: Some(id),
+            message: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::CommandId;
@@ -75,5 +129,21 @@ mod tests {
         let mut set = std::collections::HashSet::new();
         set.insert(id);
         assert!(set.contains(&copy));
+    }
+
+    #[test]
+    fn command_ack_constructors() {
+        use super::{Command, CommandAck, Key};
+
+        let ack = CommandAck::new();
+        assert_eq!(ack.id, None);
+        assert_eq!(ack.message, None);
+
+        let id = CommandId::new();
+        let ack_with_id = CommandAck::with_id(id);
+        assert_eq!(ack_with_id.id, Some(id));
+
+        let cmd = Command::Key(Key::Power);
+        assert_eq!(cmd, Command::Key(Key::Power));
     }
 }

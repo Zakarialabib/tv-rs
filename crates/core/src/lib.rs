@@ -41,9 +41,11 @@ pub mod command;
 #[cfg(feature = "conformance")]
 pub mod conformance;
 pub mod descriptor;
+pub mod driver;
 pub mod error;
 pub mod imperative;
 pub mod lease;
+pub mod observe;
 #[cfg(feature = "mock-backend")]
 pub mod mock;
 pub mod provisioning;
@@ -51,6 +53,7 @@ pub mod provisioning;
 pub mod quirks;
 pub mod state;
 pub mod telemetry;
+pub mod types;
 
 #[cfg(feature = "serde")]
 pub mod serde;
@@ -67,11 +70,14 @@ pub use caps::{
     CapabilityId, CapabilityMatrix, EndpointCapabilities, HelloUpdate, MulticastLockRequired,
     PermissionStatus, UiTile,
 };
-pub use command::CommandId;
-pub use descriptor::{DeviceDescriptor, DeviceId, DeviceOs, PowerState};
+pub use command::{Command, CommandAck, CommandId};
+pub use descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv, PowerState};
+pub use driver::{AnyDriver, BoxedDeviceHandle, Driver, ErasedDriver};
 pub use error::{AuthError, ProtocolError, QuirkId, Remedy, StateError, TransportError, TvError};
 pub use imperative::ImperativeCommand;
 pub use lease::{LeaseMode, MaintenanceLease};
+pub use observe::{ObservationStream, TvEvent};
 pub use provisioning::{MdcTopology, NetworkProvisionTarget, ProvisioningBundleV1};
 pub use state::{Confidence, ObservedField, ObservedState};
 pub use telemetry::{Telemetry, TelemetryProvider};
+pub use types::TvVendor;

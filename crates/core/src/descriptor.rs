@@ -3,6 +3,7 @@
 use std::fmt;
 
 use crate::error::TvError;
+use crate::types::TvVendor;
 
 /// A stable identifier for one television.
 ///
@@ -210,9 +211,76 @@ impl PowerState {
     }
 }
 
+/// A television discovered on the local network or direct address.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct DiscoveredTv {
+    /// The classified vendor.
+    pub vendor: TvVendor,
+    /// Network address or IP.
+    pub ip: String,
+    /// UPnP location URL, if advertised.
+    pub location: Option<String>,
+    /// Advertised friendly name.
+    pub friendly_name: Option<String>,
+    /// Manufacturer name.
+    pub manufacturer: Option<String>,
+    /// Model name or number.
+    pub model_name: Option<String>,
+    /// Serial number, when advertised.
+    pub serial_number: Option<String>,
+    /// SSDP Unique Service Name (USN), containing UDN.
+    pub usn: Option<String>,
+    /// Hardware MAC address, when known.
+    pub mac: Option<String>,
+}
+
+impl DiscoveredTv {
+    /// Constructs a direct probed target with known vendor and IP.
+    #[must_use]
+    pub fn probed(vendor: TvVendor, ip: impl Into<String>) -> Self {
+        Self {
+            vendor,
+            ip: ip.into(),
+            location: None,
+            friendly_name: None,
+            manufacturer: None,
+            model_name: None,
+            serial_number: None,
+            usn: None,
+            mac: None,
+        }
+    }
+
+    /// Best available display label: friendly name, model name, or address.
+    #[must_use]
+    pub fn label(&self) -> &str {
+        self.friendly_name
+            .as_deref()
+            .or(self.model_name.as_deref())
+            .unwrap_or(self.ip.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn discovered_tv_probed_and_label() {
+        let tv = DiscoveredTv::probed(TvVendor::Samsung, "192.168.1.100");
+        assert_eq!(tv.vendor, TvVendor::Samsung);
+        assert_eq!(tv.ip, "192.168.1.100");
+        assert_eq!(tv.label(), "192.168.1.100");
+
+        let mut tv_with_model = tv.clone();
+        tv_with_model.model_name = Some("QN90A".to_string());
+        assert_eq!(tv_with_model.label(), "QN90A");
+
+        let mut tv_with_name = tv_with_model;
+        tv_with_name.friendly_name = Some("Living Room TV".to_string());
+        assert_eq!(tv_with_name.label(), "Living Room TV");
+    }
 
     #[test]
     fn device_id_rejects_empty_values() {
