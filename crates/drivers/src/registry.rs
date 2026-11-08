@@ -268,4 +268,19 @@ mod tests {
             assert!(reg.find_for_vendor(TvVendor::Roku).is_some());
         }
     }
+
+    #[test]
+    fn default_registry_and_capability_aggregation() {
+        let def = default_registry();
+        assert_eq!(def.len(), registry().len());
+
+        let agg = def.aggregate_capabilities();
+        assert!(!agg.is_empty());
+
+        let cap_reg = def.build_capability_registry();
+        assert_eq!(cap_reg.len(), def.len());
+
+        let power_drivers = def.find_by_capability(Capability::PowerState);
+        assert!(!power_drivers.is_empty());
+    }
 }

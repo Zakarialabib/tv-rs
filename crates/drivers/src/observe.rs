@@ -10,13 +10,26 @@ pub const DEFAULT_OBSERVE_CHANNEL_CAPACITY: usize = 64;
 /// Adapter implementing `EventReceiver` over a `tokio::sync::broadcast::Receiver`.
 pub struct BroadcastReceiver {
     receiver: broadcast::Receiver<TvEvent>,
+    _sender: Option<broadcast::Sender<TvEvent>>,
 }
 
 impl BroadcastReceiver {
     /// Wraps a tokio broadcast receiver.
     #[must_use]
     pub fn new(receiver: broadcast::Receiver<TvEvent>) -> Self {
-        Self { receiver }
+        Self {
+            receiver,
+            _sender: None,
+        }
+    }
+
+    /// Wraps a tokio broadcast receiver and retains a sender reference to keep the channel open.
+    #[must_use]
+    pub fn with_sender(receiver: broadcast::Receiver<TvEvent>, sender: broadcast::Sender<TvEvent>) -> Self {
+        Self {
+            receiver,
+            _sender: Some(sender),
+        }
     }
 
     /// Converts this receiver into an erased `ObservationStream`.

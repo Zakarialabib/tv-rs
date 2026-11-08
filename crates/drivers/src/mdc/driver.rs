@@ -54,6 +54,12 @@ impl MdcDriver {
         driver.active_client = Some(client);
         driver
     }
+
+    /// Returns a reference to the broadcast event sender.
+    #[must_use]
+    pub fn event_sender(&self) -> &tokio::sync::broadcast::Sender<TvEvent> {
+        &self.event_tx
+    }
 }
 
 impl Default for MdcDriver {

@@ -40,6 +40,12 @@ impl CastDriver {
             event_tx,
         }
     }
+
+    /// Returns a reference to the broadcast event sender.
+    #[must_use]
+    pub fn event_sender(&self) -> &tokio::sync::broadcast::Sender<TvEvent> {
+        &self.event_tx
+    }
 }
 
 impl Default for CastDriver {
