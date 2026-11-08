@@ -6,8 +6,8 @@
 //! deal with TV addresses and commands.
 //!
 //! ```no_run
-//! # async fn run() -> tv_rs_tizen::Result<()> {
-//! use tv_rs_tizen::TizenRemote;
+//! # async fn run() -> tv_rs_drivers::tizen::Result<()> {
+//! use tv_rs_drivers::tizen::remote::TizenRemote;
 //!
 //! let remote = TizenRemote::new("tv-tokens.json", "SignageMaster");
 //! let pairing = remote.pair("192.168.1.10").await?;

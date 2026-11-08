@@ -35,10 +35,10 @@ pub const PRIME_VIDEO_APP_ID: &str = "3201512006786";
 /// numeric id â€” silently launching nothing would be worse than a clear failure.
 ///
 /// ```
-/// # fn demo() -> Result<(), tv_rs_tizen::TizenError> {
-/// assert_eq!(tv_rs_tizen::resolve_app_id("Netflix")?, "1110110");
-/// assert_eq!(tv_rs_tizen::resolve_app_id("2019010019")?, "2019010019");
-/// assert!(tv_rs_tizen::resolve_app_id("not an app").is_err());
+/// # fn demo() -> Result<(), tv_rs_drivers::tizen::TizenError> {
+/// assert_eq!(tv_rs_drivers::tizen::resolve_app_id("Netflix")?, "1110110");
+/// assert_eq!(tv_rs_drivers::tizen::resolve_app_id("2019010019")?, "2019010019");
+/// assert!(tv_rs_drivers::tizen::resolve_app_id("not an app").is_err());
 /// # Ok(()) }
 /// ```
 pub fn resolve_app_id(input: &str) -> Result<String> {

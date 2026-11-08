@@ -9,7 +9,7 @@
 //! quarantined rather than taking the application down.
 //!
 //! ```no_run
-//! use tv_rs_tizen::SamsungTokenStore;
+//! use tv_rs_drivers::tizen::SamsungTokenStore;
 //!
 //! let mut store = SamsungTokenStore::load("tv-tokens.json");
 //! store.upsert("192.168.1.10", "token-abc", "Living Room").expect("write");

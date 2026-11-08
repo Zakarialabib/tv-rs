@@ -6,10 +6,10 @@
 //! so the pool keeps one channel per TV and reopens it exactly once when a send
 //! fails.
 //!
-//! ```
-//! # async fn demo() -> tv_rs_tizen::Result<()> {
+//! ```no_run
+//! # async fn demo() -> tv_rs_drivers::tizen::Result<()> {
 //! use std::time::Duration;
-//! use tv_rs_tizen::{TizenClient, TizenConnectionPool, TizenRemoteKey};
+//! use tv_rs_drivers::tizen::{TizenClient, TizenConnectionPool, TizenRemoteKey};
 //!
 //! let pool = TizenConnectionPool::new();
 //! let client = TizenClient::new("192.168.1.10").with_token("saved-token");

@@ -110,8 +110,8 @@ pub fn is_samsung(st: Option<&str>, manufacturer: Option<&str>, model: Option<&s
 /// all, "no TVs found" would be a misleading result.
 ///
 /// ```no_run
-/// # async fn run() -> tv_rs_tizen::Result<()> {
-/// let tvs = tv_rs_tizen::discover_samsung(std::time::Duration::from_secs(3)).await?;
+/// # async fn run() -> tv_rs_drivers::tizen::Result<()> {
+/// let tvs = tv_rs_drivers::tizen::discovery::discover(std::time::Duration::from_secs(3)).await?;
 /// for tv in tvs {
 ///     println!("{} at {}", tv.label(), tv.ip);
 /// }
