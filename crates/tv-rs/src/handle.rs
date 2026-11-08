@@ -51,63 +51,28 @@ use crate::map;
 use crate::types::TvVendor;
 
 impl TvClient {
-    /// The capabilities this backend actually implements.
+    /// Discovers and reports the capabilities of this television client dynamically
+    /// via the active driver registered in `tv-rs-drivers::registry`.
+    ///
+    /// Per SPECDD §3.1: queries `Driver::capabilities()` rather than hardcoding vendor enums.
     #[must_use]
-    pub fn core_capabilities(&self) -> CapabilitySet {
-        let mut set = CapabilitySet::empty().with(Capability::PowerState);
-        match self {
-            Self::Tizen { .. } => {
-                set.insert(Capability::Key);
-                set.insert(Capability::AppLaunch);
-                // `ms.remote.control` with `SendInputString` types a string.
-                set.insert(Capability::TextInput);
-            }
-            Self::Webos { .. } => {
-                set.insert(Capability::AppLaunch);
-                set.insert(Capability::Foreground);
-                set.insert(Capability::Volume);
-                set.insert(Capability::Key);
-                set.insert(Capability::InputSelect);
-                // `ssap://com.webos.applicationManager/listApps` answers with the
-                // installed catalogue, so this is a fact rather than a promise.
-                set.insert(Capability::AppList);
-                // `ssap://com.webos.service.ime/insertText` types into the focused field.
-                set.insert(Capability::TextInput);
-            }
-            Self::Roku { .. } => {
-                set.insert(Capability::Key);
-                set.insert(Capability::AppLaunch);
-                // ECP answers power-on while the screen is dark, so a Roku needs
-                // neither a MAC nor a magic packet to be woken.
-                set.insert(Capability::Wake);
-                // `/query/active-app` says what is in front, which is the whole
-                // input of an "on screen" card.
-                set.insert(Capability::Foreground);
-                // `/query/apps` lists what is installed.
-                set.insert(Capability::AppList);
-                // `keypress/Lit_<char>` types printable ASCII.
-                set.insert(Capability::TextInput);
-            }
-            Self::Philips { .. } => {
-                // Philips SICP provides power control.
-            }
-            Self::GoogleCast { .. } => {
-                set.insert(Capability::AppLaunch);
-                set.insert(Capability::ScreenCast);
-            }
-            Self::Cec { .. } => {
-                set.insert(Capability::Wake);
-                set.insert(Capability::Key);
-                set.insert(Capability::InputSelect);
-            }
-        }
-        // The other two drop their network stack when they sleep, so a magic
-        // packet is the only path — a capability only once there is an address to
-        // send it to.
+    pub fn capabilities(&self) -> CapabilitySet {
+        let mut set = tv_rs_drivers::registry::default_registry()
+            .find_for_vendor(self.vendor())
+            .map(CapabilitySet::from_driver)
+            .unwrap_or_else(|| CapabilitySet::empty().with(Capability::PowerState));
+
+        // Instance-level Wake-on-LAN: enabled only when a physical MAC address is known
         if self.mac().is_some() {
             set.insert(Capability::Wake);
         }
         set
+    }
+
+    /// Backwards-compatible alias for [`TvClient::capabilities`].
+    #[must_use]
+    pub fn core_capabilities(&self) -> CapabilitySet {
+        self.capabilities()
     }
 
     /// The hardware address this handle knows, if any.

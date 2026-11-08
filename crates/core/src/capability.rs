@@ -4,6 +4,7 @@ use core::fmt;
 use core::time::Duration;
 
 use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -12,8 +13,10 @@ use async_trait::async_trait;
 
 use crate::command::CommandId;
 use crate::descriptor::{DeviceDescriptor, DeviceId, PowerState};
+use crate::driver::{AnyDriver, Driver};
 use crate::error::TvError;
 use crate::telemetry::TelemetryProvider;
+use crate::types::TvVendor;
 
 /// One thing a device can be asked to do.
 ///
@@ -159,6 +162,141 @@ impl CapabilitySet {
             .iter()
             .copied()
             .filter(|capability| self.contains(*capability))
+    }
+
+    /// Constructs a `CapabilitySet` by querying an erased driver (`AnyDriver`).
+    #[must_use]
+    pub fn from_driver(driver: &AnyDriver) -> Self {
+        *driver.capabilities()
+    }
+
+    /// Constructs a `CapabilitySet` by querying any typed driver implementing [`Driver`].
+    #[must_use]
+    pub fn from_typed_driver<D: Driver>(driver: &D) -> Self {
+        *driver.capabilities()
+    }
+
+    /// Returns the union of `self` and `other`.
+    #[must_use]
+    pub fn union(&self, other: &Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    /// Extends `self` in place with all capabilities in `other`.
+    pub fn extend(&mut self, other: &Self) {
+        self.0 |= other.0;
+    }
+
+    /// Returns the number of distinct capabilities contained in this set.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.count_ones() as usize
+    }
+}
+
+impl core::ops::BitOr for CapabilitySet {
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self::Output {
+        self.union(&rhs)
+    }
+}
+
+impl core::ops::BitOrAssign for CapabilitySet {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.extend(&rhs);
+    }
+}
+
+impl FromIterator<Capability> for CapabilitySet {
+    fn from_iter<T: IntoIterator<Item = Capability>>(iter: T) -> Self {
+        let mut set = Self::empty();
+        for cap in iter {
+            set.insert(cap);
+        }
+        set
+    }
+}
+
+/// Registry mapping television vendors / drivers to their advertised capability sets.
+///
+/// Designed per SPECDD §3.1 for unified capability management and conformance verification.
+/// Strictly `no_std` + `alloc` compliant: uses `alloc::collections::BTreeMap`.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CapabilityRegistry {
+    entries: BTreeMap<TvVendor, CapabilitySet>,
+}
+
+impl CapabilityRegistry {
+    /// Creates an empty capability registry.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            entries: BTreeMap::new(),
+        }
+    }
+
+    /// Registers a capability set for a specific television vendor.
+    pub fn register(&mut self, vendor: TvVendor, capabilities: CapabilitySet) {
+        self.entries.insert(vendor, capabilities);
+    }
+
+    /// Registers an erased driver trait object into the registry.
+    pub fn register_driver(&mut self, driver: &AnyDriver) {
+        self.register(driver.vendor(), CapabilitySet::from_driver(driver));
+    }
+
+    /// Registers a concrete driver into the registry.
+    pub fn register_typed_driver<D: Driver>(&mut self, driver: &D) {
+        self.register(driver.vendor(), CapabilitySet::from_typed_driver(driver));
+    }
+
+    /// Looks up the capability set for the given vendor.
+    #[must_use]
+    pub fn capabilities_for(&self, vendor: TvVendor) -> Option<&CapabilitySet> {
+        self.entries.get(&vendor)
+    }
+
+    /// Computes the aggregated union of all capabilities across all registered drivers.
+    #[must_use]
+    pub fn aggregate_capabilities(&self) -> CapabilitySet {
+        let mut agg = CapabilitySet::empty();
+        for caps in self.entries.values() {
+            agg.extend(caps);
+        }
+        agg
+    }
+
+    /// Returns a list of all registered vendor identifiers.
+    #[must_use]
+    pub fn vendors(&self) -> Vec<TvVendor> {
+        self.entries.keys().copied().collect()
+    }
+
+    /// Finds all vendors whose driver advertises the specified capability.
+    #[must_use]
+    pub fn drivers_with_capability(&self, capability: Capability) -> Vec<TvVendor> {
+        self.entries
+            .iter()
+            .filter(|(_, caps)| caps.contains(capability))
+            .map(|(vendor, _)| *vendor)
+            .collect()
+    }
+
+    /// Returns the number of registered drivers/vendors.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Returns `true` if the registry has no registered drivers.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Iterates over all registered vendors and their capability sets.
+    pub fn iter(&self) -> impl Iterator<Item = (&TvVendor, &CapabilitySet)> {
+        self.entries.iter()
     }
 }
 
@@ -955,5 +1093,59 @@ mod tests {
         let app = AppRef::new("3201512006786").with_name("Prime Video");
         assert_eq!(app.to_string(), "Prime Video");
         assert_eq!(AppRef::new("guess").to_string(), "guess");
+    }
+
+    #[test]
+    fn capability_set_union_and_operators() {
+        let a = CapabilitySet::of(Capability::PowerState);
+        let b = CapabilitySet::of(Capability::Volume);
+        let union = a.union(&b);
+        assert_eq!(union.len(), 2);
+        assert!(union.contains(Capability::PowerState));
+        assert!(union.contains(Capability::Volume));
+
+        let bitor = a | b;
+        assert_eq!(bitor, union);
+
+        let mut c = a;
+        c |= b;
+        assert_eq!(c, union);
+
+        let collected: CapabilitySet = [Capability::PowerState, Capability::Key].into_iter().collect();
+        assert_eq!(collected.len(), 2);
+        assert!(collected.contains(Capability::PowerState));
+        assert!(collected.contains(Capability::Key));
+    }
+
+    #[test]
+    fn capability_registry_aggregation_and_lookup() {
+        let mut reg = CapabilityRegistry::new();
+        assert!(reg.is_empty());
+        assert_eq!(reg.len(), 0);
+
+        let tizen_caps = CapabilitySet::of(Capability::PowerState) | CapabilitySet::of(Capability::Key);
+        let roku_caps = CapabilitySet::of(Capability::PowerState) | CapabilitySet::of(Capability::Volume);
+
+        reg.register(TvVendor::Samsung, tizen_caps);
+        reg.register(TvVendor::Roku, roku_caps);
+
+        assert_eq!(reg.len(), 2);
+        assert_eq!(reg.capabilities_for(TvVendor::Samsung), Some(&tizen_caps));
+        assert_eq!(reg.capabilities_for(TvVendor::Roku), Some(&roku_caps));
+        assert_eq!(reg.capabilities_for(TvVendor::Lg), None);
+
+        let agg = reg.aggregate_capabilities();
+        assert_eq!(agg.len(), 3);
+        assert!(agg.contains(Capability::PowerState));
+        assert!(agg.contains(Capability::Key));
+        assert!(agg.contains(Capability::Volume));
+
+        let with_volume = reg.drivers_with_capability(Capability::Volume);
+        assert_eq!(with_volume, vec![TvVendor::Roku]);
+
+        let with_power = reg.drivers_with_capability(Capability::PowerState);
+        assert_eq!(with_power.len(), 2);
+
+        assert_eq!(reg.vendors(), vec![TvVendor::Samsung, TvVendor::Roku]);
     }
 }

@@ -25,9 +25,52 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::capability::{AppRef, Capability, DeviceHandle, Input, Key, Orientation};
+use crate::capability::{AppRef, Capability, CapabilitySet, DeviceHandle, Input, Key, Orientation};
 use crate::command::CommandId;
 use crate::error::TvError;
+
+/// A named conformance test case targeting a specific capability.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConformanceCase {
+    /// The capability tested by this case.
+    pub capability: Capability,
+    /// Human-readable description of what this case verifies.
+    pub label: &'static str,
+}
+
+impl ConformanceCase {
+    /// Creates a new conformance case.
+    #[must_use]
+    pub const fn new(capability: Capability, label: &'static str) -> Self {
+        Self { capability, label }
+    }
+}
+
+/// Trait implemented by drivers and handles that expose conformance test cases.
+pub trait ConformanceProvider {
+    /// Returns the conformance cases covering the capabilities of this provider.
+    fn conformance_cases(&self) -> Vec<ConformanceCase>;
+}
+
+/// Asserts that every capability advertised by the driver has at least one matching
+/// conformance case. Returns `Err` with all orphaned capabilities if any are missing.
+pub fn verify_orphaned_capabilities(
+    capabilities: &CapabilitySet,
+    cases: &[ConformanceCase],
+) -> Result<(), Vec<Capability>> {
+    let mut orphaned = Vec::new();
+    for cap in capabilities.iter() {
+        if !cases.iter().any(|c| c.capability == cap) {
+            orphaned.push(cap);
+        }
+    }
+
+    if orphaned.is_empty() {
+        Ok(())
+    } else {
+        Err(orphaned)
+    }
+}
 
 /// One failed expectation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,10 +107,11 @@ pub async fn run(handle: &dyn DeviceHandle) -> Vec<Violation> {
 fn capability_accessors(handle: &dyn DeviceHandle, violations: &mut Vec<Violation>) {
     let set = handle.capabilities();
 
-    let pairs = [
+    let direct_pairs = [
         (Capability::PowerState, handle.as_power().is_some()),
         (Capability::Key, handle.as_key().is_some()),
         (Capability::AppLaunch, handle.as_app().is_some()),
+        (Capability::TextInput, handle.as_text().is_some()),
         (Capability::InputSelect, handle.as_input().is_some()),
         (Capability::Volume, handle.as_volume().is_some()),
         (Capability::Brightness, handle.as_brightness().is_some()),
@@ -80,6 +124,7 @@ fn capability_accessors(handle: &dyn DeviceHandle, violations: &mut Vec<Violatio
             handle.as_panel_health().is_some(),
         ),
         (Capability::ScreenCast, handle.as_screen_cast().is_some()),
+        (Capability::SpatialAudio, handle.as_spatial_audio().is_some()),
         #[cfg(feature = "supporting")]
         (
             Capability::LampOrPanelHours,
@@ -92,7 +137,7 @@ fn capability_accessors(handle: &dyn DeviceHandle, violations: &mut Vec<Violatio
         ),
     ];
 
-    for (capability, accessor) in pairs {
+    for (capability, accessor) in direct_pairs {
         let advertised = set.contains(capability);
         if advertised != accessor {
             violations.push(Violation::new(
@@ -100,6 +145,26 @@ fn capability_accessors(handle: &dyn DeviceHandle, violations: &mut Vec<Violatio
                 format!("{capability}: advertised={advertised} but accessor_present={accessor}"),
             ));
         }
+    }
+
+    // Grouped Capabilities Verification
+    if set.contains(Capability::Wake) && handle.as_power().is_none() {
+        violations.push(Violation::new(
+            "capability_accessors",
+            "Capability::Wake advertised but handle.as_power() is None (orphaned capability)",
+        ));
+    }
+    if set.contains(Capability::Foreground) && handle.as_app().is_none() {
+        violations.push(Violation::new(
+            "capability_accessors",
+            "Capability::Foreground advertised but handle.as_app() is None (orphaned capability)",
+        ));
+    }
+    if set.contains(Capability::AppList) && handle.as_app().is_none() {
+        violations.push(Violation::new(
+            "capability_accessors",
+            "Capability::AppList advertised but handle.as_app() is None (orphaned capability)",
+        ));
     }
 }
 

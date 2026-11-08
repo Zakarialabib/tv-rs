@@ -76,7 +76,7 @@ pub mod types;
 pub mod serde;
 
 pub use capability::{
-    AppLaunch, AppRef, BrightnessControl, Capability, CapabilitySet, DeviceHandle, Input,
+    AppLaunch, AppRef, BrightnessControl, Capability, CapabilityRegistry, CapabilitySet, DeviceHandle, Input,
     InputSelect, Key, KeyInput, Orientation, OrientationControl, PanelHealth, PanelHealthProvider,
     PanelHours, PanelLockControl, PowerControl, Probe, Rebootable, ScreenCastProvider,
     SpatialAudioProvider, TextInput, VolumeControl,
@@ -88,12 +88,14 @@ pub use caps::{
     PermissionStatus, UiTile,
 };
 pub use command::{Command, CommandAck, CommandId};
+#[cfg(feature = "conformance")]
+pub use conformance::{ConformanceCase, ConformanceProvider, verify_orphaned_capabilities, Violation};
 pub use descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv, PowerState};
 pub use driver::{AnyDriver, BoxedDeviceHandle, Driver, ErasedDriver};
 pub use error::{AuthError, ProtocolError, QuirkId, Remedy, StateError, TransportError, TvError};
 pub use imperative::ImperativeCommand;
 pub use lease::{LeaseMode, MaintenanceLease};
-pub use observe::{ObservationStream, TvEvent};
+pub use observe::{EventReceiver, ObservationError, ObservationStream, TvEvent};
 pub use provisioning::{MdcTopology, NetworkProvisionTarget, ProvisioningBundleV1};
 pub use state::{Confidence, ObservedField, ObservedState};
 pub use telemetry::{Telemetry, TelemetryProvider};

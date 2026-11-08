@@ -10,7 +10,7 @@ keywords = ["smart-tv", "device", "capability", "fleet", "no-tokio"]
 categories = ["api-bindings", "hardware-support"]
 
 [features]
-default = ["std"]
+default = ["std", "conformance"]
 std = [
     "alloc",
     "thiserror/std",

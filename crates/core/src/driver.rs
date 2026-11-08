@@ -37,6 +37,15 @@ pub trait Driver: Send + Sync {
 
     /// Opens an observation event stream for device state transitions.
     async fn observe(&mut self) -> Result<ObservationStream, TvError>;
+
+    /// Returns the conformance cases covering all advertised capabilities.
+    #[cfg(feature = "conformance")]
+    fn conformance_cases(&self) -> alloc::vec::Vec<crate::conformance::ConformanceCase> {
+        self.capabilities()
+            .iter()
+            .map(|cap| crate::conformance::ConformanceCase::new(cap, cap.as_str()))
+            .collect()
+    }
 }
 
 /// An erased device handle boxed as a trait object.
@@ -77,5 +86,10 @@ where
 
     async fn observe(&mut self) -> Result<ObservationStream, TvError> {
         self.0.observe().await
+    }
+
+    #[cfg(feature = "conformance")]
+    fn conformance_cases(&self) -> alloc::vec::Vec<crate::conformance::ConformanceCase> {
+        self.0.conformance_cases()
     }
 }

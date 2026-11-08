@@ -740,6 +740,24 @@ impl TvClient {
         }
     }
 
+    /// Opens an observation stream receiving real-time state change events.
+    ///
+    /// Resolves the active driver for this vendor and target address, and initiates observation.
+    pub async fn observe(&self) -> Result<tv_rs_core::observe::ObservationStream> {
+        let mut target = DiscoveredTv::probed(self.vendor(), self.address());
+        if let Some(mac) = self.mac() {
+            target.mac = Some(mac.to_string());
+        }
+
+        let mut reg = tv_rs_drivers::registry::DriverRegistry::with_defaults();
+        if let Some(driver) = reg.find_for_vendor_mut(self.vendor()) {
+            let _ = driver.connect(&target).await;
+            driver.observe().await
+        } else {
+            Ok(tv_rs_core::observe::ObservationStream::new())
+        }
+    }
+
     /// The Tizen client, when this handle targets a Samsung TV.
     pub fn as_tizen(&self) -> Option<&TizenClient> {
         match self {

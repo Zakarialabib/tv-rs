@@ -60,6 +60,7 @@ pub use tv_rs_discovery::{
     SamsungDiscoverySource, SsdpDiscoverySource, WolDiscoverySource,
 };
 pub use types::{DiscoveredTv, TvVendor};
+pub use tv_rs_core::observe::{ObservationError, ObservationStream, TvEvent};
 
 /// The one home of vendor-error → [`TvError`] mapping.
 ///
