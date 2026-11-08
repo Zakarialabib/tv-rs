@@ -57,11 +57,13 @@ fn matches_vendor(driver_vendor: TvVendor, query_vendor: TvVendor) -> bool {
     if driver_vendor == query_vendor {
         return true;
     }
-    match (driver_vendor, query_vendor) {
-        (TvVendor::Samsung, TvVendor::Tizen) | (TvVendor::Tizen, TvVendor::Samsung) => true,
-        (TvVendor::Lg, TvVendor::WebOs) | (TvVendor::WebOs, TvVendor::Lg) => true,
-        _ => false,
-    }
+    matches!(
+        (driver_vendor, query_vendor),
+        (TvVendor::Samsung, TvVendor::Tizen)
+            | (TvVendor::Tizen, TvVendor::Samsung)
+            | (TvVendor::Lg, TvVendor::WebOs)
+            | (TvVendor::WebOs, TvVendor::Lg)
+    )
 }
 
 /// Dynamic, expanding registry supporting runtime plug-and-play driver registration.

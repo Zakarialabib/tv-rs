@@ -444,6 +444,11 @@ impl KeyInput for TvClient {
                             .send(&cmd_str)
                             .await
                             .map_err(|error| TvError::protocol(error.to_string()))?;
+                        let release_str = format!("tx 4{:X}:45", address.as_u8());
+                        client
+                            .send(&release_str)
+                            .await
+                            .map_err(|error| TvError::protocol(error.to_string()))?;
                         Ok(())
                     }
                 }
