@@ -11,7 +11,7 @@ use tv_rs_core::command::{Command, CommandAck, CommandId};
 use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv, PowerState};
 use tv_rs_core::driver::Driver;
 use tv_rs_core::error::{TransportError, TvError};
-use tv_rs_core::observe::ObservationStream;
+use tv_rs_core::observe::{ObservationStream, TvEvent};
 use tv_rs_core::types::TvVendor;
 
 use crate::tizen::remote::{normalize_host, TizenRemote};
@@ -22,6 +22,7 @@ pub struct TizenDriver {
     capabilities: CapabilitySet,
     remote: Arc<TizenRemote>,
     active_target: Option<String>,
+    event_tx: tokio::sync::broadcast::Sender<TvEvent>,
 }
 
 impl TizenDriver {
@@ -44,11 +45,13 @@ impl TizenDriver {
         caps.insert(Capability::TextInput);
         caps.insert(Capability::Volume);
 
+        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         let remote = Arc::new(TizenRemote::new(path, "tv-rs"));
         Self {
             capabilities: caps,
             remote,
             active_target: None,
+            event_tx,
         }
     }
 }
@@ -89,6 +92,7 @@ impl Driver for TizenDriver {
             desc = desc.with_model(model.clone());
         }
 
+        let _ = self.event_tx.send(TvEvent::ConnectionChanged(true));
         Ok(TizenDeviceHandle::new(desc, self.capabilities, self.remote.clone(), host))
     }
 
@@ -109,23 +113,28 @@ impl Driver for TizenDriver {
             Command::Power(false) => {
                 self.remote.send_key_typed(host, TizenRemoteKey::PowerOff).await
                     .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::PowerState))?;
+                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
             }
             Command::Power(true) => {
                 self.remote.send_key_typed(host, TizenRemoteKey::Power).await
                     .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::PowerState))?;
+                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::On));
             }
             Command::LaunchApp(app_id) => {
                 self.remote.launch_app(host, &app_id).await
                     .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::AppLaunch))?;
+                let _ = self.event_tx.send(TvEvent::AppChanged(app_id));
             }
             Command::Volume(level) => {
                 let key = if level > 50 { TizenRemoteKey::VolumeUp } else { TizenRemoteKey::VolumeDown };
                 self.remote.send_key_typed(host, key).await
                     .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::Volume))?;
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
             }
-            Command::Mute(_) => {
+            Command::Mute(muted) => {
                 self.remote.send_key_typed(host, TizenRemoteKey::Mute).await
                     .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::Volume))?;
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level: 0, muted });
             }
             Command::Text(text) => {
                 self.remote.send_key(host, &text).await
@@ -138,7 +147,8 @@ impl Driver for TizenDriver {
     }
 
     async fn observe(&mut self) -> Result<ObservationStream, TvError> {
-        Ok(ObservationStream::new())
+        let rx = self.event_tx.subscribe();
+        Ok(crate::observe::BroadcastReceiver::new(rx).into_stream())
     }
 }
 

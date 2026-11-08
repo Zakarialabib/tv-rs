@@ -3,10 +3,10 @@
 use async_trait::async_trait;
 use tv_rs_core::capability::{Capability, CapabilitySet};
 use tv_rs_core::command::{Command, CommandAck, CommandId};
-use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv};
+use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv, PowerState};
 use tv_rs_core::driver::Driver;
 use tv_rs_core::error::{ProtocolError, TransportError, TvError};
-use tv_rs_core::observe::ObservationStream;
+use tv_rs_core::observe::{ObservationStream, TvEvent};
 use tv_rs_core::types::TvVendor;
 
 use crate::mdc::client::{MdcClient, MdcOptions};
@@ -17,6 +17,7 @@ use crate::mdc::types::{DisplayId, InputSource};
 pub struct MdcDriver {
     capabilities: CapabilitySet,
     active_client: Option<MdcClient>,
+    event_tx: tokio::sync::broadcast::Sender<TvEvent>,
 }
 
 impl MdcDriver {
@@ -38,9 +39,11 @@ impl MdcDriver {
             caps.insert(Capability::LampOrPanelHours);
         }
 
+        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         Self {
             capabilities: caps,
             active_client: None,
+            event_tx,
         }
     }
 
@@ -100,6 +103,7 @@ impl Driver for MdcDriver {
         let device = MdcDevice::new(client.clone(), descriptor);
 
         self.active_client = Some(client);
+        let _ = self.event_tx.send(TvEvent::ConnectionChanged(true));
         Ok(device)
     }
 
@@ -114,17 +118,21 @@ impl Driver for MdcDriver {
             Command::Power(on) => {
                 if on {
                     client.power_on().await?;
+                    let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::On));
                 } else {
                     client.power_off().await?;
+                    let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
                 }
                 Ok(CommandAck::with_id(CommandId::new()))
             }
             Command::Volume(level) => {
                 client.set_volume(level).await?;
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
                 Ok(CommandAck::with_id(CommandId::new()))
             }
             Command::Mute(muted) => {
                 client.set_mute(muted).await?;
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level: 0, muted });
                 Ok(CommandAck::with_id(CommandId::new()))
             }
             Command::Input(input) => {
@@ -134,6 +142,7 @@ impl Driver for MdcDriver {
                     )))
                 })?;
                 client.set_input(source).await?;
+                let _ = self.event_tx.send(TvEvent::InputChanged(input));
                 Ok(CommandAck::with_id(CommandId::new()))
             }
             Command::Custom { name, payload } => match name.as_str() {
@@ -184,6 +193,7 @@ impl Driver for MdcDriver {
     }
 
     async fn observe(&mut self) -> Result<ObservationStream, TvError> {
-        Ok(ObservationStream::new())
+        let rx = self.event_tx.subscribe();
+        Ok(crate::observe::BroadcastReceiver::new(rx).into_stream())
     }
 }

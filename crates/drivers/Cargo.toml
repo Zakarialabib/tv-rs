@@ -14,29 +14,24 @@ default = ["discovery", "power"]
 discovery = [
     "dep:tv-rs-transport",
     "dep:thiserror",
-    "dep:tokio",
     "dep:serde",
     "dep:serde_json",
     "dep:reqwest",
     "dep:roxmltree",
     "dep:url",
     "dep:uuid",
-    "dep:async-trait",
 ]
 mobile = ["discovery", "dep:ipnet"]
 power = [
     "dep:tv-rs-transport",
     "dep:thiserror",
-    "dep:tokio",
     "dep:serde",
-    "dep:async-trait",
 ]
 tizen = [
     "dep:tv-rs-transport",
     "tv-rs-transport/ws",
     "tv-rs-transport/rustls",
     "dep:thiserror",
-    "dep:tokio",
     "dep:serde",
     "dep:serde_json",
     "dep:reqwest",
@@ -45,20 +40,17 @@ tizen = [
     "dep:base64",
     "dep:futures-util",
     "dep:tokio-tungstenite",
-    "dep:async-trait",
 ]
 webos = [
     "dep:tv-rs-transport",
     "tv-rs-transport/ws",
     "tv-rs-transport/rustls",
     "dep:thiserror",
-    "dep:tokio",
     "dep:serde",
     "dep:serde_json",
     "dep:url",
     "dep:futures-util",
     "dep:tokio-tungstenite",
-    "dep:async-trait",
 ]
 roku = [
     "dep:reqwest",
@@ -66,45 +58,34 @@ roku = [
     "dep:serde",
     "dep:serde_json",
     "dep:thiserror",
-    "dep:tokio",
     "dep:tv-rs-transport",
-    "dep:async-trait",
 ]
 mdc = [
-    "dep:tokio",
     "dep:thiserror",
     "dep:tracing",
-    "dep:async-trait",
 ]
 sicp = [
-    "dep:tokio",
     "dep:thiserror",
     "dep:tracing",
-    "dep:async-trait",
 ]
 ir = [
     "dep:serde",
     "dep:thiserror",
-    "dep:tokio",
     "dep:toml",
     "dep:tracing",
     "power",
-    "dep:async-trait",
 ]
 ir-network-bridge = ["ir", "dep:reqwest"]
 serial = ["dep:tokio-serial"]
 supporting = ["tv-rs-core/supporting"]
 cec = [
     "dep:thiserror",
-    "dep:tokio",
     "dep:libc",
-    "dep:async-trait",
     "dep:tracing",
 ]
 cec-native = ["cec", "dep:libc"]
 cast = [
     "dep:thiserror",
-    "dep:tokio",
     "dep:serde",
     "dep:serde_json",
     "dep:reqwest",
@@ -113,7 +94,6 @@ cast = [
     "dep:rustls",
     "dep:tokio-rustls",
     "dep:pki-types",
-    "dep:async-trait",
 ]
 testkit = []
 all = [
@@ -124,11 +104,11 @@ all = [
 
 [dependencies]
 tv-rs-core = { workspace = true }
-async-trait = { workspace = true, optional = true }
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["process", "sync"] }
 
 tv-rs-transport = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
-tokio = { workspace = true, features = ["process"], optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }

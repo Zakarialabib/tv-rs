@@ -10,7 +10,7 @@ use tv_rs_core::command::{Command, CommandAck, CommandId};
 use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv, PowerState};
 use tv_rs_core::driver::Driver;
 use tv_rs_core::error::{TransportError, TvError};
-use tv_rs_core::observe::ObservationStream;
+use tv_rs_core::observe::{ObservationStream, TvEvent};
 use tv_rs_core::types::TvVendor;
 
 use crate::webos::client::WebosClient;
@@ -21,6 +21,7 @@ pub struct WebOsDriver {
     capabilities: CapabilitySet,
     pool: Arc<DynSessionPool>,
     active_client: Option<WebosClient>,
+    event_tx: tokio::sync::broadcast::Sender<TvEvent>,
 }
 
 impl WebOsDriver {
@@ -37,11 +38,13 @@ impl WebOsDriver {
         caps.insert(Capability::TextInput);
         caps.insert(Capability::Volume);
 
+        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         let pool = Arc::new(DynSessionPool::with_factory(Box::new(LiveSessionFactory)));
         Self {
             capabilities: caps,
             pool,
             active_client: None,
+            event_tx,
         }
     }
 }
@@ -84,6 +87,7 @@ impl Driver for WebOsDriver {
             desc = desc.with_model(model.clone());
         }
 
+        let _ = self.event_tx.send(TvEvent::ConnectionChanged(true));
         Ok(WebOsDeviceHandle::new(desc, self.capabilities, self.pool.clone(), client))
     }
 
@@ -104,18 +108,22 @@ impl Driver for WebOsDriver {
             Command::Power(false) => {
                 self.pool.power_off(client).await
                     .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::PowerState))?;
+                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
             }
             Command::LaunchApp(app_id) => {
                 self.pool.launch_app(client, &app_id).await
                     .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::AppLaunch))?;
+                let _ = self.event_tx.send(TvEvent::AppChanged(app_id));
             }
             Command::Volume(level) => {
                 self.pool.set_volume(client, level).await
                     .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::Volume))?;
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
             }
             Command::Mute(muted) => {
                 self.pool.set_mute(client, muted).await
                     .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::Volume))?;
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level: 0, muted });
             }
             Command::Text(text) => {
                 self.pool.insert_text(client, &text, false).await
@@ -128,7 +136,8 @@ impl Driver for WebOsDriver {
     }
 
     async fn observe(&mut self) -> Result<ObservationStream, TvError> {
-        Ok(ObservationStream::new())
+        let rx = self.event_tx.subscribe();
+        Ok(crate::observe::BroadcastReceiver::new(rx).into_stream())
     }
 }
 

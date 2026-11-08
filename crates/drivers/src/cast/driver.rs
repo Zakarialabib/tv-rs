@@ -5,10 +5,10 @@ use tokio::sync::Mutex;
 use async_trait::async_trait;
 use tv_rs_core::capability::{Capability, CapabilitySet, DeviceHandle, Key};
 use tv_rs_core::command::{Command, CommandAck, CommandId};
-use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv};
+use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv, PowerState};
 use tv_rs_core::driver::Driver;
 use tv_rs_core::error::{TransportError, TvError};
-use tv_rs_core::observe::ObservationStream;
+use tv_rs_core::observe::{ObservationStream, TvEvent};
 use tv_rs_core::types::TvVendor;
 
 use super::client::CastClient;
@@ -19,6 +19,7 @@ use super::handle::CastDeviceHandle;
 pub struct CastDriver {
     capabilities: CapabilitySet,
     active_handle: Option<Arc<CastDeviceHandle>>,
+    event_tx: tokio::sync::broadcast::Sender<TvEvent>,
 }
 
 impl CastDriver {
@@ -32,9 +33,11 @@ impl CastDriver {
         caps.insert(Capability::Volume);
         caps.insert(Capability::ScreenCast);
 
+        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         Self {
             capabilities: caps,
             active_handle: None,
+            event_tx,
         }
     }
 }
@@ -88,6 +91,7 @@ impl Driver for CastDriver {
         let arc_handle = Arc::new(handle);
         self.active_handle = Some(arc_handle.clone());
 
+        let _ = self.event_tx.send(TvEvent::ConnectionChanged(true));
         Ok(CastDeviceHandle::new(
             arc_handle.descriptor(),
             arc_handle.capabilities(),
@@ -106,29 +110,36 @@ impl Driver for CastDriver {
         match cmd {
             Command::Power(false) => {
                 handle.stop_media().await?;
+                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
             }
             Command::LaunchApp(app_id) => {
                 use tv_rs_core::capability::AppLaunch;
                 handle
-                    .launch(tv_rs_core::capability::AppRef::new(app_id), CommandId::new())
+                    .launch(tv_rs_core::capability::AppRef::new(app_id.clone()), CommandId::new())
                     .await?;
+                let _ = self.event_tx.send(TvEvent::AppChanged(app_id));
             }
             Command::Volume(level) => {
                 use tv_rs_core::capability::VolumeControl;
                 handle.set_volume(level, CommandId::new()).await?;
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
             }
             Command::Mute(muted) => {
                 use tv_rs_core::capability::VolumeControl;
                 handle.set_mute(muted, CommandId::new()).await?;
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level: 0, muted });
             }
             Command::Key(Key::Play) => {
                 handle.play().await?;
+                let _ = self.event_tx.send(TvEvent::MediaPlaybackChanged("PLAYING".to_string()));
             }
             Command::Key(Key::Pause) => {
                 handle.pause().await?;
+                let _ = self.event_tx.send(TvEvent::MediaPlaybackChanged("PAUSED".to_string()));
             }
             Command::Key(Key::Stop) => {
                 handle.stop_media().await?;
+                let _ = self.event_tx.send(TvEvent::MediaPlaybackChanged("IDLE".to_string()));
             }
             Command::Custom { name, payload } => {
                 if name == "media_status" {
@@ -138,10 +149,13 @@ impl Driver for CastDriver {
                     return Ok(ack);
                 } else if name == "play" {
                     handle.play().await?;
+                    let _ = self.event_tx.send(TvEvent::MediaPlaybackChanged("PLAYING".to_string()));
                 } else if name == "pause" {
                     handle.pause().await?;
+                    let _ = self.event_tx.send(TvEvent::MediaPlaybackChanged("PAUSED".to_string()));
                 } else if name == "stop" {
                     handle.stop_media().await?;
+                    let _ = self.event_tx.send(TvEvent::MediaPlaybackChanged("IDLE".to_string()));
                 } else if name == "seek" {
                     let secs = payload
                         .parse::<f64>()
@@ -158,6 +172,7 @@ impl Driver for CastDriver {
     }
 
     async fn observe(&mut self) -> Result<ObservationStream, TvError> {
-        Ok(ObservationStream::new())
+        let rx = self.event_tx.subscribe();
+        Ok(crate::observe::BroadcastReceiver::new(rx).into_stream())
     }
 }

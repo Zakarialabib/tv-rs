@@ -1,8 +1,18 @@
 //! Driver registry aggregating all enabled protocol implementations.
 
+use std::sync::OnceLock;
 pub use tv_rs_core::driver::{AnyDriver, ErasedDriver};
 use tv_rs_core::types::TvVendor;
 use tv_rs_core::descriptor::DiscoveredTv;
+use tv_rs_core::capability::{Capability, CapabilityRegistry, CapabilitySet};
+
+static DEFAULT_REGISTRY: OnceLock<DriverRegistry> = OnceLock::new();
+
+/// Returns a shared, lazily-initialized reference to the default compile-time driver registry.
+#[must_use]
+pub fn default_registry() -> &'static DriverRegistry {
+    DEFAULT_REGISTRY.get_or_init(DriverRegistry::with_defaults)
+}
 
 /// Returns all driver implementations enabled via Cargo feature flags.
 #[must_use]
@@ -154,6 +164,48 @@ impl DriverRegistry {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.drivers.is_empty()
+    }
+
+    /// Returns the capabilities advertised by the driver matching `vendor`, if registered.
+    #[must_use]
+    pub fn capabilities_for_vendor(&self, vendor: TvVendor) -> Option<CapabilitySet> {
+        self.find_for_vendor(vendor).map(CapabilitySet::from_driver)
+    }
+
+    /// Computes the union of capabilities across all currently registered drivers.
+    #[must_use]
+    pub fn aggregate_capabilities(&self) -> CapabilitySet {
+        let mut union = CapabilitySet::empty();
+        for driver in &self.drivers {
+            union.extend(&CapabilitySet::from_driver(&**driver));
+        }
+        union
+    }
+
+    /// Constructs a `CapabilityRegistry` snapshot from all registered drivers.
+    #[must_use]
+    pub fn build_capability_registry(&self) -> CapabilityRegistry {
+        let mut cap_reg = CapabilityRegistry::new();
+        for driver in &self.drivers {
+            cap_reg.register_driver(&**driver);
+        }
+        cap_reg
+    }
+
+    /// Returns a list of all vendors represented in this driver registry.
+    #[must_use]
+    pub fn vendors(&self) -> Vec<TvVendor> {
+        self.drivers.iter().map(|d| d.vendor()).collect()
+    }
+
+    /// Returns all registered drivers that advertise `capability`.
+    #[must_use]
+    pub fn find_by_capability(&self, capability: Capability) -> Vec<&AnyDriver> {
+        self.drivers
+            .iter()
+            .filter(|d| d.capabilities().contains(capability))
+            .map(|b| &**b)
+            .collect()
     }
 }
 

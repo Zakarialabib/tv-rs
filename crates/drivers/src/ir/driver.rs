@@ -4,10 +4,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tv_rs_core::capability::{Capability, CapabilitySet, Key};
 use tv_rs_core::command::{Command, CommandAck, CommandId};
-use tv_rs_core::descriptor::DiscoveredTv;
+use tv_rs_core::descriptor::{DiscoveredTv, PowerState};
 use tv_rs_core::driver::Driver;
 use tv_rs_core::error::{ProtocolError, TvError};
-use tv_rs_core::observe::ObservationStream;
+use tv_rs_core::observe::{ObservationStream, TvEvent};
 use tv_rs_core::types::TvVendor;
 
 use crate::ir::device::IrDeviceHandle;
@@ -19,6 +19,7 @@ pub struct IrDriver {
     capabilities: CapabilitySet,
     emitter: Arc<dyn IrEmitter>,
     active_profile: IrProfile,
+    event_tx: tokio::sync::broadcast::Sender<TvEvent>,
 }
 
 impl IrDriver {
@@ -38,10 +39,12 @@ impl IrDriver {
         caps.insert(Capability::Volume);
         caps.insert(Capability::InputSelect);
 
+        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         Self {
             capabilities: caps,
             emitter,
             active_profile: default_samsung_profile(),
+            event_tx,
         }
     }
 
@@ -85,6 +88,7 @@ impl Driver for IrDriver {
             self.active_profile = profile;
         }
 
+        let _ = self.event_tx.send(TvEvent::ConnectionChanged(true));
         Ok(IrDeviceHandle::new(
             self.active_profile.clone(),
             Arc::new(self.emitter.clone()),
@@ -94,16 +98,26 @@ impl Driver for IrDriver {
     async fn send(&mut self, cmd: Command) -> Result<CommandAck, TvError> {
         let key = match cmd {
             Command::Key(k) => k,
-            Command::Power(true) => Key::Power,
-            Command::Power(false) => Key::PowerOff,
+            Command::Power(true) => {
+                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::On));
+                Key::Power
+            }
+            Command::Power(false) => {
+                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
+                Key::PowerOff
+            }
             Command::Volume(level) => {
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
                 if level > 50 {
                     Key::VolumeUp
                 } else {
                     Key::VolumeDown
                 }
             }
-            Command::Mute(_) => Key::Mute,
+            Command::Mute(muted) => {
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level: 0, muted });
+                Key::Mute
+            }
             Command::Custom { name, .. } => {
                 return Err(TvError::Protocol(ProtocolError::Malformed(format!(
                     "custom command '{name}' not supported by IR"
@@ -126,6 +140,7 @@ impl Driver for IrDriver {
     }
 
     async fn observe(&mut self) -> Result<ObservationStream, TvError> {
-        Ok(ObservationStream::new())
+        let rx = self.event_tx.subscribe();
+        Ok(crate::observe::BroadcastReceiver::new(rx).into_stream())
     }
 }

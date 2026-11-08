@@ -3,10 +3,10 @@
 use async_trait::async_trait;
 use tv_rs_core::capability::{Capability, CapabilitySet};
 use tv_rs_core::command::{Command, CommandAck, CommandId};
-use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv};
+use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv, PowerState};
 use tv_rs_core::driver::Driver;
 use tv_rs_core::error::{ProtocolError, TransportError, TvError};
-use tv_rs_core::observe::ObservationStream;
+use tv_rs_core::observe::{ObservationStream, TvEvent};
 use tv_rs_core::types::TvVendor;
 
 use crate::sicp::client::{SicpClient, SicpOptions};
@@ -17,6 +17,7 @@ use crate::sicp::types::{DisplayId, SicpInput};
 pub struct SicpDriver {
     capabilities: CapabilitySet,
     active_client: Option<SicpClient>,
+    event_tx: tokio::sync::broadcast::Sender<TvEvent>,
 }
 
 impl SicpDriver {
@@ -30,9 +31,11 @@ impl SicpDriver {
         caps.insert(Capability::Telemetry);
         caps.insert(Capability::NoSignalStatus);
 
+        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         Self {
             capabilities: caps,
             active_client: None,
+            event_tx,
         }
     }
 
@@ -92,6 +95,7 @@ impl Driver for SicpDriver {
         let device = SicpDevice::new(client.clone(), descriptor);
 
         self.active_client = Some(client);
+        let _ = self.event_tx.send(TvEvent::ConnectionChanged(true));
         Ok(device)
     }
 
@@ -106,13 +110,16 @@ impl Driver for SicpDriver {
             Command::Power(on) => {
                 if on {
                     client.power_on().await?;
+                    let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::On));
                 } else {
                     client.power_off().await?;
+                    let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
                 }
                 Ok(CommandAck::with_id(CommandId::new()))
             }
             Command::Volume(level) => {
                 client.set_volume(level).await?;
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
                 Ok(CommandAck::with_id(CommandId::new()))
             }
             Command::Mute(_) => {
@@ -125,6 +132,7 @@ impl Driver for SicpDriver {
                     )))
                 })?;
                 client.set_input(sicp_input).await?;
+                let _ = self.event_tx.send(TvEvent::InputChanged(input));
                 Ok(CommandAck::with_id(CommandId::new()))
             }
             Command::Custom { name, payload } => match name.as_str() {
@@ -152,6 +160,7 @@ impl Driver for SicpDriver {
     }
 
     async fn observe(&mut self) -> Result<ObservationStream, TvError> {
-        Ok(ObservationStream::new())
+        let rx = self.event_tx.subscribe();
+        Ok(crate::observe::BroadcastReceiver::new(rx).into_stream())
     }
 }

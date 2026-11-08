@@ -11,7 +11,7 @@ use tv_rs_core::command::{Command, CommandAck, CommandId};
 use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv, PowerState};
 use tv_rs_core::driver::Driver;
 use tv_rs_core::error::{ProtocolError, TransportError, TvError};
-use tv_rs_core::observe::ObservationStream;
+use tv_rs_core::observe::{ObservationStream, TvEvent};
 use tv_rs_core::types::TvVendor;
 
 use crate::roku::client::RokuClient;
@@ -22,6 +22,7 @@ use crate::roku::types::{RokuKey, RokuPowerMode};
 pub struct RokuDriver {
     capabilities: CapabilitySet,
     active_client: Option<RokuClient>,
+    event_tx: tokio::sync::broadcast::Sender<TvEvent>,
 }
 
 impl RokuDriver {
@@ -39,9 +40,11 @@ impl RokuDriver {
         caps.insert(Capability::Volume);
         caps.insert(Capability::InputSelect);
 
+        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         Self {
             capabilities: caps,
             active_client: None,
+            event_tx,
         }
     }
 
@@ -96,6 +99,7 @@ impl Driver for RokuDriver {
             desc = desc.with_model(model.clone());
         }
 
+        let _ = self.event_tx.send(TvEvent::ConnectionChanged(true));
         Ok(RokuDeviceHandle::new(desc, self.capabilities, client))
     }
 
@@ -114,12 +118,15 @@ impl Driver for RokuDriver {
             }
             Command::Power(true) => {
                 client.power_on().await.map_err(map_roku_error)?;
+                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::On));
             }
             Command::Power(false) => {
                 client.power_off().await.map_err(map_roku_error)?;
+                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
             }
             Command::LaunchApp(app_id) => {
                 client.launch_app(&app_id).await.map_err(map_roku_error)?;
+                let _ = self.event_tx.send(TvEvent::AppChanged(app_id));
             }
             Command::Text(text) => {
                 client.type_text(&text).await.map_err(map_roku_error)?;
@@ -131,16 +138,19 @@ impl Driver for RokuDriver {
                     RokuKey::VolumeDown
                 };
                 client.send_keypress(key).await.map_err(map_roku_error)?;
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
             }
-            Command::Mute(_) => {
+            Command::Mute(muted) => {
                 client
                     .send_keypress(RokuKey::VolumeMute)
                     .await
                     .map_err(map_roku_error)?;
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level: 0, muted });
             }
             Command::Input(input) => {
                 let app_id = format!("tvinput.{}", input);
                 client.launch_app(&app_id).await.map_err(map_roku_error)?;
+                let _ = self.event_tx.send(TvEvent::InputChanged(input));
             }
             Command::Custom { name, payload } => {
                 if name == "keypress" {
@@ -161,7 +171,8 @@ impl Driver for RokuDriver {
     }
 
     async fn observe(&mut self) -> Result<ObservationStream, TvError> {
-        Ok(ObservationStream::new())
+        let rx = self.event_tx.subscribe();
+        Ok(crate::observe::BroadcastReceiver::new(rx).into_stream())
     }
 }
 

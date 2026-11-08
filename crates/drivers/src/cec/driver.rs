@@ -4,10 +4,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tv_rs_core::capability::{Capability, CapabilitySet};
 use tv_rs_core::command::{Command, CommandAck, CommandId};
-use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv};
+use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv, PowerState};
 use tv_rs_core::driver::Driver;
 use tv_rs_core::error::TvError;
-use tv_rs_core::observe::ObservationStream;
+use tv_rs_core::observe::{ObservationStream, TvEvent};
 use tv_rs_core::types::TvVendor;
 
 use super::handle::CecDeviceHandle;
@@ -21,6 +21,7 @@ pub struct CecDriver {
     target_address: CecAddress,
     initiator_address: u8,
     transport: Arc<dyn CecTransport>,
+    event_tx: tokio::sync::broadcast::Sender<TvEvent>,
 }
 
 impl CecDriver {
@@ -34,11 +35,13 @@ impl CecDriver {
         caps.insert(Capability::Volume);
         caps.insert(Capability::InputSelect);
 
+        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         Self {
             capabilities: caps,
             target_address: CecAddress::Tv,
             initiator_address: CecAddress::Playback1.as_u8(),
             transport: Arc::new(ClientTransport::new("cec-client")),
+            event_tx,
         }
     }
 
@@ -91,6 +94,7 @@ impl Driver for CecDriver {
             desc = desc.with_name(name.clone());
         }
 
+        let _ = self.event_tx.send(TvEvent::ConnectionChanged(true));
         Ok(CecDeviceHandle::new(
             desc,
             self.capabilities,
@@ -108,10 +112,12 @@ impl Driver for CecDriver {
             Command::Power(true) => {
                 let frame = image_view_on_frame(init, dest);
                 self.transport.send(&frame).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::On));
             }
             Command::Power(false) => {
                 let frame = standby_frame(init, dest);
                 self.transport.send(&frame).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
             }
             Command::Key(key) => {
                 let code = map_key_to_cec(key)?;
@@ -126,17 +132,20 @@ impl Driver for CecDriver {
                 let release = user_control_released_frame(init, dest);
                 self.transport.send(&press).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
                 self.transport.send(&release).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
             }
-            Command::Mute(_) => {
+            Command::Mute(muted) => {
                 let press = user_control_pressed_frame(init, dest, CEC_USER_CONTROL_MUTE);
                 let release = user_control_released_frame(init, dest);
                 self.transport.send(&press).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
                 self.transport.send(&release).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                let _ = self.event_tx.send(TvEvent::VolumeChanged { level: 0, muted });
             }
             Command::Input(input) => {
-                let phys = map_input_to_physical(input)?;
+                let phys = map_input_to_physical(input.clone())?;
                 let frame = active_source_frame(init, phys);
                 self.transport.send(&frame).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                let _ = self.event_tx.send(TvEvent::InputChanged(input));
             }
             Command::Custom { name, payload } => {
                 if name == "raw" || name == "tx" {
@@ -159,6 +168,7 @@ impl Driver for CecDriver {
     }
 
     async fn observe(&mut self) -> Result<ObservationStream, TvError> {
-        Ok(ObservationStream::new())
+        let rx = self.event_tx.subscribe();
+        Ok(crate::observe::BroadcastReceiver::new(rx).into_stream())
     }
 }

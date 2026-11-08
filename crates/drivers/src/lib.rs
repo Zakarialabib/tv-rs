@@ -9,7 +9,11 @@
 #![warn(missing_docs)]
 
 pub mod registry;
-pub use registry::{registry, AnyDriver, DriverRegistry};
+pub use registry::{default_registry, registry, AnyDriver, DriverRegistry};
+pub use tv_rs_core::capability::CapabilityRegistry;
+
+pub mod observe;
+pub use observe::{BroadcastReceiver, DEFAULT_OBSERVE_CHANNEL_CAPACITY};
 
 pub mod map;
 
