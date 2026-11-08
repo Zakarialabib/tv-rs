@@ -11,3 +11,16 @@ pub mod mdc;
 
 #[cfg(feature = "sicp")]
 pub mod sicp;
+
+#[cfg(feature = "tizen")]
+pub mod tizen;
+
+#[cfg(feature = "webos")]
+pub mod webos;
+
+#[cfg(feature = "cast")]
+pub mod cast;
+
+#[cfg(feature = "cec")]
+pub mod cec;
+
