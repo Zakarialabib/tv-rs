@@ -17,25 +17,28 @@ pub trait IrScanFeedback: Send + Sync {
     async fn is_active(&self) -> Result<bool, IrError>;
 }
 
+#[cfg(feature = "cec")]
 /// HDMI-CEC feedback loop checking device activity over the HDMI CEC bus.
-pub struct CecFeedback<T: tv_rs_cec::CecTransport> {
-    client: tv_rs_cec::CecClient<T>,
-    target_address: tv_rs_cec::CecAddress,
+pub struct CecFeedback<T: crate::cec::CecTransport> {
+    client: crate::cec::CecClient<T>,
+    target_address: crate::cec::CecAddress,
 }
 
-impl<T: tv_rs_cec::CecTransport> CecFeedback<T> {
+#[cfg(feature = "cec")]
+impl<T: crate::cec::CecTransport> CecFeedback<T> {
     /// Creates a CEC feedback probe using the given transport and target address.
     #[must_use]
-    pub fn new(transport: T, target_address: tv_rs_cec::CecAddress) -> Self {
+    pub fn new(transport: T, target_address: crate::cec::CecAddress) -> Self {
         Self {
-            client: tv_rs_cec::CecClient::new(transport),
+            client: crate::cec::CecClient::new(transport),
             target_address,
         }
     }
 }
 
+#[cfg(feature = "cec")]
 #[async_trait]
-impl<T: tv_rs_cec::CecTransport> IrScanFeedback for CecFeedback<T> {
+impl<T: crate::cec::CecTransport> IrScanFeedback for CecFeedback<T> {
     async fn is_active(&self) -> Result<bool, IrError> {
         // Query target device over CEC bus
         match self.client.power_on(self.target_address).await {

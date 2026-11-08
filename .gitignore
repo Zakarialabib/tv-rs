@@ -11,3 +11,4 @@ claude*.exe
 node_modules
 /tests/e2e_suite
 /.agents
+/tests/e2e/target

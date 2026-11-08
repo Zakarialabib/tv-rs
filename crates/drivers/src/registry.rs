@@ -12,12 +12,12 @@ pub fn registry() -> Vec<Box<AnyDriver>> {
 
     #[cfg(feature = "tizen")]
     {
-        // Instantiated in TV-12
+        drivers.push(Box::new(ErasedDriver(crate::tizen::TizenDriver::new())));
     }
 
     #[cfg(feature = "webos")]
     {
-        // Instantiated in TV-12
+        drivers.push(Box::new(ErasedDriver(crate::webos::WebOsDriver::new())));
     }
 
     #[cfg(feature = "roku")]
@@ -42,15 +42,26 @@ pub fn registry() -> Vec<Box<AnyDriver>> {
 
     #[cfg(feature = "cec")]
     {
-        // Instantiated in TV-14
+        drivers.push(Box::new(ErasedDriver(crate::cec::CecDriver::new())));
     }
 
     #[cfg(feature = "cast")]
     {
-        // Instantiated in TV-14
+        drivers.push(Box::new(ErasedDriver(crate::cast::CastDriver::new())));
     }
 
     drivers
+}
+
+fn matches_vendor(driver_vendor: TvVendor, query_vendor: TvVendor) -> bool {
+    if driver_vendor == query_vendor {
+        return true;
+    }
+    match (driver_vendor, query_vendor) {
+        (TvVendor::Samsung, TvVendor::Tizen) | (TvVendor::Tizen, TvVendor::Samsung) => true,
+        (TvVendor::Lg, TvVendor::WebOs) | (TvVendor::WebOs, TvVendor::Lg) => true,
+        _ => false,
+    }
 }
 
 /// Dynamic, expanding registry supporting runtime plug-and-play driver registration.
@@ -93,13 +104,19 @@ impl DriverRegistry {
     /// Finds a driver matching the given vendor.
     #[must_use]
     pub fn find_for_vendor(&self, vendor: TvVendor) -> Option<&AnyDriver> {
-        self.drivers.iter().find(|d| d.vendor() == vendor).map(|b| &**b)
+        self.drivers
+            .iter()
+            .find(|d| matches_vendor(d.vendor(), vendor))
+            .map(|b| &**b)
     }
 
     /// Finds a driver matching the given vendor (mutable).
     #[must_use]
     pub fn find_for_vendor_mut(&mut self, vendor: TvVendor) -> Option<&mut AnyDriver> {
-        self.drivers.iter_mut().find(|d| d.vendor() == vendor).map(|b| &mut **b)
+        self.drivers
+            .iter_mut()
+            .find(|d| matches_vendor(d.vendor(), vendor))
+            .map(|b| &mut **b)
     }
 
     /// Finds a driver that can handle the discovered target.
@@ -148,6 +165,16 @@ mod tests {
         let reg = DriverRegistry::with_defaults();
         assert_eq!(reg.len(), default_drivers.len());
 
+        #[cfg(feature = "tizen")]
+        {
+            assert!(reg.find_for_vendor(TvVendor::Samsung).is_some());
+            assert!(reg.find_for_vendor(TvVendor::Tizen).is_some());
+        }
+        #[cfg(feature = "webos")]
+        {
+            assert!(reg.find_for_vendor(TvVendor::Lg).is_some());
+            assert!(reg.find_for_vendor(TvVendor::WebOs).is_some());
+        }
         #[cfg(feature = "roku")]
         {
             assert!(reg.find_for_vendor(TvVendor::Roku).is_some());
@@ -164,10 +191,19 @@ mod tests {
         {
             assert!(reg.find_for_vendor(TvVendor::Ir).is_some());
         }
+        #[cfg(feature = "cec")]
+        {
+            assert!(reg.find_for_vendor(TvVendor::Cec).is_some());
+        }
+        #[cfg(feature = "cast")]
+        {
+            assert!(reg.find_for_vendor(TvVendor::GoogleCast).is_some());
+        }
     }
 
     #[test]
     fn extensible_registry_supports_runtime_registration() {
+        #[allow(unused_mut)]
         let mut reg = DriverRegistry::new();
         assert!(reg.is_empty());
 

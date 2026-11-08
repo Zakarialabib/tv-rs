@@ -4,7 +4,8 @@
 //! across Samsung Tizen, LG webOS, Roku, Samsung MDC, Philips SICP, Sony IRCC,
 //! HDMI-CEC, and Google Cast.
 
-#![forbid(unsafe_code)]
+#![cfg_attr(not(feature = "cec-native"), forbid(unsafe_code))]
+#![cfg_attr(feature = "cec-native", deny(unsafe_code))]
 #![warn(missing_docs)]
 
 pub mod registry;
@@ -22,11 +23,11 @@ pub mod power;
 
 #[cfg(feature = "tizen")]
 /// Samsung Tizen consumer television driver.
-pub mod tizen {}
+pub mod tizen;
 
 #[cfg(feature = "webos")]
 /// LG webOS television driver.
-pub mod webos {}
+pub mod webos;
 
 #[cfg(feature = "roku")]
 /// Roku External Control Protocol (ECP) driver.
@@ -46,8 +47,8 @@ pub mod ir;
 
 #[cfg(feature = "cec")]
 /// HDMI-CEC driver.
-pub mod cec {}
+pub mod cec;
 
 #[cfg(feature = "cast")]
 /// Google Cast and Chromecast driver.
-pub mod cast {}
+pub mod cast;

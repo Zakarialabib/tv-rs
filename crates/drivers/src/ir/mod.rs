@@ -14,4 +14,6 @@ pub use emitter::{IrEmitter, LircEmitter, MockIrEmitter, NetworkBridgeEmitter};
 pub use error::IrError;
 pub use profile::{all_default_profiles, default_samsung_profile, IrProfile};
 pub use protocol::{IrProtocol, IrSignal};
-pub use scanner::{CecFeedback, IrScanFeedback, MockFeedback, TcpProbeFeedback, UniversalScanner};
+#[cfg(feature = "cec")]
+pub use scanner::CecFeedback;
+pub use scanner::{IrScanFeedback, MockFeedback, TcpProbeFeedback, UniversalScanner};
