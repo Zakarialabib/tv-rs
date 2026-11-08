@@ -1,0 +1,422 @@
+//! The shared `DeviceHandle` adapter for an MDC display.
+
+use std::time::{Duration, Instant};
+
+use async_trait::async_trait;
+use tv_rs_core::{
+    BrightnessControl, Capability, CapabilitySet, CommandId, DeviceDescriptor, DeviceHandle,
+    DeviceId, Input, InputSelect, Orientation, OrientationControl, PanelHealth,
+    PanelHealthProvider, PanelLockControl, PowerControl, PowerState, Probe, ProtocolError,
+    Rebootable, TvError, VolumeControl,
+};
+#[cfg(feature = "supporting")]
+use tv_rs_core::{PanelHours, PanelHoursProvider};
+
+use crate::mdc::client::MdcClient;
+use crate::mdc::payload::Status;
+use crate::mdc::types::{InputSource, MdcOrientation, MdcPower};
+
+/// An MDC display exposed through the vendor-neutral device model.
+///
+/// The underlying [`MdcClient`] remains available for raw frames; the shared traits
+/// cover power, input, volume, brightness, reboot, the LFD subset — panel key lock
+/// (`0x5F`), content orientation (`0xC8`/`0x82`), signal state and panel health
+/// (`0x0D`), and panel hours (`0x83`, behind the `supporting` feature) — and a
+/// control-channel probe.
+pub struct MdcDevice {
+    client: MdcClient,
+    descriptor: DeviceDescriptor,
+}
+
+impl MdcDevice {
+    /// Wraps a client with the descriptor discovery or configuration supplied.
+    #[must_use]
+    pub fn new(client: MdcClient, descriptor: DeviceDescriptor) -> Self {
+        Self { client, descriptor }
+    }
+
+    /// The underlying MDC client.
+    #[must_use]
+    pub fn client(&self) -> &MdcClient {
+        &self.client
+    }
+
+    /// Reads the full MDC status.
+    ///
+    /// # Errors
+    ///
+    /// Returns the MDC transport, protocol or `NAK` error mapped into [`TvError`].
+    pub async fn status(&self) -> Result<Status, TvError> {
+        Ok(self.client.status().await?)
+    }
+
+    /// Reads brightness. `None` means the panel does not report it.
+    ///
+    /// # Errors
+    ///
+    /// Returns the MDC error mapped into [`TvError`].
+    pub async fn brightness(&self) -> Result<Option<u8>, TvError> {
+        Ok(self.client.brightness().await?)
+    }
+
+    /// Sets brightness, 0-100.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TvError::Protocol`] for a value above 100, or the mapped MDC
+    /// transport, protocol or `NAK` error.
+    pub async fn set_brightness(&self, level: u8) -> Result<(), TvError> {
+        Ok(self.client.set_brightness(level).await?)
+    }
+
+    /// Reads whether the panel's own keys are locked.
+    ///
+    /// # Errors
+    ///
+    /// Returns the MDC error mapped into [`TvError`].
+    pub async fn panel_lock(&self) -> Result<Option<bool>, TvError> {
+        Ok(Some(self.client.panel_lock().await?))
+    }
+
+    /// Locks or unlocks the panel's own keys.
+    ///
+    /// # Errors
+    ///
+    /// Returns the MDC error mapped into [`TvError`].
+    pub async fn set_panel_lock(&self, locked: bool) -> Result<(), TvError> {
+        Ok(self.client.set_panel_lock(locked).await?)
+    }
+
+    /// Reads the orientation the panel displays its source content in.
+    ///
+    /// # Errors
+    ///
+    /// Returns the MDC error mapped into [`TvError`].
+    pub async fn orientation(&self) -> Result<Option<Orientation>, TvError> {
+        Ok(Some(Orientation::from(self.client.orientation().await?)))
+    }
+
+    /// Sets the orientation the panel displays its source content in.
+    ///
+    /// # Errors
+    ///
+    /// Returns the MDC error mapped into [`TvError`].
+    pub async fn set_orientation(&self, orientation: Orientation) -> Result<(), TvError> {
+        Ok(self
+            .client
+            .set_orientation(MdcOrientation::from(orientation))
+            .await?)
+    }
+
+    /// Reads the panel's signal state and health (`0x0D`).
+    ///
+    /// # Errors
+    ///
+    /// Returns the MDC error mapped into [`TvError`].
+    pub async fn panel_health(&self) -> Result<Option<PanelHealth>, TvError> {
+        let status = self.client.error_status().await?;
+        Ok(Some(PanelHealth {
+            signal_present: !status.signal_error,
+            temperature_celsius: Some(i16::from(status.temperature_celsius)),
+            lamp_error: status.lamp_error,
+        }))
+    }
+
+    /// Reads how many hours the panel has been powered on (`0x83`).
+    ///
+    /// # Errors
+    ///
+    /// Returns the MDC error mapped into [`TvError`].
+    #[cfg(feature = "supporting")]
+    pub async fn panel_hours(&self) -> Result<Option<PanelHours>, TvError> {
+        let hours = self.client.panel_hours().await?;
+        Ok(Some(PanelHours {
+            panel_hours: hours,
+            lamp_hours: None,
+        }))
+    }
+
+    /// Returns another handle targeting a specific display ID over the same connection.
+    #[must_use]
+    pub fn display(&self, display_id: crate::mdc::types::DisplayId) -> Self {
+        let client = self.client.display(display_id);
+        let mut desc = self.descriptor.clone();
+        desc.address = format!("{}:{}", self.descriptor.address, display_id.value());
+        Self { client, descriptor: desc }
+    }
+
+    /// Returns a handle targeting all panels via the broadcast address (`0xFE`).
+    #[must_use]
+    pub fn broadcast(&self) -> Self {
+        let client = self.client.broadcast();
+        Self { client, descriptor: self.descriptor.clone() }
+    }
+}
+
+#[async_trait]
+impl PowerControl for MdcDevice {
+    async fn power_state(&self) -> Result<PowerState, TvError> {
+        Ok(match self.client.power().await? {
+            MdcPower::On => PowerState::On,
+            MdcPower::Off => PowerState::Off,
+            MdcPower::Reboot => PowerState::Unknown,
+        })
+    }
+
+    async fn wake(&self) -> Result<(), TvError> {
+        // The MDC specification requires Wake-on-LAN when the panel is off; a
+        // TCP frame is not a wake transport. Advertising it would be a lie.
+        Err(TvError::Unsupported(Capability::Wake))
+    }
+
+    async fn sleep(&self) -> Result<(), TvError> {
+        Ok(self.client.power_off().await?)
+    }
+}
+
+#[async_trait]
+impl InputSelect for MdcDevice {
+    async fn active_input(&self) -> Result<Option<Input>, TvError> {
+        Ok(self
+            .client
+            .active_input()
+            .await?
+            .map(InputSource::to_core_input))
+    }
+
+    async fn select_input(&self, input: Input, _cmd: CommandId) -> Result<(), TvError> {
+        let source = InputSource::from_core_input(&input).ok_or_else(|| {
+            TvError::Protocol(ProtocolError::Unexpected(format!(
+                "MDC has no input code for {input}"
+            )))
+        })?;
+        Ok(self.client.set_input(source).await?)
+    }
+}
+
+#[async_trait]
+impl VolumeControl for MdcDevice {
+    async fn volume(&self) -> Result<Option<u8>, TvError> {
+        Ok(self.client.volume().await?)
+    }
+
+    async fn set_volume(&self, level: u8, _cmd: CommandId) -> Result<(), TvError> {
+        Ok(self.client.set_volume(level).await?)
+    }
+
+    async fn set_mute(&self, muted: bool, _cmd: CommandId) -> Result<(), TvError> {
+        Ok(self.client.set_mute(muted).await?)
+    }
+
+    /// MDC answers mute directly (`0x00` status and the dedicated query); `None`
+    /// means the panel has no audio path at all.
+    async fn mute(&self) -> Result<Option<bool>, TvError> {
+        Ok(self.client.muted().await?)
+    }
+}
+
+#[async_trait]
+impl BrightnessControl for MdcDevice {
+    async fn brightness(&self) -> Result<Option<u8>, TvError> {
+        Ok(self.client.brightness().await?)
+    }
+
+    async fn set_brightness(&self, level: u8, _cmd: CommandId) -> Result<(), TvError> {
+        Ok(self.client.set_brightness(level).await?)
+    }
+}
+
+#[async_trait]
+impl Rebootable for MdcDevice {
+    async fn reboot(&self, _cmd: CommandId) -> Result<(), TvError> {
+        Ok(self.client.reboot().await?)
+    }
+}
+
+#[async_trait]
+impl PanelLockControl for MdcDevice {
+    async fn panel_lock(&self) -> Result<Option<bool>, TvError> {
+        Ok(Some(self.client.panel_lock().await?))
+    }
+
+    async fn set_panel_lock(&self, locked: bool, _cmd: CommandId) -> Result<(), TvError> {
+        Ok(self.client.set_panel_lock(locked).await?)
+    }
+}
+
+#[async_trait]
+impl OrientationControl for MdcDevice {
+    async fn orientation(&self) -> Result<Option<Orientation>, TvError> {
+        Ok(Some(Orientation::from(self.client.orientation().await?)))
+    }
+
+    async fn set_orientation(
+        &self,
+        orientation: Orientation,
+        _cmd: CommandId,
+    ) -> Result<(), TvError> {
+        Ok(self
+            .client
+            .set_orientation(MdcOrientation::from(orientation))
+            .await?)
+    }
+}
+
+#[async_trait]
+impl PanelHealthProvider for MdcDevice {
+    async fn panel_health(&self) -> Result<Option<PanelHealth>, TvError> {
+        let status = self.client.error_status().await?;
+        Ok(Some(PanelHealth {
+            signal_present: !status.signal_error,
+            temperature_celsius: Some(i16::from(status.temperature_celsius)),
+            lamp_error: status.lamp_error,
+        }))
+    }
+}
+
+#[cfg(feature = "supporting")]
+#[async_trait]
+impl PanelHoursProvider for MdcDevice {
+    async fn panel_hours(&self) -> Result<Option<PanelHours>, TvError> {
+        let hours = self.client.panel_hours().await?;
+        Ok(Some(PanelHours {
+            panel_hours: hours,
+            lamp_hours: None,
+        }))
+    }
+}
+
+#[async_trait]
+impl Probe for MdcDevice {
+    async fn ping(&self) -> Result<Duration, TvError> {
+        let started = Instant::now();
+        self.client.status().await?;
+        Ok(started.elapsed())
+    }
+}
+
+impl DeviceHandle for MdcDevice {
+    fn id(&self) -> DeviceId {
+        self.descriptor.id.clone()
+    }
+
+    fn descriptor(&self) -> DeviceDescriptor {
+        self.descriptor.clone()
+    }
+
+    fn capabilities(&self) -> CapabilitySet {
+        let set = CapabilitySet::empty()
+            .with(Capability::PowerState)
+            .with(Capability::InputSelect)
+            .with(Capability::Volume)
+            .with(Capability::Brightness)
+            .with(Capability::Reboot)
+            .with(Capability::PanelLock)
+            .with(Capability::Orientation)
+            .with(Capability::NoSignalStatus);
+        // Under `supporting`: MDC documents panel on-time on `0x83`. Screen
+        // capture stays unadvertised in every configuration — no MDC command
+        // exists, and advertising a fake would be worse than telling the
+        // caller "not here".
+        #[cfg(feature = "supporting")]
+        let set = set.with(Capability::LampOrPanelHours);
+        set
+    }
+
+    fn as_power(&self) -> Option<&dyn PowerControl> {
+        self.capabilities()
+            .contains(Capability::PowerState)
+            .then_some(self as &dyn PowerControl)
+    }
+
+    fn as_key(&self) -> Option<&dyn tv_rs_core::KeyInput> {
+        None
+    }
+
+    fn as_app(&self) -> Option<&dyn tv_rs_core::AppLaunch> {
+        None
+    }
+
+    fn as_text(&self) -> Option<&dyn tv_rs_core::TextInput> {
+        // MDC has no text-entry command: a commercial panel's remote channel
+        // carries keys and inputs, never a string to type.
+        None
+    }
+
+    fn as_input(&self) -> Option<&dyn InputSelect> {
+        self.capabilities()
+            .contains(Capability::InputSelect)
+            .then_some(self as &dyn InputSelect)
+    }
+
+    fn as_volume(&self) -> Option<&dyn VolumeControl> {
+        self.capabilities()
+            .contains(Capability::Volume)
+            .then_some(self as &dyn VolumeControl)
+    }
+
+    fn as_brightness(&self) -> Option<&dyn BrightnessControl> {
+        self.capabilities()
+            .contains(Capability::Brightness)
+            .then_some(self as &dyn BrightnessControl)
+    }
+
+    fn as_reboot(&self) -> Option<&dyn Rebootable> {
+        self.capabilities()
+            .contains(Capability::Reboot)
+            .then_some(self as &dyn Rebootable)
+    }
+
+    fn as_panel_lock(&self) -> Option<&dyn PanelLockControl> {
+        self.capabilities()
+            .contains(Capability::PanelLock)
+            .then_some(self as &dyn PanelLockControl)
+    }
+
+    fn as_orientation(&self) -> Option<&dyn OrientationControl> {
+        self.capabilities()
+            .contains(Capability::Orientation)
+            .then_some(self as &dyn OrientationControl)
+    }
+
+    fn as_panel_health(&self) -> Option<&dyn PanelHealthProvider> {
+        self.capabilities()
+            .contains(Capability::NoSignalStatus)
+            .then_some(self as &dyn PanelHealthProvider)
+    }
+
+    #[cfg(feature = "supporting")]
+    fn as_panel_hours(&self) -> Option<&dyn PanelHoursProvider> {
+        self.capabilities()
+            .contains(Capability::LampOrPanelHours)
+            .then_some(self as &dyn PanelHoursProvider)
+    }
+
+    fn as_probe(&self) -> Option<&dyn Probe> {
+        Some(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tv_rs_core::conformance;
+    use tv_rs_core::{DeviceDescriptor, DeviceId, DeviceOs};
+
+    use super::MdcDevice;
+    use crate::mdc::client::MdcClient;
+    use crate::mdc::types::DisplayId;
+
+    #[tokio::test]
+    async fn the_handle_satisfies_the_shared_conformance_suite_without_hardware() {
+        let client =
+            MdcClient::new("127.0.0.1").display(DisplayId::new(1).expect("valid display id"));
+        let descriptor = DeviceDescriptor::new(
+            DeviceId::new("mdc-test-1").expect("valid id"),
+            DeviceOs::SamsungMdc,
+            "127.0.0.1:1515",
+        );
+        let device = MdcDevice::new(client, descriptor);
+        let violations = conformance::run(&device).await;
+        assert!(violations.is_empty(), "{violations:#?}");
+    }
+}

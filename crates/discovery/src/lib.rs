@@ -1,96 +1,45 @@
-//! `tv-rs-discovery` — Universal display discovery, device fingerprinting, and device registry.
+//! `tv-rs-discovery` (deprecated shim).
 //!
-//! This crate provides universal discovery of televisions, commercial panels, streaming boxes,
-//! and digital signage displays across multiple protocols:
-//! - **SSDP / UPnP** (`SsdpScanner`)
-//! - **mDNS / Bonjour** (`MdnsScanner`, `MdnsAdvertiser`)
-//! - **ADB Network Devices** (`AdbScanner`)
-//! - **Bluetooth LE Advertising** (`BluetoothScanner`)
-//! - **Google Cast Devices** (`CastScanner`)
-//! - **Local HTTP Display APIs** (`LocalHttpDisplayScanner`)
-//! - **HDMI-CEC Topology** (`CecTopologyScanner`)
-//! - **Saved Device Registry** (`DeviceRegistry`)
-//!
-//! # Device Fingerprinting
-//! The [`DeviceFingerprint`] combines signatures (MAC pattern, mDNS hostname, SSDP server string,
-//! open ports, HDMI-CEC vendor ID, Bluetooth advertising name, ADB model string) to identify:
-//! - Smart TV brands (Samsung Tizen, LG webOS, Sony Bravia, Roku TV)
-//! - Android TV boxes
-//! - Amlogic platform devices
-//! - Amazon Fire TV devices
-//! - Google Chromecast-like receivers
-//! - Commercial digital signage panels (Samsung MDC, SICP, LG Commercial)
-//!
-//! **Discovery needs no authentication.** SSDP, mDNS, BLE advertising, and network probes are
-//! unauthenticated LAN/multicast protocols used to inventory devices prior to control or pairing.
-//!
-//! # Example
-//!
-//! ```no_run
-//! use tv_rs_discovery::SsdpScanner;
-//!
-//! # async fn example() -> Result<(), tv_rs_discovery::DiscoveryError> {
-//! let scanner = SsdpScanner::new();
-//!
-//! for response in scanner.discover().await? {
-//!     if let Some(location) = response.location {
-//!         println!("{} -> {}", response.source, location);
-//!     }
-//! }
-//! # Ok(())
-//! # }
-//! ```
+//! This crate has been consolidated into `tv-rs-drivers` under the `discovery` feature.
+//! Please migrate dependencies to `tv-rs-drivers` with `features = ["discovery"]` or
+//! import via the facade `tv-rs::discovery`.
 
-#![forbid(unsafe_code)]
-pub mod adb;
-pub mod bluetooth;
-pub mod cast;
-pub mod cec_topology;
-pub mod client;
-pub mod error;
-pub mod fingerprint;
-pub mod http_display;
-pub mod mdns;
-pub mod pairing;
-pub mod payload;
-pub mod probe;
-pub mod protocol;
-pub mod registry;
-pub mod source;
-pub mod types;
-pub mod universal;
+#![allow(deprecated)]
 
-pub use adb::{AdbDevice, AdbScanner};
-pub use bluetooth::{BluetoothAdvertisement, BluetoothScanner};
-pub use cast::{CastDevice, CastScanner, CAST_MDNS_SERVICE_TYPE};
-pub use cec_topology::{vendor_id_to_name, CecDeviceNode, CecTopologyMap, CecTopologyScanner};
-pub use fingerprint::DeviceFingerprint;
-pub use http_display::{HttpDisplay, LocalHttpDisplayScanner, HTTP_DISPLAY_PORTS};
-pub use registry::{DeviceRegistry, SavedDevice};
-pub use universal::{DiscoveredDevice, UniversalScanner};
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::adb")]
+pub use tv_rs_drivers::discovery::adb;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::bluetooth")]
+pub use tv_rs_drivers::discovery::bluetooth;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::cast")]
+pub use tv_rs_drivers::discovery::cast;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::cec_topology")]
+pub use tv_rs_drivers::discovery::cec_topology;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::client")]
+pub use tv_rs_drivers::discovery::client;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::error")]
+pub use tv_rs_drivers::discovery::error;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::fingerprint")]
+pub use tv_rs_drivers::discovery::fingerprint;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::http_display")]
+pub use tv_rs_drivers::discovery::http_display;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::mdns")]
+pub use tv_rs_drivers::discovery::mdns;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::pairing")]
+pub use tv_rs_drivers::discovery::pairing;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::payload")]
+pub use tv_rs_drivers::discovery::payload;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::probe")]
+pub use tv_rs_drivers::discovery::probe;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::protocol")]
+pub use tv_rs_drivers::discovery::protocol;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::registry")]
+pub use tv_rs_drivers::discovery::registry;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::source")]
+pub use tv_rs_drivers::discovery::source;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::types")]
+pub use tv_rs_drivers::discovery::types;
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::universal")]
+pub use tv_rs_drivers::discovery::universal;
 
-pub use client::{build_msearch, parse_device_descriptor, parse_msearch_response, SsdpScanner};
-pub use error::{DiscoveryError, Result};
-pub use mdns::{
-    MdnsAdvertiser, MdnsScanner, MdnsServiceRecord, MDNS_SERVICE_TYPE_SIGNAGE, MDNS_SERVICE_TYPE_TV,
-};
-pub use pairing::{
-    validate_handshake, SignageHandshakeRequest, SignageHandshakeResponse, SignagePairingPayload,
-    SignagePairingSession, DEFAULT_SESSION_TTL_SECS, SIGNAGE_PAIRING_URI_SCHEME,
-};
-pub use payload::{SsdpDeviceDescriptor, SsdpMsearchResponse};
-#[cfg(feature = "mobile")]
-pub use probe::sweep_subnet_bounded;
-pub use probe::{
-    probe_host, ProbeSignal, ProbedEndpoint, ProbedVendor, ATR_V2_PORT, PROBE_CONNECT_TIMEOUT,
-    ROKU_ECP_PORT, TIZEN_API_PORT, WEBOS_SSAP_PORT,
-};
-pub use protocol::{DiscoveryDiagnostics, DiscoveryOutcome, SsdpDiscovery};
-pub use source::{
-    CompositeDiscoverySource, DiscoverySource, LgDiscoverySource, RokuDiscoverySource,
-    SamsungDiscoverySource, SsdpDiscoverySource, WolDiscoverySource,
-};
-pub use types::{
-    DiscoveryMethod, MDNS_MULTICAST_IP, MDNS_UDP_PORT, SSDP_ALL_DEVICES, SSDP_MULTICAST_IP,
-    SSDP_ROOT_DEVICE, SSDP_UDP_PORT,
-};
+#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::*")]
+pub use tv_rs_drivers::discovery::*;

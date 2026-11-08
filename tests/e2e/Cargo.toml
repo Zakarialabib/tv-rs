@@ -1,0 +1,27 @@
+[package]
+name = "tv-rs-e2e"
+version = "0.7.1"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[[bin]]
+name = "e2e_runner"
+path = "src/main.rs"
+
+[lib]
+name = "tv_rs_e2e"
+path = "src/lib.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+futures = "0.3"
+async-trait = "0.1"
+toml = "0.8"
+roxmltree = "0.21"
+ipnet = "2.12"
+base64 = "0.23"
+thiserror = "2"

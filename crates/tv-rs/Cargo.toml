@@ -12,6 +12,7 @@ repository.workspace = true
 [dependencies]
 # Facade re-exports the protocol crates; it holds no protocol logic of its own.
 tv-rs-core.workspace = true
+tv-rs-drivers = { workspace = true, features = ["discovery", "power", "roku", "ir", "mdc", "sicp"] }
 tv-rs-discovery.workspace = true
 tv-rs-power.workspace = true
 tv-rs-transport.workspace = true

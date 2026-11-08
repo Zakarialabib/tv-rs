@@ -1,22 +1,11 @@
-//! Universal IR Remote control and scanner crate (`tv-rs-ir`).
+//! `tv-rs-ir` (deprecated shim).
 //!
-//! Provides protocol encodings (NEC, RC5, RC6, SIRC, RCA, Amlogic), hardware/mock
-//! emitter abstractions ([`IrEmitter`]), erased [`tv_rs_core::DeviceHandle`] integration,
-//! and the [`UniversalScanner`] feedback-loop detection system.
+//! Consolidated into `tv-rs-drivers`; use `tv_rs_drivers::ir` instead.
 
-#![forbid(unsafe_code)]
-#![warn(missing_docs)]
+#![allow(deprecated)]
 
-pub mod device;
-pub mod emitter;
-pub mod error;
-pub mod profile;
-pub mod protocol;
-pub mod scanner;
-
-pub use device::IrDeviceHandle;
-pub use emitter::{IrEmitter, LircEmitter, MockIrEmitter, NetworkBridgeEmitter};
-pub use error::IrError;
-pub use profile::{all_default_profiles, IrProfile};
-pub use protocol::{IrProtocol, IrSignal};
-pub use scanner::{CecFeedback, IrScanFeedback, MockFeedback, TcpProbeFeedback, UniversalScanner};
+#[deprecated(
+    since = "0.8.0",
+    note = "Consolidated into tv-rs-drivers; use tv_rs_drivers::ir instead"
+)]
+pub use tv_rs_drivers::ir::*;

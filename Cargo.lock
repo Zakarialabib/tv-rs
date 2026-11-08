@@ -3038,6 +3038,7 @@ dependencies = [
  "tv-rs-core",
  "tv-rs-discovery",
  "tv-rs-dlna",
+ "tv-rs-drivers",
  "tv-rs-ir",
  "tv-rs-mdc",
  "tv-rs-mirror",
@@ -3190,17 +3191,7 @@ dependencies = [
 name = "tv-rs-discovery"
 version = "0.7.1"
 dependencies = [
- "async-trait",
- "ipnet",
- "reqwest",
- "roxmltree",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tv-rs-transport",
- "url",
- "uuid",
+ "tv-rs-drivers",
 ]
 
 [[package]]
@@ -3218,19 +3209,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "tv-rs-ir"
+name = "tv-rs-drivers"
 version = "0.7.1"
 dependencies = [
  "async-trait",
+ "ipnet",
  "reqwest",
+ "roxmltree",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
+ "tokio-serial",
  "toml",
  "tracing",
  "tv-rs-cec",
  "tv-rs-core",
- "tv-rs-power",
+ "tv-rs-transport",
+ "url",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
+name = "tv-rs-ir"
+version = "0.7.1"
+dependencies = [
+ "tv-rs-drivers",
 ]
 
 [[package]]
@@ -3259,11 +3264,9 @@ dependencies = [
 name = "tv-rs-mdc"
 version = "0.7.1"
 dependencies = [
- "async-trait",
- "thiserror",
  "tokio",
- "tokio-serial",
  "tv-rs-core",
+ "tv-rs-drivers",
 ]
 
 [[package]]
@@ -3293,11 +3296,7 @@ dependencies = [
 name = "tv-rs-power"
 version = "0.7.1"
 dependencies = [
- "async-trait",
- "serde",
- "thiserror",
- "tokio",
- "tv-rs-transport",
+ "tv-rs-drivers",
 ]
 
 [[package]]
@@ -3330,15 +3329,7 @@ dependencies = [
 name = "tv-rs-roku"
 version = "0.7.1"
 dependencies = [
- "async-trait",
- "reqwest",
- "roxmltree",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tv-rs-transport",
- "wiremock",
+ "tv-rs-drivers",
 ]
 
 [[package]]
@@ -3359,11 +3350,9 @@ dependencies = [
 name = "tv-rs-sicp"
 version = "0.7.1"
 dependencies = [
- "async-trait",
- "thiserror",
  "tokio",
- "tokio-serial",
  "tv-rs-core",
+ "tv-rs-drivers",
 ]
 
 [[package]]

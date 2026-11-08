@@ -6,29 +6,99 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-keywords = ["smart-tv", "driver", "tizen", "webos", "roku"]
+keywords = ["smart-tv", "driver", "tizen", "webos", "roku", "mdc", "sicp"]
 categories = ["api-bindings", "hardware-support"]
 
 [features]
 default = ["discovery", "power"]
-discovery = []
-power = []
+discovery = [
+    "dep:tv-rs-transport",
+    "dep:thiserror",
+    "dep:tokio",
+    "dep:serde",
+    "dep:serde_json",
+    "dep:reqwest",
+    "dep:roxmltree",
+    "dep:url",
+    "dep:uuid",
+    "dep:async-trait",
+]
+mobile = ["discovery", "dep:ipnet"]
+power = [
+    "dep:tv-rs-transport",
+    "dep:thiserror",
+    "dep:tokio",
+    "dep:serde",
+    "dep:async-trait",
+]
 tizen = []
 webos = []
-roku = []
-mdc = []
-sicp = []
-ir = []
+roku = [
+    "dep:reqwest",
+    "dep:roxmltree",
+    "dep:serde",
+    "dep:serde_json",
+    "dep:thiserror",
+    "dep:tokio",
+    "dep:tv-rs-transport",
+    "dep:async-trait",
+]
+mdc = [
+    "dep:tokio",
+    "dep:thiserror",
+    "dep:tracing",
+    "dep:async-trait",
+]
+sicp = [
+    "dep:tokio",
+    "dep:thiserror",
+    "dep:tracing",
+    "dep:async-trait",
+]
+ir = [
+    "dep:serde",
+    "dep:thiserror",
+    "dep:tokio",
+    "dep:toml",
+    "dep:tracing",
+    "dep:tv-rs-cec",
+    "power",
+    "dep:async-trait",
+]
+ir-network-bridge = ["ir", "dep:reqwest"]
+serial = ["dep:tokio-serial"]
+supporting = ["tv-rs-core/supporting"]
 cec = []
 cast = []
 all = [
     "tizen", "webos", "roku", "mdc", "sicp",
     "ir", "cec", "cast", "discovery", "power",
+    "mobile", "supporting", "serial", "ir-network-bridge",
 ]
 
 [dependencies]
 tv-rs-core = { workspace = true }
-async-trait = { workspace = true }
+async-trait = { workspace = true, optional = true }
+
+tv-rs-transport = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+tokio = { workspace = true, features = ["process"], optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+roxmltree = { workspace = true, optional = true }
+url = { workspace = true, optional = true }
+uuid = { workspace = true, features = ["v4"], optional = true }
+ipnet = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+tv-rs-cec = { workspace = true, optional = true }
+tokio-serial = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+wiremock = { workspace = true }
+tv-rs-core = { workspace = true, features = ["conformance", "mock-backend"] }
 
 [lints]
 workspace = true

@@ -1,35 +1,23 @@
 [package]
 name = "tv-rs-mdc"
-description = "Samsung Multiple Display Control (MDC) over TCP 1515: frames, display IDs, power, input, volume, mute and brightness."
-readme = "README.md"
+description = "Deprecated shim for tv-rs-mdc; consolidated into tv-rs-drivers"
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-keywords = ["samsung", "mdc", "signage", "display", "tcp"]
-categories = ["api-bindings", "network-programming"]
 
 [features]
-# The supporting-tier LFD surfaces. `LampOrPanelHours` maps to MDC `0x83`
-# (panel on-time); `ScreenCapture` has no MDC command and is never advertised,
-# so only the hours surface is gated here.
-supporting = ["tv-rs-core/supporting"]
-
-# RS-232 as well as TCP. A wired video wall has no discovery, no DHCP and no TLS to
-# argue about, so the same frames travel over a serial line; off by default so a
-# cloud agent does not compile a serial stack.
-serial = ["dep:tokio-serial"]
+default = []
+supporting = ["tv-rs-drivers/supporting"]
+serial = ["tv-rs-drivers/serial"]
 
 [dependencies]
-async-trait.workspace = true
-thiserror.workspace = true
-tokio.workspace = true
-tokio-serial = { workspace = true, optional = true }
-tv-rs-core.workspace = true
+tv-rs-drivers = { workspace = true, features = ["mdc"] }
 
 [dev-dependencies]
-tokio.workspace = true
+tokio = { workspace = true }
 tv-rs-core = { workspace = true, features = ["conformance", "mock-backend"] }
 
 [lints]

@@ -1,6 +1,7 @@
 [package]
 name = "tv-rs-power"
-description = "Wake-on-LAN / Wake-on-Wireless-LAN magic packets and TV power-state probing."
+description = "Deprecated shim: Wake-on-LAN and TV power-state probing moved to tv-rs-drivers::power."
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,15 +11,7 @@ keywords = ["wake-on-lan", "wol", "wowlan", "magic-packet", "power"]
 categories = ["api-bindings", "network-programming"]
 
 [dependencies]
-async-trait.workspace = true
-serde.workspace = true
-thiserror.workspace = true
-tokio.workspace = true
-# Vocabulary only: no TLS connector, no WebSocket framing (default features off).
-tv-rs-transport.workspace = true
-
-[dev-dependencies]
-tokio.workspace = true
+tv-rs-drivers = { workspace = true, features = ["power"] }
 
 [lints]
 workspace = true

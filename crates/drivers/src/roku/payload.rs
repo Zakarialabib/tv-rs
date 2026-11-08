@@ -1,0 +1,105 @@
+//! Protocol payload structs (serde).
+//!
+//! These model the XML documents returned by the Roku ECP `/query` endpoints.
+//! XML is parsed with `roxmltree` (see `client::parse_device_info` and
+//! `client::parse_apps`); the serde derives mirror the same shapes so callers
+//! can round-trip them through JSON if they wish.
+
+use serde::{Deserialize, Serialize};
+
+/// A parsed `GET /query/device-info` response body.
+///
+/// Every field is optional because different Roku models and firmware versions
+/// expose different subsets of `<device-info>` elements. Hyphenated XML element
+/// names (`<vendor-name>`, `<supports-suspend>`, …) map to the underscore field
+/// names below.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct RokuDeviceInfo {
+    /// Manufacturer, typically `"Roku"`. From `<vendor-name>`.
+    pub vendor_name: Option<String>,
+    /// Marketing model name, e.g. `"Roku Ultra"`. From `<model-name>`.
+    pub model_name: Option<String>,
+    /// Model number, e.g. `"4800X"`. From `<model-number>`.
+    pub model_number: Option<String>,
+    /// Device serial number. From `<serial-number>`.
+    pub serial_number: Option<String>,
+    /// Unique device id used by Roku cloud services. From `<device-id>`.
+    pub device_id: Option<String>,
+    /// Wi-Fi MAC address. From `<wifi-mac>`.
+    pub wifi_mac: Option<String>,
+    /// Ethernet MAC address. From `<ethernet-mac>`.
+    pub ethernet_mac: Option<String>,
+    /// Current power state, e.g. `"PowerOn"`. From `<power-mode>`.
+    pub power_mode: Option<String>,
+    /// Current output resolution, e.g. `"1080p"`. From `<screen-resolution>`.
+    pub screen_resolution: Option<String>,
+    /// Installed OS version. From `<software-version>`.
+    pub software_version: Option<String>,
+    /// User-assigned device name. From `<user-device-name>`.
+    pub user_device_name: Option<String>,
+    /// Whether the device reports support for suspend. From `<supports-suspend>`.
+    pub supports_suspend: Option<bool>,
+    /// Whether the device reports support for find-remote. From `<supports-find-remote>`.
+    pub supports_find_remote: Option<bool>,
+    /// Whether the device accepts TV power control over ECP. From
+    /// `<supports-tv-power-control>` (Roku OS 15+).
+    ///
+    /// This is the flag that distinguishes a Roku TV (panel plus ECP) from a
+    /// streaming player, which has no panel to switch off.
+    pub supports_tv_power_control: Option<bool>,
+    /// Whether the device accepts absolute volume over ECP. From
+    /// `<supports-audio-volume-control>` (Roku OS 15+).
+    pub supports_audio_volume_control: Option<bool>,
+}
+
+impl RokuDeviceInfo {
+    /// The hardware address the device reports, preferring Wi-Fi.
+    ///
+    /// A wired Roku fills `ethernet-mac` and leaves `wifi-mac` empty; a wireless
+    /// one does the reverse. Either identifies the box, so the first present wins.
+    #[must_use]
+    pub fn mac(&self) -> Option<String> {
+        self.wifi_mac.clone().or_else(|| self.ethernet_mac.clone())
+    }
+}
+
+impl RokuDeviceInfo {
+    /// The reported power state as a typed value.
+    ///
+    /// Returns [`crate::roku::RokuPowerMode::Unknown`] when the firmware omitted `<power-mode>`
+    /// or sent a value this crate does not model — an absent element is not an
+    /// error, it only means the probe learned nothing.
+    #[must_use]
+    pub fn power_state(&self) -> crate::roku::types::RokuPowerMode {
+        self.power_mode
+            .as_deref()
+            .map(crate::roku::types::RokuPowerMode::from_text)
+            .unwrap_or_default()
+    }
+}
+
+/// A `GET /query/active-app` response.
+///
+/// The `app` element is the bare text `Roku` with **no** `id` when the user is on the
+/// home screen: that is "nothing is in front", not an application called Roku, which
+/// is why the id is the optional part and the name is not.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RokuActiveApp {
+    /// The active application's id, when an application (not the home screen) is in
+    /// front. This is what a launcher would pass to `/launch/`.
+    pub app_id: Option<String>,
+    /// The active application's name as the device reports it.
+    pub app_name: String,
+    /// The screensaver covering the application, when one is active.
+    pub screensaver: Option<String>,
+}
+
+/// A single entry from a `GET /query/apps` response.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RokuApp {
+    /// The application id taken from the `id` attribute.
+    pub id: String,
+    /// The human-readable application name taken from the element text.
+    pub name: String,
+}

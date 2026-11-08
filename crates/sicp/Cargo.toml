@@ -1,28 +1,23 @@
 [package]
 name = "tv-rs-sicp"
-description = "Philips Serial Information Control Protocol (SICP) over TCP 5000: frames, display IDs, power, input, volume, and display temperature/status."
-readme = "README.md"
+description = "Deprecated shim for tv-rs-sicp; consolidated into tv-rs-drivers"
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-keywords = ["philips", "sicp", "signage", "display", "tcp"]
-categories = ["api-bindings", "network-programming"]
 
 [features]
-supporting = ["tv-rs-core/supporting"]
-serial = ["dep:tokio-serial"]
+default = []
+supporting = ["tv-rs-drivers/supporting"]
+serial = ["tv-rs-drivers/serial"]
 
 [dependencies]
-async-trait.workspace = true
-thiserror.workspace = true
-tokio.workspace = true
-tokio-serial = { workspace = true, optional = true }
-tv-rs-core.workspace = true
+tv-rs-drivers = { workspace = true, features = ["sicp"] }
 
 [dev-dependencies]
-tokio.workspace = true
+tokio = { workspace = true }
 tv-rs-core = { workspace = true, features = ["conformance", "mock-backend"] }
 
 [lints]

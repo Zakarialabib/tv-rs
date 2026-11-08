@@ -5,12 +5,13 @@ use tv_rs_core::descriptor::DiscoveredTv;
 use tv_rs_core::observe::{ObservationStream, TvEvent};
 use tv_rs_core::state::ObservedState;
 use tv_rs_core::types::TvVendor;
-use tv_rs_drivers::registry;
+use tv_rs_drivers::registry::DriverRegistry;
 
 #[test]
 fn test_empty_registry_edge_cases() {
-    let drivers = registry();
-    // In Wave 0, registry must return an empty Vec
+    let empty_reg = DriverRegistry::new();
+    let drivers = empty_reg.into_drivers();
+    // Empty registry must return an empty Vec
     assert!(drivers.is_empty());
     assert_eq!(drivers.len(), 0);
 
