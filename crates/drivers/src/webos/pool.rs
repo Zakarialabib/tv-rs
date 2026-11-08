@@ -7,9 +7,9 @@
 //! The pool keeps one registered session per TV and reopens it exactly once
 //! when a request fails against it.
 //!
-//! ```
-//! # async fn demo() -> tv_rs_webos::Result<()> {
-//! use tv_rs_webos::{WebosClient, WebosSessionPool};
+//! ```no_run
+//! # async fn demo() -> tv_rs_drivers::webos::Result<()> {
+//! use tv_rs_drivers::webos::{WebosClient, WebosSessionPool};
 //!
 //! let pool = WebosSessionPool::new();
 //! let client = WebosClient::new("192.168.1.20")

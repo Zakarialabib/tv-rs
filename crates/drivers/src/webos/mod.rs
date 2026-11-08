@@ -8,9 +8,9 @@
 //! # Example
 //!
 //! ```no_run
-//! use tv_rs_webos::{load_client_key, save_client_key, WebosClient};
+//! use tv_rs_drivers::webos::{load_client_key, save_client_key, WebosClient};
 //!
-//! # async fn run() -> tv_rs_webos::Result<()> {
+//! # async fn run() -> tv_rs_drivers::webos::Result<()> {
 //! let mut client = WebosClient::new("192.168.1.20").with_device_name("tv-rs");
 //!
 //! // First run: pair (triggers the on-screen prompt) and persist the issued key.

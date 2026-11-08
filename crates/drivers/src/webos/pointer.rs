@@ -132,8 +132,8 @@ impl PointerSocket {
     /// Ask for the path over an already-registered main session:
     ///
     /// ```no_run
-    /// # async fn demo() -> tv_rs_webos::Result<()> {
-    /// use tv_rs_webos::{extract_socket_path, PointerFrame, PointerSocket, SsapUri, WebosClient};
+    /// # async fn demo() -> tv_rs_drivers::webos::Result<()> {
+    /// use tv_rs_drivers::webos::{extract_socket_path, PointerFrame, PointerSocket, SsapUri, WebosClient};
     ///
     /// let client = WebosClient::new("192.168.1.20").with_wss().with_client_key("key");
     /// let mut session = client.connect().await?;
