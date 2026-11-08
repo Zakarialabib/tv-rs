@@ -1,18 +1,11 @@
-//! Google Cast sender implementation for smart TVs and Chromecasts.
+//! `tv-rs-cast` (deprecated shim).
 //!
-//! Control channel uses TLS on port 8009 and EKE2 handshake.
-//! Fallback to DIAL over HTTP port 8008 for launch/stop.
+//! Google Cast driver functionality has consolidated into `tv-rs-drivers::cast`.
 
-#![forbid(unsafe_code)]
+#![allow(deprecated)]
 
-pub mod error;
-pub mod proto;
-
-pub mod client;
-pub mod dial;
-pub mod payload;
-pub mod transport;
-
-pub use client::CastClient;
-pub use error::{CastError, Result};
-pub use payload::MediaStatusDto;
+#[deprecated(
+    since = "0.8.0",
+    note = "Consolidated into tv-rs-drivers; use tv_rs_drivers::cast instead"
+)]
+pub use tv_rs_drivers::cast::*;

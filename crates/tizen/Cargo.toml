@@ -9,7 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-tv-rs-drivers = { workspace = true, default-features = false, features = ["tizen"] }
+tv-rs-drivers = { workspace = true, features = ["tizen"] }
 
 [dev-dependencies]
 tokio.workspace = true

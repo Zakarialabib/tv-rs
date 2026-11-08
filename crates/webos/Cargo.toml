@@ -1,33 +1,21 @@
 [package]
 name = "tv-rs-webos"
-description = "LG webOS TV control over SSAP: JSON-RPC WebSocket transport (3000/3001), pairing client-key and app launching."
+description = "DEPRECATED: LG webOS TV control consolidated into tv-rs-drivers"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-keywords = ["lg", "webos", "ssap", "smart-tv", "json-rpc"]
-categories = ["api-bindings", "network-programming"]
+publish = false
 
 [dependencies]
-async-trait.workspace = true
-futures-util.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-thiserror.workspace = true
-tokio.workspace = true
-tokio-tungstenite.workspace = true
-tv-rs-transport = { workspace = true, features = ["ws", "rustls"] }
-url.workspace = true
+tv-rs-drivers = { workspace = true, features = ["webos"] }
 
 [dev-dependencies]
 tokio.workspace = true
 
 [features]
-# Counting test doubles for the session pool (`tv_rs_webos::testkit`), so a
-# downstream crate can prove session reuse without a television. Off by default:
-# a released build carries no test code.
-testkit = []
+testkit = ["tv-rs-drivers/testkit"]
 
 [lints]
 workspace = true
