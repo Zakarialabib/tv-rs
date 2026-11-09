@@ -34,11 +34,9 @@ impl RokuDriver {
         caps.insert(Capability::Wake);
         caps.insert(Capability::Key);
         caps.insert(Capability::AppLaunch);
-        caps.insert(Capability::AppList);
         caps.insert(Capability::Foreground);
+        caps.insert(Capability::AppList);
         caps.insert(Capability::TextInput);
-        caps.insert(Capability::Volume);
-        caps.insert(Capability::InputSelect);
 
         let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         Self {
@@ -237,11 +235,11 @@ impl DeviceHandle for RokuDeviceHandle {
     }
 
     fn as_volume(&self) -> Option<&dyn VolumeControl> {
-        Some(self)
+        None
     }
 
     fn as_input(&self) -> Option<&dyn InputSelect> {
-        Some(self)
+        None
     }
 }
 

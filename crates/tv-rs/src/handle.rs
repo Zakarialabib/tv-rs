@@ -58,7 +58,7 @@ impl TvClient {
     #[must_use]
     pub fn capabilities(&self) -> CapabilitySet {
         let mut set = tv_rs_drivers::registry::default_registry()
-            .find_for_vendor(self.vendor())
+            .find_for_vendor(self.vendor().into())
             .map(CapabilitySet::from_driver)
             .unwrap_or_else(|| CapabilitySet::empty().with(Capability::PowerState));
 

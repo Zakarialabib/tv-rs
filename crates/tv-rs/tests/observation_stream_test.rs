@@ -9,6 +9,9 @@
 
 use std::time::{Duration, Instant};
 
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
+use tokio::sync::oneshot;
 use tv_rs_core::command::Command;
 use tv_rs_core::descriptor::{DiscoveredTv, PowerState};
 use tv_rs_core::driver::Driver;
@@ -19,10 +22,39 @@ use tv_rs_drivers::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY;
 use tv_rs_drivers::roku::driver::RokuDriver;
 use tv_rs_drivers::tizen::driver::TizenDriver;
 
+async fn start_mock_roku_server() -> (String, oneshot::Sender<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (tx, mut rx) = oneshot::channel();
+    tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = &mut rx => break,
+                res = listener.accept() => {
+                    if let Ok((mut socket, _)) = res {
+                        tokio::spawn(async move {
+                            let mut buf = [0u8; 1024];
+                            let _ = socket.read(&mut buf).await;
+                            let response = b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
+                            let _ = socket.write_all(response).await;
+                        });
+                    }
+                }
+            }
+        }
+    });
+    (addr.to_string(), tx)
+}
+
 #[tokio::test]
 async fn test_observation_stream_tizen_vendor_latency_and_unsubscription() {
+    let server = tv_rs_sim::MockTizenServer::start_plain("127.0.0.1:0")
+        .await
+        .expect("start mock tizen");
+    let target_addr = server.local_addr().to_string();
+
     let mut driver = TizenDriver::new();
-    let target = DiscoveredTv::probed(TvVendor::Samsung, "127.0.0.1");
+    let target = DiscoveredTv::probed(TvVendor::Samsung, target_addr);
     let _handle = driver.connect(&target).await.expect("connect target");
 
     // Initial receiver count is 0
@@ -53,34 +85,34 @@ async fn test_observation_stream_tizen_vendor_latency_and_unsubscription() {
 
     // Verify subsequent command
     driver
-        .send(Command::Volume(25))
+        .send(Command::Power(false))
         .await
-        .expect("volume command ack");
-    let event = stream.recv().await.expect("recv volume event");
-    assert_eq!(
-        event,
-        TvEvent::VolumeChanged {
-            level: 25,
-            muted: false
-        }
-    );
+        .expect("power false command ack");
+    let event = stream.recv().await.expect("recv power event");
+    assert_eq!(event, TvEvent::PowerChanged(PowerState::Standby));
 
     // Automatic unsubscription on Drop
     drop(stream);
     assert_eq!(driver.event_sender().receiver_count(), 0);
+    server.shutdown().await;
 }
 
 #[tokio::test]
 async fn test_observation_stream_roku_vendor_latency_and_events() {
+    let (addr, shutdown_tx) = start_mock_roku_server().await;
     let mut driver = RokuDriver::new();
-    let target = DiscoveredTv::probed(TvVendor::Roku, "127.0.0.1:8060");
+    let target = DiscoveredTv::probed(TvVendor::Roku, addr);
     let _handle = driver.connect(&target).await.expect("connect target");
 
     let mut stream = driver.observe().await.expect("open stream");
     assert_eq!(driver.event_sender().receiver_count(), 1);
 
     let start = Instant::now();
-    let _ = driver.send(Command::Power(false)).await;
+    let ack = driver
+        .send(Command::Power(false))
+        .await
+        .expect("send power false");
+    assert!(ack.id.is_some());
 
     let event = tokio::time::timeout(Duration::from_millis(200), stream.recv())
         .await
@@ -91,25 +123,38 @@ async fn test_observation_stream_roku_vendor_latency_and_events() {
     assert_eq!(event, TvEvent::PowerChanged(PowerState::Standby));
 
     // Test App launch event
-    let _ = driver.send(Command::LaunchApp("12".to_string())).await;
+    let _ = driver
+        .send(Command::LaunchApp("12".to_string()))
+        .await
+        .expect("send launch app");
     let event = stream.recv().await.expect("recv app event");
     assert_eq!(event, TvEvent::AppChanged("12".to_string()));
 
     drop(stream);
     assert_eq!(driver.event_sender().receiver_count(), 0);
+    let _ = shutdown_tx.send(());
 }
 
 #[tokio::test]
 async fn test_observation_stream_mdc_vendor_latency_and_events() {
+    let server = tv_rs_sim::MockMdcServer::start("127.0.0.1:0")
+        .await
+        .expect("start mock mdc");
+    let target_addr = server.local_addr().to_string();
+
     let mut driver = MdcDriver::new();
-    let target = DiscoveredTv::probed(TvVendor::Mdc, "127.0.0.1:1515");
+    let target = DiscoveredTv::probed(TvVendor::Mdc, target_addr);
     let _handle = driver.connect(&target).await.expect("connect target");
 
     let mut stream = driver.observe().await.expect("open stream");
     assert_eq!(driver.event_sender().receiver_count(), 1);
 
     let start = Instant::now();
-    let _ = driver.send(Command::Power(true)).await;
+    let ack = driver
+        .send(Command::Power(true))
+        .await
+        .expect("send power true");
+    assert!(ack.id.is_some());
 
     let event = tokio::time::timeout(Duration::from_millis(200), stream.recv())
         .await
@@ -120,7 +165,10 @@ async fn test_observation_stream_mdc_vendor_latency_and_events() {
     assert_eq!(event, TvEvent::PowerChanged(PowerState::On));
 
     // Volume event
-    let _ = driver.send(Command::Volume(40)).await;
+    let _ = driver
+        .send(Command::Volume(40))
+        .await
+        .expect("send volume");
     let event = stream.recv().await.expect("recv volume event");
     assert_eq!(
         event,
@@ -132,6 +180,7 @@ async fn test_observation_stream_mdc_vendor_latency_and_events() {
 
     drop(stream);
     assert_eq!(driver.event_sender().receiver_count(), 0);
+    server.shutdown().await;
 }
 
 #[tokio::test]
@@ -169,10 +218,12 @@ async fn test_observation_stream_drop_oldest_lag_reporting() {
 
 #[tokio::test]
 async fn test_facade_tv_client_observe_integration() {
-    let target = DiscoveredTv::probed(TvVendor::Roku, "127.0.0.1:8060");
+    let (addr, shutdown_tx) = start_mock_roku_server().await;
+    let target = tv_rs::DiscoveredTv::probed(tv_rs::TvVendor::Roku, addr);
     let client = tv_rs::TvClient::from_discovered(&target).expect("tv client from discovered");
 
-    let mut stream = client.observe().await.expect("client observe stream");
+    let stream = client.observe().await.expect("client observe stream");
     // When stream is open, it can receive events or wait
     assert_eq!(format!("{stream:?}"), "ObservationStream { _private: () }");
+    let _ = shutdown_tx.send(());
 }

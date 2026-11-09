@@ -30,13 +30,13 @@ impl WebOsDriver {
     pub fn new() -> Self {
         let mut caps = CapabilitySet::empty();
         caps.insert(Capability::PowerState);
-        caps.insert(Capability::Wake);
         caps.insert(Capability::Key);
         caps.insert(Capability::AppLaunch);
-        caps.insert(Capability::AppList);
         caps.insert(Capability::Foreground);
-        caps.insert(Capability::TextInput);
+        caps.insert(Capability::InputSelect);
         caps.insert(Capability::Volume);
+        caps.insert(Capability::AppList);
+        caps.insert(Capability::TextInput);
 
         let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         let pool = Arc::new(DynSessionPool::with_factory(Box::new(LiveSessionFactory)));
@@ -172,7 +172,7 @@ impl DeviceHandle for WebOsDeviceHandle {
     fn as_key(&self) -> Option<&dyn KeyInput> { Some(self) }
     fn as_app(&self) -> Option<&dyn AppLaunch> { Some(self) }
     fn as_text(&self) -> Option<&dyn TextInput> { Some(self) }
-    fn as_input(&self) -> Option<&dyn tv_rs_core::capability::InputSelect> { None }
+    fn as_input(&self) -> Option<&dyn tv_rs_core::capability::InputSelect> { Some(self) }
 }
 
 #[async_trait]
@@ -243,6 +243,24 @@ impl TextInput for WebOsDeviceHandle {
     async fn type_text(&self, text: &str, _cmd: CommandId) -> Result<(), TvError> {
         self.pool.insert_text(&self.client, text, false).await
             .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::TextInput))
+    }
+}
+
+#[async_trait]
+impl tv_rs_core::capability::InputSelect for WebOsDeviceHandle {
+    async fn active_input(&self) -> Result<Option<tv_rs_core::capability::Input>, TvError> {
+        Ok(None)
+    }
+
+    async fn select_input(&self, input: tv_rs_core::capability::Input, _cmd: CommandId) -> Result<(), TvError> {
+        let input_id = match input {
+            tv_rs_core::capability::Input::Hdmi(n) => format!("HDMI_{n}"),
+            tv_rs_core::capability::Input::Tv => "tv".to_string(),
+            tv_rs_core::capability::Input::Other(s) => s,
+            _ => return Err(TvError::Unsupported(Capability::InputSelect)),
+        };
+        self.pool.switch_input(&self.client, &input_id).await
+            .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::InputSelect))
     }
 }
 

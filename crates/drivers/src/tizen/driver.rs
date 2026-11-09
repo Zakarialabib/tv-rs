@@ -37,13 +37,9 @@ impl TizenDriver {
     pub fn with_token_store(path: impl Into<PathBuf>) -> Self {
         let mut caps = CapabilitySet::empty();
         caps.insert(Capability::PowerState);
-        caps.insert(Capability::Wake);
         caps.insert(Capability::Key);
         caps.insert(Capability::AppLaunch);
-        caps.insert(Capability::AppList);
-        caps.insert(Capability::Foreground);
         caps.insert(Capability::TextInput);
-        caps.insert(Capability::Volume);
 
         let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         let remote = Arc::new(TizenRemote::new(path, "tv-rs"));
@@ -181,7 +177,7 @@ impl DeviceHandle for TizenDeviceHandle {
     fn as_power(&self) -> Option<&dyn PowerControl> { Some(self) }
     fn as_key(&self) -> Option<&dyn KeyInput> { Some(self) }
     fn as_app(&self) -> Option<&dyn AppLaunch> { Some(self) }
-    fn as_volume(&self) -> Option<&dyn VolumeControl> { Some(self) }
+    fn as_volume(&self) -> Option<&dyn VolumeControl> { None }
     fn as_text(&self) -> Option<&dyn TextInput> { Some(self) }
     fn as_input(&self) -> Option<&dyn tv_rs_core::capability::InputSelect> { None }
 }

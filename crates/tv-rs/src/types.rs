@@ -203,6 +203,42 @@ impl DiscoveredTv {
     }
 }
 
+impl From<TvVendor> for tv_rs_core::types::TvVendor {
+    fn from(v: TvVendor) -> Self {
+        match v {
+            TvVendor::Samsung => Self::Samsung,
+            TvVendor::Lg => Self::Lg,
+            TvVendor::Roku => Self::Roku,
+            TvVendor::Philips => Self::Sicp,
+            TvVendor::GoogleCast => Self::GoogleCast,
+            TvVendor::Cec => Self::Cec,
+            TvVendor::Unknown => Self::Unknown,
+        }
+    }
+}
+
+impl From<&DiscoveredTv> for tv_rs_core::descriptor::DiscoveredTv {
+    fn from(d: &DiscoveredTv) -> Self {
+        Self {
+            vendor: d.vendor.into(),
+            ip: d.ip.clone(),
+            location: d.location.clone(),
+            friendly_name: d.friendly_name.clone(),
+            manufacturer: d.manufacturer.clone(),
+            model_name: d.model_name.clone(),
+            serial_number: d.serial_number.clone(),
+            usn: d.usn.clone(),
+            mac: d.mac.clone(),
+        }
+    }
+}
+
+impl From<DiscoveredTv> for tv_rs_core::descriptor::DiscoveredTv {
+    fn from(d: DiscoveredTv) -> Self {
+        (&d).into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

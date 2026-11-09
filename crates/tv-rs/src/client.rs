@@ -744,14 +744,21 @@ impl TvClient {
     ///
     /// Resolves the active driver for this vendor and target address, and initiates observation.
     pub async fn observe(&self) -> Result<tv_rs_core::observe::ObservationStream> {
-        let mut target = DiscoveredTv::probed(self.vendor(), self.address());
-        if let Some(mac) = self.mac() {
-            target.mac = Some(mac.to_string());
-        }
+        let core_target = tv_rs_core::descriptor::DiscoveredTv {
+            vendor: self.vendor().into(),
+            ip: self.address().to_string(),
+            location: None,
+            friendly_name: None,
+            manufacturer: None,
+            model_name: None,
+            serial_number: None,
+            usn: None,
+            mac: self.mac().map(|m| m.to_string()),
+        };
 
         let mut reg = tv_rs_drivers::registry::DriverRegistry::with_defaults();
-        if let Some(driver) = reg.find_for_vendor_mut(self.vendor()) {
-            let _ = driver.connect(&target).await;
+        if let Some(driver) = reg.find_for_vendor_mut(self.vendor().into()) {
+            let _ = driver.connect(&core_target).await;
             driver.observe().await
         } else {
             Ok(tv_rs_core::observe::ObservationStream::new())
@@ -1002,7 +1009,7 @@ impl TvClient {
     /// Polls power observation on `interval` and calls `on_change` when state changes.
     ///
     /// Runs in a spawned tokio task until `stop_rx` receives a signal or is dropped.
-    pub fn observe<F>(
+    pub fn observe_polling<F>(
         &self,
         interval: std::time::Duration,
         mut stop_rx: tokio::sync::oneshot::Receiver<()>,
@@ -1465,7 +1472,7 @@ mod tests {
         let count_clone = count.clone();
 
         let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
-        let handle = client.observe(Duration::from_millis(10), stop_rx, move |_obs| {
+        let handle = client.observe_polling(Duration::from_millis(10), stop_rx, move |_obs| {
             count_clone.fetch_add(1, Ordering::SeqCst);
         });
 

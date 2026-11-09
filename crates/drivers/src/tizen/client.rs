@@ -417,9 +417,20 @@ impl TizenClient {
     /// Creates a client for `host` using the legacy WS port, DIAL port 8080, the
     /// [`TlsPolicy::Strict`] policy, the default device name and no token.
     pub fn new(host: impl Into<String>) -> Self {
+        let raw_host: String = host.into();
+        let (parsed_host, parsed_port) = if let Some((h, p)) = raw_host.rsplit_once(':') {
+            if let Ok(parsed_p) = p.parse::<u16>() {
+                (h.to_string(), parsed_p)
+            } else {
+                (raw_host, TIZEN_WS_PORT)
+            }
+        } else {
+            (raw_host, TIZEN_WS_PORT)
+        };
+
         Self {
-            host: host.into(),
-            port: TIZEN_WS_PORT,
+            host: parsed_host,
+            port: parsed_port,
             dial_port: TIZEN_DIAL_PORT,
             tls: TlsPolicy::default(),
             device_name: TIZEN_APP_ID.to_string(),

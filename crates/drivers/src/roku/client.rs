@@ -157,7 +157,13 @@ impl RokuClient {
     /// Creates a client targeting `host` on the default ECP port (8060).
     pub fn new(host: impl Into<String>) -> Self {
         let host = host.into();
-        Self::with_base_url(format!("http://{host}:{ROKU_ECP_PORT}"))
+        let stripped = host.trim().trim_start_matches("http://");
+        let base = if stripped.contains(':') {
+            format!("http://{stripped}")
+        } else {
+            format!("http://{stripped}:{ROKU_ECP_PORT}")
+        };
+        Self::with_base_url(base)
     }
 
     /// Creates a client targeting an explicit base URL (no trailing slash, no
