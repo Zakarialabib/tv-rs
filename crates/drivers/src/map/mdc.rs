@@ -1,7 +1,7 @@
 //! MDC error mapping to unified `TvError`.
 
-use tv_rs_core::error::{ProtocolError, TransportError, TvError};
 use crate::mdc::error::MdcError;
+use tv_rs_core::error::{ProtocolError, TransportError, TvError};
 
 /// Maps a raw MDC error into the shared `TvError` routing taxonomy.
 #[must_use]

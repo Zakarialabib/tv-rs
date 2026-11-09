@@ -1,8 +1,8 @@
 //! Tizen error mapping to unified `TvError`.
 
+use crate::tizen::error::TizenError;
 use tv_rs_core::capability::Capability;
 use tv_rs_core::error::{AuthError, ProtocolError, TransportError, TvError};
-use crate::tizen::error::TizenError;
 
 /// Maps a Tizen error to a unified `TvError`.
 #[must_use]

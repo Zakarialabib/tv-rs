@@ -1,10 +1,10 @@
 //! `WebOsDriver` and `WebOsDeviceHandle` implementations.
 
-use std::sync::Arc;
 use async_trait::async_trait;
+use std::sync::Arc;
 use tv_rs_core::capability::{
-    AppLaunch, AppRef, Capability, CapabilitySet, DeviceHandle,
-    Key, KeyInput, PowerControl, TextInput, VolumeControl,
+    AppLaunch, AppRef, Capability, CapabilitySet, DeviceHandle, Key, KeyInput, PowerControl,
+    TextInput, VolumeControl,
 };
 use tv_rs_core::command::{Command, CommandAck, CommandId};
 use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv, PowerState};
@@ -38,7 +38,8 @@ impl WebOsDriver {
         caps.insert(Capability::AppList);
         caps.insert(Capability::TextInput);
 
-        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
+        let (event_tx, _) =
+            tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         let pool = Arc::new(DynSessionPool::with_factory(Box::new(LiveSessionFactory)));
         Self {
             capabilities: caps,
@@ -83,8 +84,8 @@ impl Driver for WebOsDriver {
         let client = WebosClient::new(&host).with_wss();
         self.active_client = Some(client.clone());
 
-        let device_id = DeviceId::new(format!("webos-{}", host))
-            .unwrap_or_else(|_| DeviceId::anonymous());
+        let device_id =
+            DeviceId::new(format!("webos-{}", host)).unwrap_or_else(|_| DeviceId::anonymous());
         let mut desc = DeviceDescriptor::new(device_id, DeviceOs::WebOs, &host);
         if let Some(ref name) = target.friendly_name {
             desc = desc.with_name(name.clone());
@@ -94,7 +95,12 @@ impl Driver for WebOsDriver {
         }
 
         let _ = self.event_tx.send(TvEvent::ConnectionChanged(true));
-        Ok(WebOsDeviceHandle::new(desc, self.capabilities, self.pool.clone(), client))
+        Ok(WebOsDeviceHandle::new(
+            desc,
+            self.capabilities,
+            self.pool.clone(),
+            client,
+        ))
     }
 
     async fn send(&mut self, cmd: Command) -> Result<CommandAck, TvError> {
@@ -106,33 +112,52 @@ impl Driver for WebOsDriver {
 
         match cmd {
             Command::Key(key) => {
-                let btn = map_core_key_to_webos(key)
-                    .ok_or(TvError::Unsupported(Capability::Key))?;
-                self.pool.send_key(client, btn).await
+                let btn =
+                    map_core_key_to_webos(key).ok_or(TvError::Unsupported(Capability::Key))?;
+                self.pool
+                    .send_key(client, btn)
+                    .await
                     .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::Key))?;
             }
             Command::Power(false) => {
-                self.pool.power_off(client).await
+                self.pool
+                    .power_off(client)
+                    .await
                     .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::PowerState))?;
-                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
+                let _ = self
+                    .event_tx
+                    .send(TvEvent::PowerChanged(PowerState::Standby));
             }
             Command::LaunchApp(app_id) => {
-                self.pool.launch_app(client, &app_id).await
+                self.pool
+                    .launch_app(client, &app_id)
+                    .await
                     .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::AppLaunch))?;
                 let _ = self.event_tx.send(TvEvent::AppChanged(app_id));
             }
             Command::Volume(level) => {
-                self.pool.set_volume(client, level).await
+                self.pool
+                    .set_volume(client, level)
+                    .await
                     .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::Volume))?;
-                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
+                let _ = self.event_tx.send(TvEvent::VolumeChanged {
+                    level,
+                    muted: false,
+                });
             }
             Command::Mute(muted) => {
-                self.pool.set_mute(client, muted).await
+                self.pool
+                    .set_mute(client, muted)
+                    .await
                     .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::Volume))?;
-                let _ = self.event_tx.send(TvEvent::VolumeChanged { level: 0, muted });
+                let _ = self
+                    .event_tx
+                    .send(TvEvent::VolumeChanged { level: 0, muted });
             }
             Command::Text(text) => {
-                self.pool.insert_text(client, &text, false).await
+                self.pool
+                    .insert_text(client, &text, false)
+                    .await
                     .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::TextInput))?;
             }
             _ => return Err(TvError::Unsupported(Capability::Key)),
@@ -158,28 +183,58 @@ pub struct WebOsDeviceHandle {
 impl WebOsDeviceHandle {
     /// Creates a new webOS device handle.
     #[must_use]
-    pub fn new(descriptor: DeviceDescriptor, capabilities: CapabilitySet, pool: Arc<DynSessionPool>, client: WebosClient) -> Self {
-        Self { descriptor, capabilities, pool, client }
+    pub fn new(
+        descriptor: DeviceDescriptor,
+        capabilities: CapabilitySet,
+        pool: Arc<DynSessionPool>,
+        client: WebosClient,
+    ) -> Self {
+        Self {
+            descriptor,
+            capabilities,
+            pool,
+            client,
+        }
     }
 }
 
 impl DeviceHandle for WebOsDeviceHandle {
-    fn id(&self) -> DeviceId { self.descriptor.id.clone() }
-    fn descriptor(&self) -> DeviceDescriptor { self.descriptor.clone() }
-    fn capabilities(&self) -> CapabilitySet { self.capabilities }
-    fn as_power(&self) -> Option<&dyn PowerControl> { Some(self) }
-    fn as_volume(&self) -> Option<&dyn VolumeControl> { Some(self) }
-    fn as_key(&self) -> Option<&dyn KeyInput> { Some(self) }
-    fn as_app(&self) -> Option<&dyn AppLaunch> { Some(self) }
-    fn as_text(&self) -> Option<&dyn TextInput> { Some(self) }
-    fn as_input(&self) -> Option<&dyn tv_rs_core::capability::InputSelect> { Some(self) }
+    fn id(&self) -> DeviceId {
+        self.descriptor.id.clone()
+    }
+    fn descriptor(&self) -> DeviceDescriptor {
+        self.descriptor.clone()
+    }
+    fn capabilities(&self) -> CapabilitySet {
+        self.capabilities
+    }
+    fn as_power(&self) -> Option<&dyn PowerControl> {
+        Some(self)
+    }
+    fn as_volume(&self) -> Option<&dyn VolumeControl> {
+        Some(self)
+    }
+    fn as_key(&self) -> Option<&dyn KeyInput> {
+        Some(self)
+    }
+    fn as_app(&self) -> Option<&dyn AppLaunch> {
+        Some(self)
+    }
+    fn as_text(&self) -> Option<&dyn TextInput> {
+        Some(self)
+    }
+    fn as_input(&self) -> Option<&dyn tv_rs_core::capability::InputSelect> {
+        Some(self)
+    }
 }
 
 #[async_trait]
 impl KeyInput for WebOsDeviceHandle {
     async fn key_press(&self, key: Key, _cmd: CommandId) -> Result<(), TvError> {
         let btn = map_core_key_to_webos(key).ok_or(TvError::Unsupported(Capability::Key))?;
-        self.pool.send_key(&self.client, btn).await
+        self.pool
+            .send_key(&self.client, btn)
+            .await
             .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::Key))
     }
 }
@@ -193,7 +248,9 @@ impl PowerControl for WebOsDeviceHandle {
         Err(TvError::Unsupported(Capability::Wake))
     }
     async fn sleep(&self) -> Result<(), TvError> {
-        self.pool.power_off(&self.client).await
+        self.pool
+            .power_off(&self.client)
+            .await
             .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::PowerState))
     }
 }
@@ -201,21 +258,29 @@ impl PowerControl for WebOsDeviceHandle {
 #[async_trait]
 impl VolumeControl for WebOsDeviceHandle {
     async fn volume(&self) -> Result<Option<u8>, TvError> {
-        self.pool.get_volume(&self.client).await
+        self.pool
+            .get_volume(&self.client)
+            .await
             .map(Some)
             .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::Volume))
     }
     async fn set_volume(&self, level: u8, _cmd: CommandId) -> Result<(), TvError> {
-        self.pool.set_volume(&self.client, level).await
+        self.pool
+            .set_volume(&self.client, level)
+            .await
             .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::Volume))
     }
     async fn mute(&self) -> Result<Option<bool>, TvError> {
-        self.pool.get_mute(&self.client).await
+        self.pool
+            .get_mute(&self.client)
+            .await
             .map(Some)
             .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::Volume))
     }
     async fn set_mute(&self, muted: bool, _cmd: CommandId) -> Result<(), TvError> {
-        self.pool.set_mute(&self.client, muted).await
+        self.pool
+            .set_mute(&self.client, muted)
+            .await
             .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::Volume))
     }
 }
@@ -223,25 +288,38 @@ impl VolumeControl for WebOsDeviceHandle {
 #[async_trait]
 impl AppLaunch for WebOsDeviceHandle {
     async fn launch(&self, app: AppRef, _cmd: CommandId) -> Result<(), TvError> {
-        self.pool.launch_app(&self.client, &app.id).await
+        self.pool
+            .launch_app(&self.client, &app.id)
+            .await
             .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::AppLaunch))
     }
     async fn foreground(&self) -> Result<Option<AppRef>, TvError> {
-        let app_id = self.pool.foreground_app(&self.client).await
+        let app_id = self
+            .pool
+            .foreground_app(&self.client)
+            .await
             .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::Foreground))?;
         Ok(app_id.map(AppRef::new))
     }
     async fn installed_apps(&self) -> Result<Vec<AppRef>, TvError> {
-        let apps = self.pool.list_apps(&self.client).await
+        let apps = self
+            .pool
+            .list_apps(&self.client)
+            .await
             .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::AppList))?;
-        Ok(apps.into_iter().map(|a| AppRef::new(a.id).with_name(a.title.unwrap_or_default())).collect())
+        Ok(apps
+            .into_iter()
+            .map(|a| AppRef::new(a.id).with_name(a.title.unwrap_or_default()))
+            .collect())
     }
 }
 
 #[async_trait]
 impl TextInput for WebOsDeviceHandle {
     async fn type_text(&self, text: &str, _cmd: CommandId) -> Result<(), TvError> {
-        self.pool.insert_text(&self.client, text, false).await
+        self.pool
+            .insert_text(&self.client, text, false)
+            .await
             .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::TextInput))
     }
 }
@@ -252,14 +330,20 @@ impl tv_rs_core::capability::InputSelect for WebOsDeviceHandle {
         Ok(None)
     }
 
-    async fn select_input(&self, input: tv_rs_core::capability::Input, _cmd: CommandId) -> Result<(), TvError> {
+    async fn select_input(
+        &self,
+        input: tv_rs_core::capability::Input,
+        _cmd: CommandId,
+    ) -> Result<(), TvError> {
         let input_id = match input {
             tv_rs_core::capability::Input::Hdmi(n) => format!("HDMI_{n}"),
             tv_rs_core::capability::Input::Tv => "tv".to_string(),
             tv_rs_core::capability::Input::Other(s) => s,
             _ => return Err(TvError::Unsupported(Capability::InputSelect)),
         };
-        self.pool.switch_input(&self.client, &input_id).await
+        self.pool
+            .switch_input(&self.client, &input_id)
+            .await
             .map_err(|e| crate::map::webos::to_tv_error(&e, Capability::InputSelect))
     }
 }

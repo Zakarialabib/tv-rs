@@ -36,4 +36,3 @@ mod tests {
         assert_eq!(msg.payload_binary, decoded.payload_binary);
     }
 }
-

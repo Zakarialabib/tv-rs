@@ -100,19 +100,34 @@ pub fn active_source_frame(initiator: u8, physical_address: u16) -> String {
 /// Generates `<User Control Pressed>` (opcode 0x44) frame.
 #[must_use]
 pub fn user_control_pressed_frame(initiator: u8, destination: u8, ui_command: u8) -> String {
-    format_frame(initiator, destination, CEC_OPCODE_USER_CONTROL_PRESSED, &[ui_command])
+    format_frame(
+        initiator,
+        destination,
+        CEC_OPCODE_USER_CONTROL_PRESSED,
+        &[ui_command],
+    )
 }
 
 /// Generates `<User Control Released>` (opcode 0x45) frame.
 #[must_use]
 pub fn user_control_released_frame(initiator: u8, destination: u8) -> String {
-    format_frame(initiator, destination, CEC_OPCODE_USER_CONTROL_RELEASED, &[])
+    format_frame(
+        initiator,
+        destination,
+        CEC_OPCODE_USER_CONTROL_RELEASED,
+        &[],
+    )
 }
 
 /// Generates `<Give Device Power Status>` (opcode 0x8F) frame.
 #[must_use]
 pub fn give_power_status_frame(initiator: u8, destination: u8) -> String {
-    format_frame(initiator, destination, CEC_OPCODE_GIVE_DEVICE_POWER_STATUS, &[])
+    format_frame(
+        initiator,
+        destination,
+        CEC_OPCODE_GIVE_DEVICE_POWER_STATUS,
+        &[],
+    )
 }
 
 /// Maps a `tv_rs_core::capability::Key` to a CEC UI command code.
@@ -175,16 +190,25 @@ mod tests {
         assert_eq!(image_view_on_frame(4, 0), "tx 40:04");
         assert_eq!(standby_frame(4, 0), "tx 40:36");
         assert_eq!(active_source_frame(4, 0x1000), "tx 4F:82:10:00");
-        assert_eq!(user_control_pressed_frame(4, 0, CEC_USER_CONTROL_SELECT), "tx 40:44:00");
+        assert_eq!(
+            user_control_pressed_frame(4, 0, CEC_USER_CONTROL_SELECT),
+            "tx 40:44:00"
+        );
         assert_eq!(user_control_released_frame(4, 0), "tx 40:45");
         assert_eq!(give_power_status_frame(4, 0), "tx 40:8F");
     }
 
     #[test]
     fn test_key_mapping() {
-        assert_eq!(map_key_to_cec(Key::Select).unwrap(), CEC_USER_CONTROL_SELECT);
+        assert_eq!(
+            map_key_to_cec(Key::Select).unwrap(),
+            CEC_USER_CONTROL_SELECT
+        );
         assert_eq!(map_key_to_cec(Key::Up).unwrap(), CEC_USER_CONTROL_UP);
-        assert_eq!(map_key_to_cec(Key::VolumeUp).unwrap(), CEC_USER_CONTROL_VOLUME_UP);
+        assert_eq!(
+            map_key_to_cec(Key::VolumeUp).unwrap(),
+            CEC_USER_CONTROL_VOLUME_UP
+        );
         assert_eq!(map_key_to_cec(Key::Mute).unwrap(), CEC_USER_CONTROL_MUTE);
         assert_eq!(map_key_to_cec(Key::Play).unwrap(), CEC_USER_CONTROL_PLAY);
         assert_eq!(map_key_to_cec(Key::Digit(5)).unwrap(), 0x25);

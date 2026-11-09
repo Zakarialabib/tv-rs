@@ -1,8 +1,8 @@
 //! Google Cast error mapping to unified `TvError`.
 
+use crate::cast::error::CastError;
 use tv_rs_core::capability::Capability;
 use tv_rs_core::error::{AuthError, ProtocolError, TransportError, TvError};
-use crate::cast::error::CastError;
 
 /// Maps a raw `CastError` into the shared `TvError` routing taxonomy.
 #[must_use]

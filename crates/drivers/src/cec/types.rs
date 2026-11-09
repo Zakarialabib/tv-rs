@@ -1,7 +1,7 @@
 //! Logical address and command models for HDMI-CEC.
 
-use std::fmt;
 use crate::cec::error::CecError;
+use std::fmt;
 
 /// A logical address on the CEC bus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

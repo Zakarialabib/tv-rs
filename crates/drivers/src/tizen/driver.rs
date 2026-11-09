@@ -1,11 +1,11 @@
 //! `TizenDriver` and `TizenDeviceHandle` implementations.
 
+use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::Arc;
-use async_trait::async_trait;
 use tv_rs_core::capability::{
-    AppLaunch, AppRef, Capability, CapabilitySet, DeviceHandle,
-    Key, KeyInput, PowerControl, TextInput, VolumeControl,
+    AppLaunch, AppRef, Capability, CapabilitySet, DeviceHandle, Key, KeyInput, PowerControl,
+    TextInput, VolumeControl,
 };
 use tv_rs_core::command::{Command, CommandAck, CommandId};
 use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv, PowerState};
@@ -41,7 +41,8 @@ impl TizenDriver {
         caps.insert(Capability::AppLaunch);
         caps.insert(Capability::TextInput);
 
-        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
+        let (event_tx, _) =
+            tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         let remote = Arc::new(TizenRemote::new(path, "tv-rs"));
         Self {
             capabilities: caps,
@@ -80,12 +81,13 @@ impl Driver for TizenDriver {
         let host = if target.ip.is_empty() {
             return Err(TvError::protocol("Tizen target requires valid IP"));
         } else {
-            normalize_host(&target.ip).map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::Key))?
+            normalize_host(&target.ip)
+                .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::Key))?
         };
 
         self.active_target = Some(host.clone());
-        let device_id = DeviceId::new(format!("tizen-{}", host))
-            .unwrap_or_else(|_| DeviceId::anonymous());
+        let device_id =
+            DeviceId::new(format!("tizen-{}", host)).unwrap_or_else(|_| DeviceId::anonymous());
         let mut desc = DeviceDescriptor::new(device_id, DeviceOs::Tizen, &host);
         if let Some(ref name) = target.friendly_name {
             desc = desc.with_name(name.clone());
@@ -95,7 +97,12 @@ impl Driver for TizenDriver {
         }
 
         let _ = self.event_tx.send(TvEvent::ConnectionChanged(true));
-        Ok(TizenDeviceHandle::new(desc, self.capabilities, self.remote.clone(), host))
+        Ok(TizenDeviceHandle::new(
+            desc,
+            self.capabilities,
+            self.remote.clone(),
+            host,
+        ))
     }
 
     async fn send(&mut self, cmd: Command) -> Result<CommandAck, TvError> {
@@ -107,39 +114,64 @@ impl Driver for TizenDriver {
 
         match cmd {
             Command::Key(key) => {
-                let tizen_key = map_core_key_to_tizen(key)
-                    .ok_or(TvError::Unsupported(Capability::Key))?;
-                self.remote.send_key_typed(host, tizen_key).await
+                let tizen_key =
+                    map_core_key_to_tizen(key).ok_or(TvError::Unsupported(Capability::Key))?;
+                self.remote
+                    .send_key_typed(host, tizen_key)
+                    .await
                     .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::Key))?;
             }
             Command::Power(false) => {
-                self.remote.send_key_typed(host, TizenRemoteKey::PowerOff).await
+                self.remote
+                    .send_key_typed(host, TizenRemoteKey::PowerOff)
+                    .await
                     .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::PowerState))?;
-                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
+                let _ = self
+                    .event_tx
+                    .send(TvEvent::PowerChanged(PowerState::Standby));
             }
             Command::Power(true) => {
-                self.remote.send_key_typed(host, TizenRemoteKey::Power).await
+                self.remote
+                    .send_key_typed(host, TizenRemoteKey::Power)
+                    .await
                     .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::PowerState))?;
                 let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::On));
             }
             Command::LaunchApp(app_id) => {
-                self.remote.launch_app(host, &app_id).await
+                self.remote
+                    .launch_app(host, &app_id)
+                    .await
                     .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::AppLaunch))?;
                 let _ = self.event_tx.send(TvEvent::AppChanged(app_id));
             }
             Command::Volume(level) => {
-                let key = if level > 50 { TizenRemoteKey::VolumeUp } else { TizenRemoteKey::VolumeDown };
-                self.remote.send_key_typed(host, key).await
+                let key = if level > 50 {
+                    TizenRemoteKey::VolumeUp
+                } else {
+                    TizenRemoteKey::VolumeDown
+                };
+                self.remote
+                    .send_key_typed(host, key)
+                    .await
                     .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::Volume))?;
-                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
+                let _ = self.event_tx.send(TvEvent::VolumeChanged {
+                    level,
+                    muted: false,
+                });
             }
             Command::Mute(muted) => {
-                self.remote.send_key_typed(host, TizenRemoteKey::Mute).await
+                self.remote
+                    .send_key_typed(host, TizenRemoteKey::Mute)
+                    .await
                     .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::Volume))?;
-                let _ = self.event_tx.send(TvEvent::VolumeChanged { level: 0, muted });
+                let _ = self
+                    .event_tx
+                    .send(TvEvent::VolumeChanged { level: 0, muted });
             }
             Command::Text(text) => {
-                self.remote.send_key(host, &text).await
+                self.remote
+                    .send_key(host, &text)
+                    .await
                     .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::TextInput))?;
             }
             _ => return Err(TvError::Unsupported(Capability::Key)),
@@ -165,28 +197,58 @@ pub struct TizenDeviceHandle {
 impl TizenDeviceHandle {
     /// Creates a new Tizen device handle.
     #[must_use]
-    pub fn new(descriptor: DeviceDescriptor, capabilities: CapabilitySet, remote: Arc<TizenRemote>, host: String) -> Self {
-        Self { descriptor, capabilities, remote, host }
+    pub fn new(
+        descriptor: DeviceDescriptor,
+        capabilities: CapabilitySet,
+        remote: Arc<TizenRemote>,
+        host: String,
+    ) -> Self {
+        Self {
+            descriptor,
+            capabilities,
+            remote,
+            host,
+        }
     }
 }
 
 impl DeviceHandle for TizenDeviceHandle {
-    fn id(&self) -> DeviceId { self.descriptor.id.clone() }
-    fn descriptor(&self) -> DeviceDescriptor { self.descriptor.clone() }
-    fn capabilities(&self) -> CapabilitySet { self.capabilities }
-    fn as_power(&self) -> Option<&dyn PowerControl> { Some(self) }
-    fn as_key(&self) -> Option<&dyn KeyInput> { Some(self) }
-    fn as_app(&self) -> Option<&dyn AppLaunch> { Some(self) }
-    fn as_volume(&self) -> Option<&dyn VolumeControl> { None }
-    fn as_text(&self) -> Option<&dyn TextInput> { Some(self) }
-    fn as_input(&self) -> Option<&dyn tv_rs_core::capability::InputSelect> { None }
+    fn id(&self) -> DeviceId {
+        self.descriptor.id.clone()
+    }
+    fn descriptor(&self) -> DeviceDescriptor {
+        self.descriptor.clone()
+    }
+    fn capabilities(&self) -> CapabilitySet {
+        self.capabilities
+    }
+    fn as_power(&self) -> Option<&dyn PowerControl> {
+        Some(self)
+    }
+    fn as_key(&self) -> Option<&dyn KeyInput> {
+        Some(self)
+    }
+    fn as_app(&self) -> Option<&dyn AppLaunch> {
+        Some(self)
+    }
+    fn as_volume(&self) -> Option<&dyn VolumeControl> {
+        None
+    }
+    fn as_text(&self) -> Option<&dyn TextInput> {
+        Some(self)
+    }
+    fn as_input(&self) -> Option<&dyn tv_rs_core::capability::InputSelect> {
+        None
+    }
 }
 
 #[async_trait]
 impl KeyInput for TizenDeviceHandle {
     async fn key_press(&self, key: Key, _cmd: CommandId) -> Result<(), TvError> {
         let k = map_core_key_to_tizen(key).ok_or(TvError::Unsupported(Capability::Key))?;
-        self.remote.send_key_typed(&self.host, k).await
+        self.remote
+            .send_key_typed(&self.host, k)
+            .await
             .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::Key))
     }
 }
@@ -201,11 +263,18 @@ impl PowerControl for TizenDeviceHandle {
         }
     }
     async fn wake(&self) -> Result<(), TvError> {
-        self.remote.send_key_typed(&self.host, TizenRemoteKey::Power).await
+        if !self.capabilities.contains(Capability::Wake) {
+            return Err(TvError::Unsupported(Capability::Wake));
+        }
+        self.remote
+            .send_key_typed(&self.host, TizenRemoteKey::Power)
+            .await
             .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::Wake))
     }
     async fn sleep(&self) -> Result<(), TvError> {
-        self.remote.send_key_typed(&self.host, TizenRemoteKey::PowerOff).await
+        self.remote
+            .send_key_typed(&self.host, TizenRemoteKey::PowerOff)
+            .await
             .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::PowerState))
     }
 }
@@ -213,7 +282,9 @@ impl PowerControl for TizenDeviceHandle {
 #[async_trait]
 impl AppLaunch for TizenDeviceHandle {
     async fn launch(&self, app: AppRef, _cmd: CommandId) -> Result<(), TvError> {
-        self.remote.launch_app(&self.host, &app.id).await
+        self.remote
+            .launch_app(&self.host, &app.id)
+            .await
             .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::AppLaunch))?;
         Ok(())
     }
@@ -231,23 +302,37 @@ impl AppLaunch for TizenDeviceHandle {
 
 #[async_trait]
 impl VolumeControl for TizenDeviceHandle {
-    async fn volume(&self) -> Result<Option<u8>, TvError> { Ok(None) }
+    async fn volume(&self) -> Result<Option<u8>, TvError> {
+        Ok(None)
+    }
     async fn set_volume(&self, level: u8, _cmd: CommandId) -> Result<(), TvError> {
-        let key = if level > 50 { TizenRemoteKey::VolumeUp } else { TizenRemoteKey::VolumeDown };
-        self.remote.send_key_typed(&self.host, key).await
+        let key = if level > 50 {
+            TizenRemoteKey::VolumeUp
+        } else {
+            TizenRemoteKey::VolumeDown
+        };
+        self.remote
+            .send_key_typed(&self.host, key)
+            .await
             .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::Volume))
     }
     async fn set_mute(&self, _muted: bool, _cmd: CommandId) -> Result<(), TvError> {
-        self.remote.send_key_typed(&self.host, TizenRemoteKey::Mute).await
+        self.remote
+            .send_key_typed(&self.host, TizenRemoteKey::Mute)
+            .await
             .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::Volume))
     }
-    async fn mute(&self) -> Result<Option<bool>, TvError> { Ok(None) }
+    async fn mute(&self) -> Result<Option<bool>, TvError> {
+        Ok(None)
+    }
 }
 
 #[async_trait]
 impl TextInput for TizenDeviceHandle {
     async fn type_text(&self, text: &str, _cmd: CommandId) -> Result<(), TvError> {
-        self.remote.send_key(&self.host, text).await
+        self.remote
+            .send_key(&self.host, text)
+            .await
             .map_err(|e| crate::map::tizen::to_tv_error(&e, Capability::TextInput))
     }
 }

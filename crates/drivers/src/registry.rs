@@ -1,10 +1,10 @@
 //! Driver registry aggregating all enabled protocol implementations.
 
 use std::sync::OnceLock;
+use tv_rs_core::capability::{Capability, CapabilityRegistry, CapabilitySet};
+use tv_rs_core::descriptor::DiscoveredTv;
 pub use tv_rs_core::driver::{AnyDriver, ErasedDriver};
 use tv_rs_core::types::TvVendor;
-use tv_rs_core::descriptor::DiscoveredTv;
-use tv_rs_core::capability::{Capability, CapabilityRegistry, CapabilitySet};
 
 static DEFAULT_REGISTRY: OnceLock<DriverRegistry> = OnceLock::new();
 
@@ -275,12 +275,33 @@ mod tests {
         assert_eq!(def.len(), registry().len());
 
         let agg = def.aggregate_capabilities();
-        assert!(!agg.is_empty());
-
         let cap_reg = def.build_capability_registry();
         assert_eq!(cap_reg.len(), def.len());
 
-        let power_drivers = def.find_by_capability(Capability::PowerState);
-        assert!(!power_drivers.is_empty());
+        // When no driver features are compiled, the registry is empty and these
+        // assertions would fail. Only check non-emptiness when at least one
+        // protocol driver feature is enabled.
+        #[cfg(any(
+            feature = "roku",
+            feature = "tizen",
+            feature = "webos",
+            feature = "cast",
+            feature = "cec",
+            feature = "discovery",
+            feature = "mdc",
+            feature = "sicp",
+            feature = "ir",
+        ))]
+        {
+            assert!(
+                !agg.is_empty(),
+                "aggregate capabilities should not be empty when driver features are enabled"
+            );
+            let power_drivers = def.find_by_capability(Capability::PowerState);
+            assert!(
+                !power_drivers.is_empty(),
+                "at least one driver should support PowerState"
+            );
+        }
     }
 }

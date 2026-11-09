@@ -1,7 +1,7 @@
 //! CEC error mapping to unified `TvError`.
 
-use tv_rs_core::error::{ProtocolError, TransportError, TvError};
 use crate::cec::error::CecError;
+use tv_rs_core::error::{ProtocolError, TransportError, TvError};
 
 /// Maps a `CecError` into the shared `TvError` routing taxonomy.
 #[must_use]

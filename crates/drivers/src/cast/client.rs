@@ -81,7 +81,9 @@ impl CastClient {
                     let resp: crate::cast::payload::ReceiverResponse =
                         serde_json::from_str(&payload_str)?;
                     match resp {
-                        crate::cast::payload::ReceiverResponse::ReceiverStatus { status, .. } => {
+                        crate::cast::payload::ReceiverResponse::ReceiverStatus {
+                            status, ..
+                        } => {
                             return Ok(status);
                         }
                         _ => continue,

@@ -142,14 +142,20 @@ impl MdcDevice {
         let client = self.client.display(display_id);
         let mut desc = self.descriptor.clone();
         desc.address = format!("{}:{}", self.descriptor.address, display_id.value());
-        Self { client, descriptor: desc }
+        Self {
+            client,
+            descriptor: desc,
+        }
     }
 
     /// Returns a handle targeting all panels via the broadcast address (`0xFE`).
     #[must_use]
     pub fn broadcast(&self) -> Self {
         let client = self.client.broadcast();
-        Self { client, descriptor: self.descriptor.clone() }
+        Self {
+            client,
+            descriptor: self.descriptor.clone(),
+        }
     }
 }
 

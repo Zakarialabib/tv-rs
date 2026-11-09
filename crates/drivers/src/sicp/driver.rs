@@ -31,7 +31,8 @@ impl SicpDriver {
         caps.insert(Capability::Telemetry);
         caps.insert(Capability::NoSignalStatus);
 
-        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
+        let (event_tx, _) =
+            tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         Self {
             capabilities: caps,
             active_client: None,
@@ -96,7 +97,8 @@ impl Driver for SicpDriver {
             },
         );
 
-        let device_id = DeviceId::new(format!("sicp:{address}")).unwrap_or_else(|_| DeviceId::anonymous());
+        let device_id =
+            DeviceId::new(format!("sicp:{address}")).unwrap_or_else(|_| DeviceId::anonymous());
         let descriptor = DeviceDescriptor::new(device_id, DeviceOs::PhilipsSicp, address);
         let device = SicpDevice::new(client.clone(), descriptor);
 
@@ -119,18 +121,21 @@ impl Driver for SicpDriver {
                     let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::On));
                 } else {
                     client.power_off().await?;
-                    let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
+                    let _ = self
+                        .event_tx
+                        .send(TvEvent::PowerChanged(PowerState::Standby));
                 }
                 Ok(CommandAck::with_id(CommandId::new()))
             }
             Command::Volume(level) => {
                 client.set_volume(level).await?;
-                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
+                let _ = self.event_tx.send(TvEvent::VolumeChanged {
+                    level,
+                    muted: false,
+                });
                 Ok(CommandAck::with_id(CommandId::new()))
             }
-            Command::Mute(_) => {
-                Err(TvError::Unsupported(Capability::Volume))
-            }
+            Command::Mute(_) => Err(TvError::Unsupported(Capability::Volume)),
             Command::Input(input) => {
                 let sicp_input = SicpInput::from_core_input(&input).ok_or_else(|| {
                     TvError::Protocol(ProtocolError::Unexpected(format!(
@@ -143,17 +148,18 @@ impl Driver for SicpDriver {
             }
             Command::Custom { name, payload } => match name.as_str() {
                 "display_id" => {
-                    let id: u8 = payload.trim().parse().map_err(|_| TvError::protocol("invalid display id"))?;
+                    let id: u8 = payload
+                        .trim()
+                        .parse()
+                        .map_err(|_| TvError::protocol("invalid display id"))?;
                     let display_id = DisplayId::new(id)?;
                     self.active_client = Some(client.display(display_id));
                     Ok(CommandAck::with_id(CommandId::new()))
                 }
-                "picture_mode" => {
-                    Ok(CommandAck {
-                        id: Some(CommandId::new()),
-                        message: Some(format!("PictureMode '{payload}' acknowledged")),
-                    })
-                }
+                "picture_mode" => Ok(CommandAck {
+                    id: Some(CommandId::new()),
+                    message: Some(format!("PictureMode '{payload}' acknowledged")),
+                }),
                 other => Ok(CommandAck {
                     id: None,
                     message: Some(format!("Unsupported custom command: {other}")),

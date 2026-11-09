@@ -1,11 +1,10 @@
 //! Roku Driver implementation and erased handle adapter.
 
-use std::sync::Arc;
 use async_trait::async_trait;
+use std::sync::Arc;
 use tv_rs_core::capability::{
-    AppLaunch, AppRef, Capability, CapabilitySet, DeviceHandle,
-    Input, InputSelect, Key, KeyInput, PowerControl, TextInput,
-    VolumeControl,
+    AppLaunch, AppRef, Capability, CapabilitySet, DeviceHandle, Input, InputSelect, Key, KeyInput,
+    PowerControl, TextInput, VolumeControl,
 };
 use tv_rs_core::command::{Command, CommandAck, CommandId};
 use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv, PowerState};
@@ -38,7 +37,8 @@ impl RokuDriver {
         caps.insert(Capability::AppList);
         caps.insert(Capability::TextInput);
 
-        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
+        let (event_tx, _) =
+            tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         Self {
             capabilities: caps,
             active_client: None,
@@ -93,8 +93,8 @@ impl Driver for RokuDriver {
         let client = RokuClient::new(&host);
         self.active_client = Some(client.clone());
 
-        let device_id = DeviceId::new(format!("roku-{}", host))
-            .unwrap_or_else(|_| DeviceId::anonymous());
+        let device_id =
+            DeviceId::new(format!("roku-{}", host)).unwrap_or_else(|_| DeviceId::anonymous());
         let mut desc = DeviceDescriptor::new(device_id, DeviceOs::Roku, &host);
         if let Some(ref name) = target.friendly_name {
             desc = desc.with_name(name.clone());
@@ -116,9 +116,12 @@ impl Driver for RokuDriver {
 
         match cmd {
             Command::Key(key) => {
-                let roku_key = map_core_key_to_roku(key)
-                    .ok_or(TvError::Unsupported(Capability::Key))?;
-                client.send_keypress(roku_key).await.map_err(map_roku_error)?;
+                let roku_key =
+                    map_core_key_to_roku(key).ok_or(TvError::Unsupported(Capability::Key))?;
+                client
+                    .send_keypress(roku_key)
+                    .await
+                    .map_err(map_roku_error)?;
             }
             Command::Power(true) => {
                 client.power_on().await.map_err(map_roku_error)?;
@@ -126,7 +129,9 @@ impl Driver for RokuDriver {
             }
             Command::Power(false) => {
                 client.power_off().await.map_err(map_roku_error)?;
-                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
+                let _ = self
+                    .event_tx
+                    .send(TvEvent::PowerChanged(PowerState::Standby));
             }
             Command::LaunchApp(app_id) => {
                 client.launch_app(&app_id).await.map_err(map_roku_error)?;
@@ -142,14 +147,19 @@ impl Driver for RokuDriver {
                     RokuKey::VolumeDown
                 };
                 client.send_keypress(key).await.map_err(map_roku_error)?;
-                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
+                let _ = self.event_tx.send(TvEvent::VolumeChanged {
+                    level,
+                    muted: false,
+                });
             }
             Command::Mute(muted) => {
                 client
                     .send_keypress(RokuKey::VolumeMute)
                     .await
                     .map_err(map_roku_error)?;
-                let _ = self.event_tx.send(TvEvent::VolumeChanged { level: 0, muted });
+                let _ = self
+                    .event_tx
+                    .send(TvEvent::VolumeChanged { level: 0, muted });
             }
             Command::Input(input) => {
                 let app_id = format!("tvinput.{}", input);
@@ -190,7 +200,11 @@ pub struct RokuDeviceHandle {
 impl RokuDeviceHandle {
     /// Creates a new `RokuDeviceHandle`.
     #[must_use]
-    pub fn new(descriptor: DeviceDescriptor, capabilities: CapabilitySet, client: RokuClient) -> Self {
+    pub fn new(
+        descriptor: DeviceDescriptor,
+        capabilities: CapabilitySet,
+        client: RokuClient,
+    ) -> Self {
         Self {
             descriptor,
             capabilities,
@@ -274,17 +288,29 @@ impl KeyInput for RokuDeviceHandle {
 #[async_trait]
 impl AppLaunch for RokuDeviceHandle {
     async fn launch(&self, app: AppRef, _cmd: CommandId) -> Result<(), TvError> {
-        self.client.launch_app(&app.id).await.map_err(map_roku_error)
+        self.client
+            .launch_app(&app.id)
+            .await
+            .map_err(map_roku_error)
     }
 
     async fn foreground(&self) -> Result<Option<AppRef>, TvError> {
-        let active = self.client.query_active_app().await.map_err(map_roku_error)?;
-        Ok(active.app_id.map(|id| AppRef::new(id).with_name(active.app_name)))
+        let active = self
+            .client
+            .query_active_app()
+            .await
+            .map_err(map_roku_error)?;
+        Ok(active
+            .app_id
+            .map(|id| AppRef::new(id).with_name(active.app_name)))
     }
 
     async fn installed_apps(&self) -> Result<Vec<AppRef>, TvError> {
         let apps = self.client.query_apps().await.map_err(map_roku_error)?;
-        Ok(apps.into_iter().map(|a| AppRef::new(a.id).with_name(a.name)).collect())
+        Ok(apps
+            .into_iter()
+            .map(|a| AppRef::new(a.id).with_name(a.name))
+            .collect())
     }
 }
 
@@ -302,12 +328,19 @@ impl VolumeControl for RokuDeviceHandle {
     }
 
     async fn set_volume(&self, level: u8, _cmd: CommandId) -> Result<(), TvError> {
-        let key = if level > 50 { RokuKey::VolumeUp } else { RokuKey::VolumeDown };
+        let key = if level > 50 {
+            RokuKey::VolumeUp
+        } else {
+            RokuKey::VolumeDown
+        };
         self.client.send_keypress(key).await.map_err(map_roku_error)
     }
 
     async fn set_mute(&self, _muted: bool, _cmd: CommandId) -> Result<(), TvError> {
-        self.client.send_keypress(RokuKey::VolumeMute).await.map_err(map_roku_error)
+        self.client
+            .send_keypress(RokuKey::VolumeMute)
+            .await
+            .map_err(map_roku_error)
     }
 
     async fn mute(&self) -> Result<Option<bool>, TvError> {
@@ -323,7 +356,10 @@ impl InputSelect for RokuDeviceHandle {
 
     async fn select_input(&self, input: Input, _cmd: CommandId) -> Result<(), TvError> {
         let app_id = format!("tvinput.{}", input);
-        self.client.launch_app(&app_id).await.map_err(map_roku_error)
+        self.client
+            .launch_app(&app_id)
+            .await
+            .map_err(map_roku_error)
     }
 }
 

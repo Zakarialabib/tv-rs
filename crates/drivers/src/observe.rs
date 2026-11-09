@@ -25,7 +25,10 @@ impl BroadcastReceiver {
 
     /// Wraps a tokio broadcast receiver and retains a sender reference to keep the channel open.
     #[must_use]
-    pub fn with_sender(receiver: broadcast::Receiver<TvEvent>, sender: broadcast::Sender<TvEvent>) -> Self {
+    pub fn with_sender(
+        receiver: broadcast::Receiver<TvEvent>,
+        sender: broadcast::Sender<TvEvent>,
+    ) -> Self {
         Self {
             receiver,
             _sender: Some(sender),
@@ -44,12 +47,8 @@ impl EventReceiver for BroadcastReceiver {
     async fn recv(&mut self) -> Result<TvEvent, ObservationError> {
         match self.receiver.recv().await {
             Ok(event) => Ok(event),
-            Err(broadcast::error::RecvError::Lagged(count)) => {
-                Err(ObservationError::Lagged(count))
-            }
-            Err(broadcast::error::RecvError::Closed) => {
-                Err(ObservationError::Closed)
-            }
+            Err(broadcast::error::RecvError::Lagged(count)) => Err(ObservationError::Lagged(count)),
+            Err(broadcast::error::RecvError::Closed) => Err(ObservationError::Closed),
         }
     }
 }

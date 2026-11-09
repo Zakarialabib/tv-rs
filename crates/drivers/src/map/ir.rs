@@ -1,7 +1,7 @@
 //! IR error mapping to unified `TvError`.
 
-use tv_rs_core::error::{ProtocolError, TransportError, TvError};
 use crate::ir::error::IrError;
+use tv_rs_core::error::{ProtocolError, TransportError, TvError};
 
 /// Maps an IR error to a unified `TvError`.
 #[must_use]

@@ -1,10 +1,10 @@
 //! `CecDeviceHandle` implementing erased device handle traits.
 
-use std::sync::Arc;
 use async_trait::async_trait;
+use std::sync::Arc;
 use tv_rs_core::capability::{
-    AppLaunch, CapabilitySet, DeviceHandle,
-    Input, InputSelect, Key, KeyInput, PowerControl, ScreenCastProvider, TextInput, VolumeControl,
+    AppLaunch, CapabilitySet, DeviceHandle, Input, InputSelect, Key, KeyInput, PowerControl,
+    ScreenCastProvider, TextInput, VolumeControl,
 };
 use tv_rs_core::command::CommandId;
 use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, PowerState};
@@ -155,15 +155,25 @@ impl VolumeControl for CecDeviceHandle {
     }
 
     async fn set_volume(&self, level: u8, _cmd: CommandId) -> Result<(), TvError> {
-        let code = if level > 50 { CEC_USER_CONTROL_VOLUME_UP } else { CEC_USER_CONTROL_VOLUME_DOWN };
+        let code = if level > 50 {
+            CEC_USER_CONTROL_VOLUME_UP
+        } else {
+            CEC_USER_CONTROL_VOLUME_DOWN
+        };
         let init = self.initiator_address;
         let dest = self.target_address.as_u8();
 
         let press = user_control_pressed_frame(init, dest, code);
         let release = user_control_released_frame(init, dest);
 
-        self.transport.send(&press).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
-        self.transport.send(&release).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
+        self.transport
+            .send(&press)
+            .await
+            .map_err(|e| crate::map::cec::to_tv_error(&e))?;
+        self.transport
+            .send(&release)
+            .await
+            .map_err(|e| crate::map::cec::to_tv_error(&e))?;
         Ok(())
     }
 
@@ -174,8 +184,14 @@ impl VolumeControl for CecDeviceHandle {
         let press = user_control_pressed_frame(init, dest, CEC_USER_CONTROL_MUTE);
         let release = user_control_released_frame(init, dest);
 
-        self.transport.send(&press).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
-        self.transport.send(&release).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
+        self.transport
+            .send(&press)
+            .await
+            .map_err(|e| crate::map::cec::to_tv_error(&e))?;
+        self.transport
+            .send(&release)
+            .await
+            .map_err(|e| crate::map::cec::to_tv_error(&e))?;
         Ok(())
     }
 

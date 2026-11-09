@@ -284,7 +284,10 @@ mod device_info_tests {
     #[test]
     fn a_document_without_a_device_object_is_a_protocol_error() {
         let error = parse_device_info(r#"{"version":"2.0.25"}"#).expect_err("no device object");
-        assert!(matches!(error, crate::tizen::TizenError::Protocol(_)), "{error:?}");
+        assert!(
+            matches!(error, crate::tizen::TizenError::Protocol(_)),
+            "{error:?}"
+        );
     }
 
     #[test]

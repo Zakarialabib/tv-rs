@@ -1,8 +1,8 @@
 //! Roku error mapping to unified `TvError`.
 
+use crate::roku::error::RokuError;
 use tv_rs_core::capability::Capability;
 use tv_rs_core::error::{AuthError, ProtocolError, TransportError, TvError};
-use crate::roku::error::RokuError;
 
 /// Maps a Roku error to a unified `TvError`.
 #[must_use]

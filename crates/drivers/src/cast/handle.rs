@@ -1,11 +1,11 @@
 //! `CastDeviceHandle` implementing erased device handle traits and authentic media dispatch.
 
+use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use async_trait::async_trait;
 use tv_rs_core::capability::{
-    AppLaunch, AppRef, Capability, CapabilitySet, DeviceHandle,
-    InputSelect, KeyInput, PowerControl, ScreenCastProvider, TextInput, VolumeControl,
+    AppLaunch, AppRef, Capability, CapabilitySet, DeviceHandle, InputSelect, KeyInput,
+    PowerControl, ScreenCastProvider, TextInput, VolumeControl,
 };
 use tv_rs_core::command::CommandId;
 use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, PowerState};

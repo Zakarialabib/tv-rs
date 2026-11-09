@@ -1,7 +1,7 @@
 //! `CecDriver` implementing [`tv_rs_core::driver::Driver`].
 
-use std::sync::Arc;
 use async_trait::async_trait;
+use std::sync::Arc;
 use tv_rs_core::capability::{Capability, CapabilitySet};
 use tv_rs_core::command::{Command, CommandAck, CommandId};
 use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv, PowerState};
@@ -35,7 +35,8 @@ impl CecDriver {
         caps.insert(Capability::Volume);
         caps.insert(Capability::InputSelect);
 
-        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
+        let (event_tx, _) =
+            tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         Self {
             capabilities: caps,
             target_address: CecAddress::Tv,
@@ -95,7 +96,8 @@ impl Driver for CecDriver {
         let device_id = DeviceId::new(format!("cec-{}", address.as_u8()))
             .unwrap_or_else(|_| DeviceId::anonymous());
 
-        let mut desc = DeviceDescriptor::new(device_id, DeviceOs::Cec, format!("cec:{}", address.as_u8()));
+        let mut desc =
+            DeviceDescriptor::new(device_id, DeviceOs::Cec, format!("cec:{}", address.as_u8()));
         if let Some(ref name) = target.friendly_name {
             desc = desc.with_name(name.clone());
         }
@@ -117,50 +119,94 @@ impl Driver for CecDriver {
         match cmd {
             Command::Power(true) => {
                 let frame = image_view_on_frame(init, dest);
-                self.transport.send(&frame).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                self.transport
+                    .send(&frame)
+                    .await
+                    .map_err(|e| crate::map::cec::to_tv_error(&e))?;
                 let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::On));
             }
             Command::Power(false) => {
                 let frame = standby_frame(init, dest);
-                self.transport.send(&frame).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
-                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
+                self.transport
+                    .send(&frame)
+                    .await
+                    .map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                let _ = self
+                    .event_tx
+                    .send(TvEvent::PowerChanged(PowerState::Standby));
             }
             Command::Key(key) => {
                 let code = map_key_to_cec(key)?;
                 let press = user_control_pressed_frame(init, dest, code);
                 let release = user_control_released_frame(init, dest);
-                self.transport.send(&press).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
-                self.transport.send(&release).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                self.transport
+                    .send(&press)
+                    .await
+                    .map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                self.transport
+                    .send(&release)
+                    .await
+                    .map_err(|e| crate::map::cec::to_tv_error(&e))?;
             }
             Command::Volume(level) => {
-                let code = if level > 50 { CEC_USER_CONTROL_VOLUME_UP } else { CEC_USER_CONTROL_VOLUME_DOWN };
+                let code = if level > 50 {
+                    CEC_USER_CONTROL_VOLUME_UP
+                } else {
+                    CEC_USER_CONTROL_VOLUME_DOWN
+                };
                 let press = user_control_pressed_frame(init, dest, code);
                 let release = user_control_released_frame(init, dest);
-                self.transport.send(&press).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
-                self.transport.send(&release).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
-                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
+                self.transport
+                    .send(&press)
+                    .await
+                    .map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                self.transport
+                    .send(&release)
+                    .await
+                    .map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                let _ = self.event_tx.send(TvEvent::VolumeChanged {
+                    level,
+                    muted: false,
+                });
             }
             Command::Mute(muted) => {
                 let press = user_control_pressed_frame(init, dest, CEC_USER_CONTROL_MUTE);
                 let release = user_control_released_frame(init, dest);
-                self.transport.send(&press).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
-                self.transport.send(&release).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
-                let _ = self.event_tx.send(TvEvent::VolumeChanged { level: 0, muted });
+                self.transport
+                    .send(&press)
+                    .await
+                    .map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                self.transport
+                    .send(&release)
+                    .await
+                    .map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                let _ = self
+                    .event_tx
+                    .send(TvEvent::VolumeChanged { level: 0, muted });
             }
             Command::Input(input) => {
                 let phys = map_input_to_physical(input.clone())?;
                 let frame = active_source_frame(init, phys);
-                self.transport.send(&frame).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                self.transport
+                    .send(&frame)
+                    .await
+                    .map_err(|e| crate::map::cec::to_tv_error(&e))?;
                 let _ = self.event_tx.send(TvEvent::InputChanged(input));
             }
             Command::Custom { name, payload } => {
                 if name == "raw" || name == "tx" {
-                    self.transport.send(&payload).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                    self.transport
+                        .send(&payload)
+                        .await
+                        .map_err(|e| crate::map::cec::to_tv_error(&e))?;
                 } else if name == "active_source" {
                     let phys = u16::from_str_radix(payload.trim_start_matches("0x"), 16)
                         .map_err(|_| TvError::protocol("invalid physical address"))?;
                     let frame = active_source_frame(init, phys);
-                    self.transport.send(&frame).await.map_err(|e| crate::map::cec::to_tv_error(&e))?;
+                    self.transport
+                        .send(&frame)
+                        .await
+                        .map_err(|e| crate::map::cec::to_tv_error(&e))?;
                 } else {
                     return Err(TvError::Unsupported(Capability::Key));
                 }

@@ -39,7 +39,8 @@ impl MdcDriver {
             caps.insert(Capability::LampOrPanelHours);
         }
 
-        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
+        let (event_tx, _) =
+            tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         Self {
             capabilities: caps,
             active_client: None,
@@ -104,7 +105,8 @@ impl Driver for MdcDriver {
             },
         );
 
-        let device_id = DeviceId::new(format!("mdc:{address}")).unwrap_or_else(|_| DeviceId::anonymous());
+        let device_id =
+            DeviceId::new(format!("mdc:{address}")).unwrap_or_else(|_| DeviceId::anonymous());
         let descriptor = DeviceDescriptor::new(device_id, DeviceOs::SamsungMdc, address);
         let device = MdcDevice::new(client.clone(), descriptor);
 
@@ -127,18 +129,25 @@ impl Driver for MdcDriver {
                     let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::On));
                 } else {
                     client.power_off().await?;
-                    let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
+                    let _ = self
+                        .event_tx
+                        .send(TvEvent::PowerChanged(PowerState::Standby));
                 }
                 Ok(CommandAck::with_id(CommandId::new()))
             }
             Command::Volume(level) => {
                 client.set_volume(level).await?;
-                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
+                let _ = self.event_tx.send(TvEvent::VolumeChanged {
+                    level,
+                    muted: false,
+                });
                 Ok(CommandAck::with_id(CommandId::new()))
             }
             Command::Mute(muted) => {
                 client.set_mute(muted).await?;
-                let _ = self.event_tx.send(TvEvent::VolumeChanged { level: 0, muted });
+                let _ = self
+                    .event_tx
+                    .send(TvEvent::VolumeChanged { level: 0, muted });
                 Ok(CommandAck::with_id(CommandId::new()))
             }
             Command::Input(input) => {
@@ -160,21 +169,32 @@ impl Driver for MdcDriver {
                         let div_y: u8 = parts[2].parse().unwrap_or(1);
                         let pos: u8 = parts[3].parse().unwrap_or(1);
                         client
-                            .request(crate::mdc::protocol::commands::VIDEO_WALL_CONTROL, &[enable, div_x, div_y, pos])
+                            .request(
+                                crate::mdc::protocol::commands::VIDEO_WALL_CONTROL,
+                                &[enable, div_x, div_y, pos],
+                            )
                             .await?;
                         Ok(CommandAck::with_id(CommandId::new()))
                     } else {
-                        Err(TvError::protocol("video_wall payload format: enable,div_x,div_y,pos"))
+                        Err(TvError::protocol(
+                            "video_wall payload format: enable,div_x,div_y,pos",
+                        ))
                     }
                 }
                 "display_id" => {
-                    let id: u8 = payload.trim().parse().map_err(|_| TvError::protocol("invalid display id"))?;
+                    let id: u8 = payload
+                        .trim()
+                        .parse()
+                        .map_err(|_| TvError::protocol("invalid display id"))?;
                     let display_id = DisplayId::new(id)?;
                     self.active_client = Some(client.display(display_id));
                     Ok(CommandAck::with_id(CommandId::new()))
                 }
                 "brightness" => {
-                    let level: u8 = payload.trim().parse().map_err(|_| TvError::protocol("invalid brightness level"))?;
+                    let level: u8 = payload
+                        .trim()
+                        .parse()
+                        .map_err(|_| TvError::protocol("invalid brightness level"))?;
                     client.set_brightness(level).await?;
                     Ok(CommandAck::with_id(CommandId::new()))
                 }

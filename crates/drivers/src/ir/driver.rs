@@ -1,7 +1,7 @@
 //! Universal IR Remote Driver implementation.
 
-use std::sync::Arc;
 use async_trait::async_trait;
+use std::sync::Arc;
 use tv_rs_core::capability::{Capability, CapabilitySet, Key};
 use tv_rs_core::command::{Command, CommandAck, CommandId};
 use tv_rs_core::descriptor::{DiscoveredTv, PowerState};
@@ -39,7 +39,8 @@ impl IrDriver {
         caps.insert(Capability::Volume);
         caps.insert(Capability::InputSelect);
 
-        let (event_tx, _) = tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
+        let (event_tx, _) =
+            tokio::sync::broadcast::channel(crate::observe::DEFAULT_OBSERVE_CHANNEL_CAPACITY);
         Self {
             capabilities: caps,
             emitter,
@@ -109,11 +110,16 @@ impl Driver for IrDriver {
                 Key::Power
             }
             Command::Power(false) => {
-                let _ = self.event_tx.send(TvEvent::PowerChanged(PowerState::Standby));
+                let _ = self
+                    .event_tx
+                    .send(TvEvent::PowerChanged(PowerState::Standby));
                 Key::PowerOff
             }
             Command::Volume(level) => {
-                let _ = self.event_tx.send(TvEvent::VolumeChanged { level, muted: false });
+                let _ = self.event_tx.send(TvEvent::VolumeChanged {
+                    level,
+                    muted: false,
+                });
                 if level > 50 {
                     Key::VolumeUp
                 } else {
@@ -121,7 +127,9 @@ impl Driver for IrDriver {
                 }
             }
             Command::Mute(muted) => {
-                let _ = self.event_tx.send(TvEvent::VolumeChanged { level: 0, muted });
+                let _ = self
+                    .event_tx
+                    .send(TvEvent::VolumeChanged { level: 0, muted });
                 Key::Mute
             }
             Command::Custom { name, .. } => {
@@ -137,10 +145,11 @@ impl Driver for IrDriver {
             .signal_for_key(key)
             .map_err(|e| TvError::Protocol(ProtocolError::Malformed(e.to_string())))?;
 
-        self.emitter
-            .emit(&signal)
-            .await
-            .map_err(|e| TvError::Transport(tv_rs_core::error::TransportError::Unreachable(e.to_string())))?;
+        self.emitter.emit(&signal).await.map_err(|e| {
+            TvError::Transport(tv_rs_core::error::TransportError::Unreachable(
+                e.to_string(),
+            ))
+        })?;
 
         Ok(CommandAck::with_id(CommandId::new()))
     }
