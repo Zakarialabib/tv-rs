@@ -165,10 +165,7 @@ async fn test_observation_stream_mdc_vendor_latency_and_events() {
     assert_eq!(event, TvEvent::PowerChanged(PowerState::On));
 
     // Volume event
-    let _ = driver
-        .send(Command::Volume(40))
-        .await
-        .expect("send volume");
+    let _ = driver.send(Command::Volume(40)).await.expect("send volume");
     let event = stream.recv().await.expect("recv volume event");
     assert_eq!(
         event,

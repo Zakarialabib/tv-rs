@@ -44,7 +44,10 @@ async fn test_conformance_across_all_enabled_default_drivers() {
     for driver in reg.drivers_mut() {
         let vendor = driver.vendor();
         let caps = *driver.capabilities();
-        assert!(!caps.is_empty(), "Driver {vendor:?} must not advertise an empty CapabilitySet");
+        assert!(
+            !caps.is_empty(),
+            "Driver {vendor:?} must not advertise an empty CapabilitySet"
+        );
 
         // 1. Verify conformance cases coverage (zero orphaned cases)
         let cases = driver.conformance_cases();
@@ -138,7 +141,11 @@ async fn test_adversarial_orphaned_capability_detection() {
         }
         async fn connect(&mut self, _t: &DiscoveredTv) -> Result<Self::Handle, TvError> {
             Ok(BrokenHandle {
-                desc: DeviceDescriptor::new(DeviceId::new("broken").unwrap(), DeviceOs::Unknown, "127.0.0.1"),
+                desc: DeviceDescriptor::new(
+                    DeviceId::new("broken").unwrap(),
+                    DeviceOs::Unknown,
+                    "127.0.0.1",
+                ),
                 caps: self.caps,
             })
         }
@@ -159,7 +166,10 @@ async fn test_adversarial_orphaned_capability_detection() {
         .unwrap();
 
     let violations = conformance::run(&handle).await;
-    assert!(!violations.is_empty(), "Harness MUST detect orphaned capability!");
+    assert!(
+        !violations.is_empty(),
+        "Harness MUST detect orphaned capability!"
+    );
     let vol_violation = violations
         .iter()
         .find(|v| v.detail.to_ascii_lowercase().contains("volume"));
@@ -193,20 +203,32 @@ fn test_capability_registry_integration_with_default_drivers() {
     }
 
     let cap_reg = reg.build_capability_registry();
-    assert!(!cap_reg.is_empty(), "CapabilityRegistry must contain default drivers");
+    assert!(
+        !cap_reg.is_empty(),
+        "CapabilityRegistry must contain default drivers"
+    );
 
     let aggregate = reg.aggregate_capabilities();
-    assert!(!aggregate.is_empty(), "Aggregated capabilities must not be empty");
+    assert!(
+        !aggregate.is_empty(),
+        "Aggregated capabilities must not be empty"
+    );
     assert!(aggregate.contains(Capability::PowerState));
     assert!(aggregate.contains(Capability::Volume));
 
     for driver in reg.drivers() {
         let vendor = driver.vendor();
         let caps = cap_reg.capabilities_for(vendor);
-        assert!(caps.is_some(), "Vendor {vendor:?} must be registered in CapabilityRegistry");
+        assert!(
+            caps.is_some(),
+            "Vendor {vendor:?} must be registered in CapabilityRegistry"
+        );
         assert_eq!(*caps.unwrap(), *driver.capabilities());
     }
 
     let power_drivers = reg.find_by_capability(Capability::PowerState);
-    assert!(!power_drivers.is_empty(), "Must find drivers supporting PowerState");
+    assert!(
+        !power_drivers.is_empty(),
+        "Must find drivers supporting PowerState"
+    );
 }

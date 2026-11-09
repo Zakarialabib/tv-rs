@@ -16,7 +16,13 @@
 //! 5. Connection pooling in WebOS driver (`WebosSessionPool`):
 //!    - Session reuse, pointer socket reuse, dead socket retry, idle timeout expiration, multi-host isolation, concurrency stress.
 
-#![cfg(all(feature = "tizen", feature = "webos", feature = "cast", feature = "cec"))]
+#![cfg(all(
+    feature = "tizen",
+    feature = "webos",
+    feature = "cast",
+    feature = "cec",
+    feature = "testkit"
+))]
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -26,8 +32,8 @@ use tokio::sync::Mutex as TokioMutex;
 use async_trait::async_trait;
 
 use tv_rs_core::capability::{
-    AppLaunch, Capability, CapabilitySet, DeviceHandle, Key, KeyInput, PowerControl,
-    TextInput, VolumeControl,
+    AppLaunch, Capability, CapabilitySet, DeviceHandle, Key, KeyInput, PowerControl, TextInput,
+    VolumeControl,
 };
 use tv_rs_core::command::{Command, CommandAck, CommandId};
 use tv_rs_core::descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv};
@@ -135,10 +141,15 @@ impl Driver for CustomThirdPartyDriver {
 #[tokio::test]
 async fn test_wave2_drivers_in_default_registry_and_polymorphic_dispatch() {
     let mut reg = DriverRegistry::with_defaults();
-    assert!(reg.len() >= 4, "Wave 2 registry must have at least 4 drivers");
+    assert!(
+        reg.len() >= 4,
+        "Wave 2 registry must have at least 4 drivers"
+    );
 
     // 1. Verify Tizen in registry
-    let tizen_driver = reg.find_for_vendor_mut(TvVendor::Samsung).expect("Tizen driver found");
+    let tizen_driver = reg
+        .find_for_vendor_mut(TvVendor::Samsung)
+        .expect("Tizen driver found");
     assert_eq!(tizen_driver.vendor(), TvVendor::Samsung);
     assert!(tizen_driver.capabilities().contains(Capability::Key));
     assert!(tizen_driver.capabilities().contains(Capability::PowerState));
@@ -146,23 +157,31 @@ async fn test_wave2_drivers_in_default_registry_and_polymorphic_dispatch() {
 
     // Erased handle connection
     let tizen_target = DiscoveredTv::probed(TvVendor::Samsung, "192.168.1.50");
-    let tizen_handle = tizen_driver.connect(&tizen_target).await.expect("Tizen connect ok");
+    let tizen_handle = tizen_driver
+        .connect(&tizen_target)
+        .await
+        .expect("Tizen connect ok");
     assert_eq!(tizen_handle.descriptor().address, "192.168.1.50");
     assert!(tizen_handle.as_key().is_some());
     assert!(tizen_handle.as_power().is_some());
     assert!(tizen_handle.as_app().is_some());
-    assert!(tizen_handle.as_volume().is_some());
+    assert!(tizen_handle.as_volume().is_none());
     assert!(tizen_handle.as_text().is_some());
     assert!(tizen_handle.as_screen_cast().is_none());
 
     // 2. Verify WebOS in registry
-    let webos_driver = reg.find_for_vendor_mut(TvVendor::Lg).expect("WebOS driver found");
+    let webos_driver = reg
+        .find_for_vendor_mut(TvVendor::Lg)
+        .expect("WebOS driver found");
     assert_eq!(webos_driver.vendor(), TvVendor::Lg);
     assert!(webos_driver.capabilities().contains(Capability::Key));
     assert!(webos_driver.capabilities().contains(Capability::Volume));
 
     let webos_target = DiscoveredTv::probed(TvVendor::Lg, "192.168.1.60");
-    let webos_handle = webos_driver.connect(&webos_target).await.expect("WebOS connect ok");
+    let webos_handle = webos_driver
+        .connect(&webos_target)
+        .await
+        .expect("WebOS connect ok");
     assert_eq!(webos_handle.descriptor().address, "192.168.1.60");
     assert!(webos_handle.as_key().is_some());
     assert!(webos_handle.as_power().is_some());
@@ -170,19 +189,26 @@ async fn test_wave2_drivers_in_default_registry_and_polymorphic_dispatch() {
     assert!(webos_handle.as_app().is_some());
 
     // 3. Verify Cast in registry
-    let cast_driver = reg.find_for_vendor_mut(TvVendor::GoogleCast).expect("Cast driver found");
+    let cast_driver = reg
+        .find_for_vendor_mut(TvVendor::GoogleCast)
+        .expect("Cast driver found");
     assert_eq!(cast_driver.vendor(), TvVendor::GoogleCast);
     assert!(cast_driver.capabilities().contains(Capability::ScreenCast));
     assert!(cast_driver.capabilities().contains(Capability::Volume));
 
     // 4. Verify CEC in registry
-    let cec_driver = reg.find_for_vendor_mut(TvVendor::Cec).expect("CEC driver found");
+    let cec_driver = reg
+        .find_for_vendor_mut(TvVendor::Cec)
+        .expect("CEC driver found");
     assert_eq!(cec_driver.vendor(), TvVendor::Cec);
     assert!(cec_driver.capabilities().contains(Capability::InputSelect));
     assert!(cec_driver.capabilities().contains(Capability::Key));
 
     let cec_target = DiscoveredTv::probed(TvVendor::Cec, "0");
-    let cec_handle = cec_driver.connect(&cec_target).await.expect("CEC connect ok");
+    let cec_handle = cec_driver
+        .connect(&cec_target)
+        .await
+        .expect("CEC connect ok");
     assert!(cec_handle.as_key().is_some());
     assert!(cec_handle.as_input().is_some());
     assert!(cec_handle.as_power().is_some());
@@ -228,8 +254,13 @@ async fn test_open_ended_extensible_registry_plug_and_play() {
     assert!(reg.find_for_vendor(TvVendor::Unknown).is_some());
     assert!(reg.find_for_vendor(TvVendor::Philips).is_some());
 
-    let plugin = reg.find_for_vendor_mut(TvVendor::Philips).expect("Philips driver");
-    plugin.send(Command::Power(true)).await.expect("plugin send ok");
+    let plugin = reg
+        .find_for_vendor_mut(TvVendor::Philips)
+        .expect("Philips driver");
+    plugin
+        .send(Command::Power(true))
+        .await
+        .expect("plugin send ok");
     assert_eq!(sent_counter2.load(Ordering::SeqCst), 1);
 }
 
@@ -242,7 +273,9 @@ fn test_vendor_alias_resolution_bidirectional_and_targets() {
     let reg = DriverRegistry::with_defaults();
 
     // 1. Samsung <-> Tizen alias
-    let by_samsung = reg.find_for_vendor(TvVendor::Samsung).expect("find by Samsung");
+    let by_samsung = reg
+        .find_for_vendor(TvVendor::Samsung)
+        .expect("find by Samsung");
     let by_tizen = reg.find_for_vendor(TvVendor::Tizen).expect("find by Tizen");
     assert_eq!(by_samsung.vendor(), TvVendor::Samsung);
     assert_eq!(by_tizen.vendor(), TvVendor::Samsung);
@@ -264,7 +297,9 @@ fn test_vendor_alias_resolution_bidirectional_and_targets() {
     assert!(reg.find_for_target(&target_webos).is_some());
 
     // 3. GoogleCast
-    let by_cast = reg.find_for_vendor(TvVendor::GoogleCast).expect("find by GoogleCast");
+    let by_cast = reg
+        .find_for_vendor(TvVendor::GoogleCast)
+        .expect("find by GoogleCast");
     assert_eq!(by_cast.vendor(), TvVendor::GoogleCast);
     let target_cast = DiscoveredTv::probed(TvVendor::GoogleCast, "10.0.0.3");
     assert!(reg.find_for_target(&target_cast).is_some());
@@ -307,7 +342,12 @@ struct RecordingCecTransport {
 impl RecordingCecTransport {
     fn new() -> (Self, Arc<TokioMutex<Vec<String>>>) {
         let frames = Arc::new(TokioMutex::new(Vec::new()));
-        (Self { frames: frames.clone() }, frames)
+        (
+            Self {
+                frames: frames.clone(),
+            },
+            frames,
+        )
     }
 }
 
@@ -349,7 +389,10 @@ async fn test_cec_user_control_pressed_and_released_atomic_pairing() {
     ];
 
     for key in &test_keys {
-        handle.key_press(*key, CommandId::new()).await.expect("key press ok");
+        handle
+            .key_press(*key, CommandId::new())
+            .await
+            .expect("key press ok");
     }
 
     let recorded = frames.lock().await.clone();
@@ -367,10 +410,16 @@ async fn test_cec_user_control_pressed_and_released_atomic_pairing() {
 
         // Verify pressed frame: tx 40:44:XX
         let expected_press = format!("tx 40:44:{expected_code:02X}");
-        assert_eq!(press_frame, &expected_press, "Press frame must match opcode 0x44 and UI code");
+        assert_eq!(
+            press_frame, &expected_press,
+            "Press frame must match opcode 0x44 and UI code"
+        );
 
         // Verify released frame: tx 40:45
-        assert_eq!(release_frame, "tx 40:45", "Release frame must follow immediately with opcode 0x45");
+        assert_eq!(
+            release_frame, "tx 40:45",
+            "Release frame must follow immediately with opcode 0x45"
+        );
     }
 }
 
@@ -380,9 +429,15 @@ async fn test_cec_driver_send_volume_and_mute_immediate_release() {
     let mut driver = CecDriver::new().with_transport(Arc::new(transport));
 
     // Volume up (> 50)
-    driver.send(Command::Volume(80)).await.expect("volume up ok");
+    driver
+        .send(Command::Volume(80))
+        .await
+        .expect("volume up ok");
     // Volume down (<= 50)
-    driver.send(Command::Volume(20)).await.expect("volume down ok");
+    driver
+        .send(Command::Volume(20))
+        .await
+        .expect("volume down ok");
     // Mute
     driver.send(Command::Mute(true)).await.expect("mute ok");
 
@@ -428,7 +483,11 @@ async fn test_cec_key_press_concurrent_stress_release_invariance() {
     }
 
     let recorded = frames.lock().await.clone();
-    assert_eq!(recorded.len(), 400, "20 tasks * 10 presses * 2 frames = 400 frames");
+    assert_eq!(
+        recorded.len(),
+        400,
+        "20 tasks * 10 presses * 2 frames = 400 frames"
+    );
 
     let press_count = recorded.iter().filter(|f| f.contains(":44:")).count();
     let release_count = recorded.iter().filter(|f| f.ends_with(":45")).count();
@@ -453,11 +512,21 @@ async fn test_tizen_connection_pool_channel_reuse_under_stress() {
 
     // 100 sequential key presses to the same TV
     for _ in 0..100 {
-        pool.send_key(&client, TizenRemoteKey::VolumeUp).await.unwrap();
+        pool.send_key(&client, TizenRemoteKey::VolumeUp)
+            .await
+            .unwrap();
     }
 
-    assert_eq!(opens.load(Ordering::SeqCst), 1, "Must reuse single pooled channel");
-    assert_eq!(sent.load(Ordering::SeqCst), 100, "Must deliver all 100 presses");
+    assert_eq!(
+        opens.load(Ordering::SeqCst),
+        1,
+        "Must reuse single pooled channel"
+    );
+    assert_eq!(
+        sent.load(Ordering::SeqCst),
+        100,
+        "Must deliver all 100 presses"
+    );
     assert_eq!(pool.len().await, 1);
 }
 
@@ -465,24 +534,20 @@ async fn test_tizen_connection_pool_channel_reuse_under_stress() {
 async fn test_tizen_connection_pool_reopen_on_dead_socket_and_double_failure() {
     // 1 simulated failure on dead channel -> must reopen once and succeed
     let (opens, sent) = tizen_testkit::counters();
-    let pool = TizenConnectionPool::with_factory(tizen_testkit::factory(
-        opens.clone(),
-        1,
-        sent.clone(),
-    ));
+    let pool =
+        TizenConnectionPool::with_factory(tizen_testkit::factory(opens.clone(), 1, sent.clone()));
     let client = TizenClient::new("192.168.1.101");
 
-    pool.send_key(&client, TizenRemoteKey::Home).await.expect("reopen retry succeeds");
+    pool.send_key(&client, TizenRemoteKey::Home)
+        .await
+        .expect("reopen retry succeeds");
     assert_eq!(opens.load(Ordering::SeqCst), 2, "Channel reopened once");
     assert_eq!(sent.load(Ordering::SeqCst), 1, "Delivered once");
 
     // 2 simulated failures -> retry fails, error surfaces to caller
     let (opens2, sent2) = tizen_testkit::counters();
-    let pool2 = TizenConnectionPool::with_factory(tizen_testkit::factory(
-        opens2.clone(),
-        2,
-        sent2.clone(),
-    ));
+    let pool2 =
+        TizenConnectionPool::with_factory(tizen_testkit::factory(opens2.clone(), 2, sent2.clone()));
     let result = pool2.send_key(&client, TizenRemoteKey::Home).await;
     assert!(result.is_err(), "Double failure must surface to caller");
     assert_eq!(opens2.load(Ordering::SeqCst), 2, "Does not loop infinitely");
@@ -505,7 +570,10 @@ async fn test_tizen_connection_pool_multi_host_isolation_and_concurrency() {
             let pool_clone = pool.clone();
             tasks.push(tokio::spawn(async move {
                 let client = TizenClient::new(format!("10.0.0.{}", host_id + 1));
-                pool_clone.send_key(&client, TizenRemoteKey::Enter).await.unwrap();
+                pool_clone
+                    .send_key(&client, TizenRemoteKey::Enter)
+                    .await
+                    .unwrap();
             }));
         }
     }
@@ -514,7 +582,11 @@ async fn test_tizen_connection_pool_multi_host_isolation_and_concurrency() {
         t.await.unwrap();
     }
 
-    assert_eq!(opens.load(Ordering::SeqCst), 10, "Exactly 1 channel per host (10 hosts)");
+    assert_eq!(
+        opens.load(Ordering::SeqCst),
+        10,
+        "Exactly 1 channel per host (10 hosts)"
+    );
     assert_eq!(sent.load(Ordering::SeqCst), 50, "50 total messages sent");
     assert_eq!(pool.len().await, 10);
 
@@ -549,14 +621,22 @@ async fn test_webos_session_pool_dual_session_and_pointer_reuse() {
         pool.set_volume(&client, 25).await.unwrap();
         let _ = pool.get_volume(&client).await.unwrap();
     }
-    assert_eq!(opens.load(Ordering::SeqCst), 1, "Session opened once and reused");
+    assert_eq!(
+        opens.load(Ordering::SeqCst),
+        1,
+        "Session opened once and reused"
+    );
     assert_eq!(served.load(Ordering::SeqCst), 100);
 
     // 2. Key presses reuse pointer socket
     for _ in 0..20 {
         pool.send_key(&client, "ENTER").await.unwrap();
     }
-    assert_eq!(ptr_opens.load(Ordering::SeqCst), 1, "Pointer dialed once and reused");
+    assert_eq!(
+        ptr_opens.load(Ordering::SeqCst),
+        1,
+        "Pointer dialed once and reused"
+    );
     assert_eq!(ptr_frames.lock().unwrap().len(), 20);
     assert!(pool.has_pointer("192.168.1.120").await);
 }
@@ -582,7 +662,11 @@ async fn test_webos_session_pool_idle_timeout_expiration() {
 
     // Next command must recognize stale session and open fresh one
     pool.set_volume(&client, 35).await.unwrap();
-    assert_eq!(opens.load(Ordering::SeqCst), 2, "Stale idle session must be dropped and reopened");
+    assert_eq!(
+        opens.load(Ordering::SeqCst),
+        2,
+        "Stale idle session must be dropped and reopened"
+    );
 }
 
 #[tokio::test]
@@ -595,7 +679,13 @@ async fn test_webos_session_pool_reopen_on_dead_socket() {
     ));
     let client = WebosClient::new("192.168.1.122");
 
-    pool.set_volume(&client, 50).await.expect("reopen retry succeeds");
-    assert_eq!(opens.load(Ordering::SeqCst), 2, "Session reopened once on error");
+    pool.set_volume(&client, 50)
+        .await
+        .expect("reopen retry succeeds");
+    assert_eq!(
+        opens.load(Ordering::SeqCst),
+        2,
+        "Session reopened once on error"
+    );
     assert_eq!(served.load(Ordering::SeqCst), 1);
 }

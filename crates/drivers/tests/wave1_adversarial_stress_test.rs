@@ -110,7 +110,9 @@ fn test_mdc_checksum_tampering_and_framing_rejection() {
 
 #[tokio::test]
 async fn test_mdc_display_multiplexing_and_video_wall_dispatch() {
-    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind listener");
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind listener");
     let port = listener.local_addr().expect("port").port();
 
     let server_handle = tokio::spawn(async move {
@@ -119,7 +121,10 @@ async fn test_mdc_display_multiplexing_and_video_wall_dispatch() {
         // 1. First command: initial default display_id is DIRECT (0).
         // Request format: [0xAA, 0x84, 0x00, 0x04, 0x01, 0x02, 0x02, 0x03, 0x90]
         let mut buf = [0u8; 9];
-        socket.read_exact(&mut buf).await.expect("read video wall request");
+        socket
+            .read_exact(&mut buf)
+            .await
+            .expect("read video wall request");
         assert_eq!(buf, [0xAA, 0x84, 0x00, 0x04, 0x01, 0x02, 0x02, 0x03, 0x90]);
 
         // Send ACK for display 0
@@ -132,7 +137,10 @@ async fn test_mdc_display_multiplexing_and_video_wall_dispatch() {
         // 2. Second command: after driver switches display_id to 2 on SAME socket (multiplexed):
         // power_on() sends: [0xAA, 0x11, 0x02, 0x01, 0x01, 0x15]
         let mut pwr_buf = [0u8; 6];
-        socket.read_exact(&mut pwr_buf).await.expect("read display 2 power request");
+        socket
+            .read_exact(&mut pwr_buf)
+            .await
+            .expect("read display 2 power request");
         assert_eq!(pwr_buf, [0xAA, 0x11, 0x02, 0x01, 0x01, 0x15]);
 
         // Send ACK for display 2 power_on
@@ -167,7 +175,10 @@ async fn test_mdc_display_multiplexing_and_video_wall_dispatch() {
     assert!(ack_switch.id.is_some());
 
     // Send power command to display 2
-    let ack_pwr = driver.send(Command::Power(true)).await.expect("power query succeeds");
+    let ack_pwr = driver
+        .send(Command::Power(true))
+        .await
+        .expect("power query succeeds");
     assert!(ack_pwr.id.is_some());
 
     server_handle.await.expect("server completed cleanly");
@@ -216,7 +227,14 @@ fn test_sicp_framing_and_xor_checksum_validation() {
     assert_eq!(encoded, vec![0x06, 0x01, 0x00, 0x18, 0x01, 0x1E]);
 
     // Parse valid response
-    let valid_resp = vec![0x06, 0x01, sicp_controls::REPLY, sicp_commands::POWER, 0x01, 0x1C];
+    let valid_resp = vec![
+        0x06,
+        0x01,
+        sicp_controls::REPLY,
+        sicp_commands::POWER,
+        0x01,
+        0x1C,
+    ];
     let parsed = SicpResponse::parse(&valid_resp).expect("valid sicp response parses");
     assert!(parsed.acknowledged);
     assert_eq!(parsed.display_id.value(), 1);
@@ -244,7 +262,14 @@ fn test_sicp_framing_and_xor_checksum_validation() {
 #[test]
 fn test_sicp_nak_error_mapping_to_tv_error() {
     // 6 ^ 1 ^ 0x03 (NAK) ^ 0x18 (POWER) ^ 0x02 = 0x1E
-    let nak_resp = vec![0x06, 0x01, sicp_controls::NAK, sicp_commands::POWER, 0x02, 0x1E];
+    let nak_resp = vec![
+        0x06,
+        0x01,
+        sicp_controls::NAK,
+        sicp_commands::POWER,
+        0x02,
+        0x1E,
+    ];
     let parsed = SicpResponse::parse(&nak_resp).expect("nak response parses");
     assert!(!parsed.acknowledged);
     assert_eq!(parsed.control_type, sicp_controls::NAK);
@@ -274,7 +299,10 @@ async fn test_ir_emitter_arc_dyn_dispatch_and_error_mapping() {
 
     // Verify IrEmitter trait implementation for Arc<dyn IrEmitter>
     let test_signal = IrSignal::encode(IrProtocol::Nec, 0x07, 0x02, None).expect("signal encode");
-    dyn_emitter.emit(&test_signal).await.expect("emit via Arc<dyn IrEmitter>");
+    dyn_emitter
+        .emit(&test_signal)
+        .await
+        .expect("emit via Arc<dyn IrEmitter>");
 
     assert_eq!(mock.emitted_signals().len(), 1);
     assert_eq!(mock.last_emitted().expect("last emitted"), test_signal);
@@ -286,7 +314,10 @@ async fn test_ir_emitter_arc_dyn_dispatch_and_error_mapping() {
     let _handle = driver.connect(&target).await.expect("driver connects");
 
     // Send power on key
-    let ack = driver.send(Command::Power(true)).await.expect("send power succeeds");
+    let ack = driver
+        .send(Command::Power(true))
+        .await
+        .expect("send power succeeds");
     assert!(ack.id.is_some());
     assert_eq!(mock.emitted_signals().len(), 2);
 
@@ -328,7 +359,10 @@ fn test_roku_dpad_key_mapping_and_unsupported_rejection() {
     assert_eq!(map_core_key_to_roku(Key::Play), Some(RokuKey::Play));
     assert_eq!(map_core_key_to_roku(Key::Pause), Some(RokuKey::Play));
     assert_eq!(map_core_key_to_roku(Key::VolumeUp), Some(RokuKey::VolumeUp));
-    assert_eq!(map_core_key_to_roku(Key::VolumeDown), Some(RokuKey::VolumeDown));
+    assert_eq!(
+        map_core_key_to_roku(Key::VolumeDown),
+        Some(RokuKey::VolumeDown)
+    );
     assert_eq!(map_core_key_to_roku(Key::Mute), Some(RokuKey::VolumeMute));
     assert_eq!(map_core_key_to_roku(Key::PowerOff), Some(RokuKey::PowerOff));
     assert_eq!(map_core_key_to_roku(Key::Power), Some(RokuKey::PowerOn));

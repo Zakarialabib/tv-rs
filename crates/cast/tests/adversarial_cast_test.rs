@@ -38,12 +38,20 @@ fn generate_mock_tls_config() -> ServerConfig {
         .expect("server config")
 }
 
-async fn read_framed_message<R: AsyncReadExt + Unpin>(reader: &mut R) -> Result<CastMessage, String> {
+async fn read_framed_message<R: AsyncReadExt + Unpin>(
+    reader: &mut R,
+) -> Result<CastMessage, String> {
     let mut len_buf = [0u8; 4];
-    reader.read_exact(&mut len_buf).await.map_err(|e| format!("read len: {e}"))?;
+    reader
+        .read_exact(&mut len_buf)
+        .await
+        .map_err(|e| format!("read len: {e}"))?;
     let len = u32::from_be_bytes(len_buf) as usize;
     let mut payload = vec![0u8; len];
-    reader.read_exact(&mut payload).await.map_err(|e| format!("read payload: {e}"))?;
+    reader
+        .read_exact(&mut payload)
+        .await
+        .map_err(|e| format!("read payload: {e}"))?;
     CastMessage::decode(&payload[..]).map_err(|e| format!("decode: {e}"))
 }
 
@@ -69,11 +77,18 @@ async fn test_cast_empty_media_status_rejection() {
         let mut tls_stream = acceptor.accept(stream).await.expect("tls accept");
 
         // 1. Read CONNECT
-        let connect_msg = read_framed_message(&mut tls_stream).await.expect("connect msg");
-        assert_eq!(connect_msg.namespace, "urn:x-cast:com.google.cast.tp.connection");
+        let connect_msg = read_framed_message(&mut tls_stream)
+            .await
+            .expect("connect msg");
+        assert_eq!(
+            connect_msg.namespace,
+            "urn:x-cast:com.google.cast.tp.connection"
+        );
 
         // 2. Read GET_STATUS
-        let status_req = read_framed_message(&mut tls_stream).await.expect("status req");
+        let status_req = read_framed_message(&mut tls_stream)
+            .await
+            .expect("status req");
         assert_eq!(status_req.namespace, "urn:x-cast:com.google.cast.media");
 
         // Send invalid MEDIA_STATUS with EMPTY status list `[]`
@@ -123,8 +138,12 @@ async fn test_cast_malformed_protobuf_wire_bytes() {
         let (stream, _) = listener.accept().await.expect("accept");
         let mut tls_stream = acceptor.accept(stream).await.expect("tls accept");
 
-        let _ = read_framed_message(&mut tls_stream).await.expect("connect msg");
-        let _ = read_framed_message(&mut tls_stream).await.expect("status req");
+        let _ = read_framed_message(&mut tls_stream)
+            .await
+            .expect("connect msg");
+        let _ = read_framed_message(&mut tls_stream)
+            .await
+            .expect("status req");
 
         // Send 4-byte length prefix (16 bytes payload)
         let corrupt_payload = [0xFF; 16]; // invalid protobuf tag/wire format
@@ -132,7 +151,10 @@ async fn test_cast_malformed_protobuf_wire_bytes() {
         buf.put_u32(16);
         buf.put_slice(&corrupt_payload);
 
-        tls_stream.write_all(&buf).await.expect("write corrupt frame");
+        tls_stream
+            .write_all(&buf)
+            .await
+            .expect("write corrupt frame");
         tls_stream.flush().await.expect("flush");
     });
 
@@ -164,11 +186,18 @@ async fn test_cast_truncated_length_prefix_eof() {
         let (stream, _) = listener.accept().await.expect("accept");
         let mut tls_stream = acceptor.accept(stream).await.expect("tls accept");
 
-        let _ = read_framed_message(&mut tls_stream).await.expect("connect msg");
-        let _ = read_framed_message(&mut tls_stream).await.expect("status req");
+        let _ = read_framed_message(&mut tls_stream)
+            .await
+            .expect("connect msg");
+        let _ = read_framed_message(&mut tls_stream)
+            .await
+            .expect("status req");
 
         // Send only 2 bytes of the 4-byte length prefix, then abruptly close connection
-        tls_stream.write_all(&[0x00, 0x01]).await.expect("write partial len");
+        tls_stream
+            .write_all(&[0x00, 0x01])
+            .await
+            .expect("write partial len");
         tls_stream.flush().await.expect("flush");
         drop(tls_stream);
     });
@@ -201,15 +230,22 @@ async fn test_cast_truncated_payload_eof() {
         let (stream, _) = listener.accept().await.expect("accept");
         let mut tls_stream = acceptor.accept(stream).await.expect("tls accept");
 
-        let _ = read_framed_message(&mut tls_stream).await.expect("connect msg");
-        let _ = read_framed_message(&mut tls_stream).await.expect("status req");
+        let _ = read_framed_message(&mut tls_stream)
+            .await
+            .expect("connect msg");
+        let _ = read_framed_message(&mut tls_stream)
+            .await
+            .expect("status req");
 
         // Announce 1000 bytes, but send only 10 bytes then close
         let mut buf = BytesMut::new();
         buf.put_u32(1000);
         buf.put_slice(&[0x08, 0x01, 0x12, 0x05, 0x74, 0x65, 0x73, 0x74, 0x00, 0x00]);
 
-        tls_stream.write_all(&buf).await.expect("write partial payload");
+        tls_stream
+            .write_all(&buf)
+            .await
+            .expect("write partial payload");
         tls_stream.flush().await.expect("flush");
         drop(tls_stream);
     });
@@ -242,8 +278,12 @@ async fn test_cast_malformed_json_in_protobuf_payload() {
         let (stream, _) = listener.accept().await.expect("accept");
         let mut tls_stream = acceptor.accept(stream).await.expect("tls accept");
 
-        let _ = read_framed_message(&mut tls_stream).await.expect("connect msg");
-        let status_req = read_framed_message(&mut tls_stream).await.expect("status req");
+        let _ = read_framed_message(&mut tls_stream)
+            .await
+            .expect("connect msg");
+        let status_req = read_framed_message(&mut tls_stream)
+            .await
+            .expect("status req");
 
         // Send valid protobuf CastMessage, but with broken JSON in payload_utf8
         let reply_msg = CastMessage {

@@ -147,9 +147,9 @@ impl Driver for ThirdPartyCustomDriver {
         self.send_calls.fetch_add(1, Ordering::SeqCst);
         match cmd {
             Command::Power(_) => Ok(CommandAck::with_id(CommandId::new())),
-            Command::Custom { name, .. } if name == "fail_me" => {
-                Err(TvError::Protocol(ProtocolError::Malformed("forced test error".to_string())))
-            }
+            Command::Custom { name, .. } if name == "fail_me" => Err(TvError::Protocol(
+                ProtocolError::Malformed("forced test error".to_string()),
+            )),
             _ => Ok(CommandAck {
                 id: None,
                 message: Some(format!("Handled by plugin {}", self.tag)),
@@ -183,7 +183,9 @@ async fn test_dynamic_plugin_registration() {
     assert!(!reg.is_empty());
 
     // 2. Query driver by vendor and target
-    let driver_ref = reg.find_for_vendor(TvVendor::GoogleCast).expect("found cast plugin");
+    let driver_ref = reg
+        .find_for_vendor(TvVendor::GoogleCast)
+        .expect("found cast plugin");
     assert_eq!(driver_ref.vendor(), TvVendor::GoogleCast);
     assert!(driver_ref.capabilities().contains(Capability::PowerState));
 
@@ -200,7 +202,10 @@ async fn test_dynamic_plugin_registration() {
     // 4. Test with_defaults() registration expansion
     let mut default_reg = DriverRegistry::with_defaults();
     let initial_count = default_reg.len();
-    assert!(initial_count >= 4, "Expected at least roku, mdc, sicp, ir built-ins");
+    assert!(
+        initial_count >= 4,
+        "Expected at least roku, mdc, sicp, ir built-ins"
+    );
 
     let plugin_c = ThirdPartyCustomDriver::new(TvVendor::WebOs, "webos_plugin");
     default_reg.register_driver(plugin_c);
@@ -208,12 +213,20 @@ async fn test_dynamic_plugin_registration() {
     assert!(default_reg.find_for_vendor(TvVendor::WebOs).is_some());
 
     // 5. Connect and execute via mutable lookup
-    let mut_driver = reg.find_for_vendor_mut(TvVendor::GoogleCast).expect("mutable driver");
+    let mut_driver = reg
+        .find_for_vendor_mut(TvVendor::GoogleCast)
+        .expect("mutable driver");
     let handle = mut_driver.connect(&target).await.expect("connect succeeds");
     assert_eq!(connect_counter.load(Ordering::SeqCst), 1);
-    assert_eq!(handle.id().as_str(), "plugin-cast_plugin-googlecast-10.0.1.25");
+    assert_eq!(
+        handle.id().as_str(),
+        "plugin-cast_plugin-googlecast-10.0.1.25"
+    );
 
-    let ack = mut_driver.send(Command::Power(true)).await.expect("send succeeds");
+    let ack = mut_driver
+        .send(Command::Power(true))
+        .await
+        .expect("send succeeds");
     assert_eq!(send_counter.load(Ordering::SeqCst), 1);
     assert!(ack.id.is_some());
 }
@@ -227,30 +240,50 @@ fn test_builtin_driver_resolution() {
     let reg = DriverRegistry::with_defaults();
 
     // Verify built-in vendors in Wave 1
-    let roku_driver = reg.find_for_vendor(TvVendor::Roku).expect("Roku driver must be registered");
+    let roku_driver = reg
+        .find_for_vendor(TvVendor::Roku)
+        .expect("Roku driver must be registered");
     assert_eq!(roku_driver.vendor(), TvVendor::Roku);
 
-    let mdc_driver = reg.find_for_vendor(TvVendor::Mdc).expect("MDC driver must be registered");
+    let mdc_driver = reg
+        .find_for_vendor(TvVendor::Mdc)
+        .expect("MDC driver must be registered");
     assert_eq!(mdc_driver.vendor(), TvVendor::Mdc);
 
-    let sicp_driver = reg.find_for_vendor(TvVendor::Sicp).expect("SICP driver must be registered");
+    let sicp_driver = reg
+        .find_for_vendor(TvVendor::Sicp)
+        .expect("SICP driver must be registered");
     assert_eq!(sicp_driver.vendor(), TvVendor::Sicp);
 
-    let ir_driver = reg.find_for_vendor(TvVendor::Ir).expect("IR driver must be registered");
+    let ir_driver = reg
+        .find_for_vendor(TvVendor::Ir)
+        .expect("IR driver must be registered");
     assert_eq!(ir_driver.vendor(), TvVendor::Ir);
 
     // Verify find_for_target
     let target_roku = DiscoveredTv::probed(TvVendor::Roku, "192.168.1.100");
-    assert_eq!(reg.find_for_target(&target_roku).map(|d| d.vendor()), Some(TvVendor::Roku));
+    assert_eq!(
+        reg.find_for_target(&target_roku).map(|d| d.vendor()),
+        Some(TvVendor::Roku)
+    );
 
     let target_mdc = DiscoveredTv::probed(TvVendor::Mdc, "192.168.1.101");
-    assert_eq!(reg.find_for_target(&target_mdc).map(|d| d.vendor()), Some(TvVendor::Mdc));
+    assert_eq!(
+        reg.find_for_target(&target_mdc).map(|d| d.vendor()),
+        Some(TvVendor::Mdc)
+    );
 
     let target_sicp = DiscoveredTv::probed(TvVendor::Sicp, "192.168.1.102");
-    assert_eq!(reg.find_for_target(&target_sicp).map(|d| d.vendor()), Some(TvVendor::Sicp));
+    assert_eq!(
+        reg.find_for_target(&target_sicp).map(|d| d.vendor()),
+        Some(TvVendor::Sicp)
+    );
 
     let target_ir = DiscoveredTv::probed(TvVendor::Ir, "192.168.1.103");
-    assert_eq!(reg.find_for_target(&target_ir).map(|d| d.vendor()), Some(TvVendor::Ir));
+    assert_eq!(
+        reg.find_for_target(&target_ir).map(|d| d.vendor()),
+        Some(TvVendor::Ir)
+    );
 
     // Target with unmapped vendor returns None
     let target_unknown = DiscoveredTv::probed(TvVendor::Unknown, "192.168.1.104");
@@ -267,7 +300,9 @@ async fn test_any_driver_polymorphic_dispatch() {
     let plugin = ThirdPartyCustomDriver::new(TvVendor::Samsung, "custom_samsung");
     reg.register_driver(plugin);
 
-    let driver = reg.find_for_vendor_mut(TvVendor::Samsung).expect("driver found");
+    let driver = reg
+        .find_for_vendor_mut(TvVendor::Samsung)
+        .expect("driver found");
 
     // 1. Connect returning erased handle
     let target = DiscoveredTv::probed(TvVendor::Samsung, "172.16.0.5");
@@ -355,7 +390,9 @@ fn test_edge_cases_empty_and_unknown() {
     // Non-existent vendor lookups return None safely without panicking
     assert!(reg.find_for_vendor(TvVendor::Unknown).is_none());
     assert!(reg.find_for_vendor(TvVendor::Roku).is_none());
-    assert!(reg.find_for_target(&DiscoveredTv::probed(TvVendor::Ir, "1.2.3.4")).is_none());
+    assert!(reg
+        .find_for_target(&DiscoveredTv::probed(TvVendor::Ir, "1.2.3.4"))
+        .is_none());
 }
 
 // -----------------------------------------------------------------------------
@@ -378,11 +415,16 @@ fn test_thread_safety_and_concurrent_queries() {
                     2 => TvVendor::Sicp,
                     _ => TvVendor::Ir,
                 };
-                let driver = reg_clone.find_for_vendor(vendor).expect("concurrent find succeeds");
+                let driver = reg_clone
+                    .find_for_vendor(vendor)
+                    .expect("concurrent find succeeds");
                 assert_eq!(driver.vendor(), vendor);
 
-                let target = DiscoveredTv::probed(vendor, format!("192.168.1.{}", (i * 10 + round) % 250));
-                let target_driver = reg_clone.find_for_target(&target).expect("concurrent target find succeeds");
+                let target =
+                    DiscoveredTv::probed(vendor, format!("192.168.1.{}", (i * 10 + round) % 250));
+                let target_driver = reg_clone
+                    .find_for_target(&target)
+                    .expect("concurrent target find succeeds");
                 assert_eq!(target_driver.vendor(), vendor);
             }
         });
@@ -403,22 +445,34 @@ async fn test_builtin_ir_driver_dispatch_and_unconnected_rejections() {
     let mut reg = DriverRegistry::with_defaults();
 
     // 1. IrDriver end-to-end connect and command dispatch via dynamic AnyDriver
-    let ir = reg.find_for_vendor_mut(TvVendor::Ir).expect("IR driver present");
+    let ir = reg
+        .find_for_vendor_mut(TvVendor::Ir)
+        .expect("IR driver present");
     let ir_target = DiscoveredTv::probed(TvVendor::Ir, "Sony-LivingRoom");
     let handle = ir.connect(&ir_target).await.expect("IR connect succeeds");
     assert!(handle.capabilities().contains(Capability::Key));
 
-    let ack = ir.send(Command::Power(true)).await.expect("IR power send succeeds");
+    let ack = ir
+        .send(Command::Power(true))
+        .await
+        .expect("IR power send succeeds");
     assert!(ack.id.is_some());
 
-    let err_ack = ir.send(Command::Custom {
-        name: "unknown_ir_cmd".to_string(),
-        payload: "".to_string(),
-    }).await;
-    assert!(matches!(err_ack, Err(TvError::Protocol(ProtocolError::Malformed(_)))));
+    let err_ack = ir
+        .send(Command::Custom {
+            name: "unknown_ir_cmd".to_string(),
+            payload: "".to_string(),
+        })
+        .await;
+    assert!(matches!(
+        err_ack,
+        Err(TvError::Protocol(ProtocolError::Malformed(_)))
+    ));
 
     // 2. RokuDriver unconnected send rejection
-    let roku = reg.find_for_vendor_mut(TvVendor::Roku).expect("Roku driver present");
+    let roku = reg
+        .find_for_vendor_mut(TvVendor::Roku)
+        .expect("Roku driver present");
     let roku_err = roku.send(Command::Power(true)).await;
     assert!(
         matches!(roku_err, Err(TvError::Transport(_))),
@@ -426,7 +480,9 @@ async fn test_builtin_ir_driver_dispatch_and_unconnected_rejections() {
     );
 
     // 3. MdcDriver unconnected send rejection
-    let mdc = reg.find_for_vendor_mut(TvVendor::Mdc).expect("MDC driver present");
+    let mdc = reg
+        .find_for_vendor_mut(TvVendor::Mdc)
+        .expect("MDC driver present");
     let mdc_err = mdc.send(Command::Power(true)).await;
     assert!(
         matches!(mdc_err, Err(TvError::Transport(_))),
@@ -495,5 +551,8 @@ async fn test_concurrent_read_write_rwlock() {
     }
 
     let final_reg = shared_reg.read().await;
-    assert!(final_reg.len() >= 4 + 20, "Registry should contain all dynamically registered drivers");
+    assert!(
+        final_reg.len() >= 4 + 20,
+        "Registry should contain all dynamically registered drivers"
+    );
 }

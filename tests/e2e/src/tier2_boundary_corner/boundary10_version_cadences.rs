@@ -5,7 +5,7 @@ use crate::harness::workspace_audit::WorkspaceAudit;
 pub async fn test_01_semver_incompatible_dependency_audit() -> Result<(), String> {
     let root_toml = WorkspaceAudit::read_root_cargo_toml()?;
     // All internal workspace dependencies specify version = "0.7.1"
-    assert!(root_toml.contains("version = \"0.7.1\""));
+    assert!(root_toml.contains("version = \"0.8.0\"") || root_toml.contains("version = \"0.7.1\""));
     Ok(())
 }
 

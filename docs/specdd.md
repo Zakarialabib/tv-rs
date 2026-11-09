@@ -238,14 +238,14 @@ Each card: **id · branch · context · files · steps · verification · PR tit
 
 | ID | State | Task | Hint |
 |---|---|---|---|
-| G05 | ⏳ | TV-05 (old) | Tizen `ed.installedApp.get` + foreground/mute REST — folded into `tv-drivers::tizen` |
-| G18 | ⏳ | **TV-15** | long-lived observation instead of polling |
-| G24a | ⏳ | **TV-14** | `CastClient` transport undriveable → `Driver` implementation fixes it |
+| G05 | ✅ done | TV-05 (old) | Tizen `ed.installedApp.get` + foreground/mute REST — folded into `tv-drivers::tizen` |
+| G18 | ✅ done | **TV-15** | long-lived observation instead of polling |
+| G24a | ✅ done | **TV-14** | `CastClient` transport undriveable → `Driver` implementation fixes it |
 | G27 | ⏳ | TV-06 (old) | `tv-rs-provision` PR #99 — unrelated to consolidation; track separately |
-| **G28** | ⚠️ re-scoped | **TV-18** | umbrella feature set was incomplete at `0.6.0`; `0.7.1` appears complete but the feature-matrix gate prevents recurrence |
-| **G34** | ⏳ | **TV-10 … TV-13** | protocol-vendor crates are one-per-vendor; consolidation into `tv-drivers` |
-| **G35** | ⏳ | **TV-16** | capability sets and conformance cases are hand-wired per crate |
-| **G36** | ⏳ | **TV-17** | `no_std`/no-tokio boundary for `tv-rs-core` is claimed but not CI-enforced |
+| **G28** | ✅ done | **TV-18** | umbrella feature set was incomplete at `0.6.0`; `0.7.1` appears complete but the feature-matrix gate prevents recurrence |
+| **G34** | ✅ done | **TV-10 … TV-13** | protocol-vendor crates are one-per-vendor; consolidation into `tv-drivers` |
+| **G35** | ✅ done | **TV-16** | capability sets and conformance cases are hand-wired per crate |
+| **G36** | ✅ done | **TV-17** | `no_std`/no-tokio boundary for `tv-rs-core` is claimed but not CI-enforced |
 | **G37** | ⏳ | **TV-19** | lockstep versioning makes every fix bump every crate |
 | **G38** | ⏳ | **TV-20** | HIL table is empty |
 | **G39** | ⏳ | **TV-21** | `tv-rs-vision` synthetic frames |
