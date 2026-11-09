@@ -182,15 +182,12 @@ async fn run_status(args: StatusArgs) -> Result<(), CliError> {
     let mut rows = Vec::with_capacity(found.len());
     for tv in &found {
         let capabilities = match TvClient::from_discovered(tv) {
-            Ok(client) => {
-                use tv_rs::core::DeviceHandle;
-                client
-                    .capabilities()
-                    .iter()
-                    .map(|capability| capability.as_str().to_string())
-                    .collect::<Vec<_>>()
-                    .join(",")
-            }
+            Ok(client) => client
+                .capabilities()
+                .iter()
+                .map(|capability| capability.as_str().to_string())
+                .collect::<Vec<_>>()
+                .join(","),
             Err(_) => "-".to_string(),
         };
 

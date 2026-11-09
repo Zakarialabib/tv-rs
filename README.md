@@ -9,7 +9,7 @@
 Find the televisions on your LAN and drive them from Rust — discovery, power,
 remote control, fleet reconciliation and media serving, behind one small facade.
 
-> **Version check.** `0.7.1` is on crates.io for all 28 workspace crates (with 17 sub-crates
+> **Version check.** `0.8.0` is on crates.io for all 28 workspace crates (with 17 sub-crates
 > re-exported behind the unified `tv-rs` facade). The surface this page describes —
 > `TvClient` (with Google Cast and HDMI-CEC support), `power_observation()`, the `quirks` feature,
 > `TizenRemote`, `tv-rs-companion`, `tv-rs-provision`, `tv-rs-dlna`, and transport controls —

@@ -12,15 +12,24 @@ pub use tv_rs_drivers::discovery::adb;
 pub use tv_rs_drivers::discovery::bluetooth;
 #[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::cast")]
 pub use tv_rs_drivers::discovery::cast;
-#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::cec_topology")]
+#[deprecated(
+    since = "0.7.1",
+    note = "Moved to tv_rs_drivers::discovery::cec_topology"
+)]
 pub use tv_rs_drivers::discovery::cec_topology;
 #[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::client")]
 pub use tv_rs_drivers::discovery::client;
 #[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::error")]
 pub use tv_rs_drivers::discovery::error;
-#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::fingerprint")]
+#[deprecated(
+    since = "0.7.1",
+    note = "Moved to tv_rs_drivers::discovery::fingerprint"
+)]
 pub use tv_rs_drivers::discovery::fingerprint;
-#[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::http_display")]
+#[deprecated(
+    since = "0.7.1",
+    note = "Moved to tv_rs_drivers::discovery::http_display"
+)]
 pub use tv_rs_drivers::discovery::http_display;
 #[deprecated(since = "0.7.1", note = "Moved to tv_rs_drivers::discovery::mdns")]
 pub use tv_rs_drivers::discovery::mdns;

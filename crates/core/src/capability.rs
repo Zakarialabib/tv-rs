@@ -1111,7 +1111,9 @@ mod tests {
         c |= b;
         assert_eq!(c, union);
 
-        let collected: CapabilitySet = [Capability::PowerState, Capability::Key].into_iter().collect();
+        let collected: CapabilitySet = [Capability::PowerState, Capability::Key]
+            .into_iter()
+            .collect();
         assert_eq!(collected.len(), 2);
         assert!(collected.contains(Capability::PowerState));
         assert!(collected.contains(Capability::Key));
@@ -1123,8 +1125,10 @@ mod tests {
         assert!(reg.is_empty());
         assert_eq!(reg.len(), 0);
 
-        let tizen_caps = CapabilitySet::of(Capability::PowerState) | CapabilitySet::of(Capability::Key);
-        let roku_caps = CapabilitySet::of(Capability::PowerState) | CapabilitySet::of(Capability::Volume);
+        let tizen_caps =
+            CapabilitySet::of(Capability::PowerState) | CapabilitySet::of(Capability::Key);
+        let roku_caps =
+            CapabilitySet::of(Capability::PowerState) | CapabilitySet::of(Capability::Volume);
 
         reg.register(TvVendor::Samsung, tizen_caps);
         reg.register(TvVendor::Roku, roku_caps);

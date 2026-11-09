@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-09
+
+### Added
+
+- **Unified `tv-rs-drivers` crate (TV-10 … TV-14)**: consolidated 10 protocol backends
+  (`roku`, `tizen`, `webos`, `cast`, `cec`, `discovery`, `mdc`, `sicp`, `ir`, `power`) into a single
+  crate behind feature flags, deprecating individual driver crates with unpublished shims.
+- **`Driver` trait and polymorphic dispatch (TV-10)**: object-safe trait in `tv-rs-core` for
+  device connection, command transport, capability advertisement, and event streaming.
+- **`TvEvent` taxonomy and observation channels (TV-15)**: `ObservationStream` and `EventReceiver`
+  with ring-buffer drop-oldest overruns and broadcast fanout across all protocol drivers.
+- **Dynamic capability registry and conformance suite (TV-16)**: `CapabilitySet`, `CapabilityRegistry`,
+  `ConformanceProvider`, and automated orphaned capability verification.
+
+### Fixed
+
+- **Tizen wake unadvertised capability check**: return `TvError::Unsupported(Capability::Wake)`
+  immediately if not advertised, preventing premature socket I/O.
+- **Registry test under default features**: conditionally gate capability non-emptiness checks
+  on protocol feature presence.
+- **Tizen `as_volume()` honesty alignment**: aligned to `None` in challenge tests to match driver reality.
+
 ## [0.7.1] - 2026-11-07
 
 ### Fixed

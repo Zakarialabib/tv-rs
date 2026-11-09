@@ -7,7 +7,6 @@
 
 use std::time::Duration;
 
-use tv_rs::core::DeviceHandle;
 use tv_rs::{discover_with, TvClient};
 use tv_rs_discovery::SsdpScanner;
 

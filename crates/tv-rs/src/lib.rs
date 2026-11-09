@@ -55,12 +55,12 @@ pub use client::{
     probe, sicp_handle, TvClient,
 };
 pub use error::{Result, TvError};
+pub use tv_rs_core::observe::{ObservationError, ObservationStream, TvEvent};
 pub use tv_rs_discovery::{
     CompositeDiscoverySource, DiscoverySource, LgDiscoverySource, RokuDiscoverySource,
     SamsungDiscoverySource, SsdpDiscoverySource, WolDiscoverySource,
 };
 pub use types::{DiscoveredTv, TvVendor};
-pub use tv_rs_core::observe::{ObservationError, ObservationStream, TvEvent};
 
 /// The one home of vendor-error → [`TvError`] mapping.
 ///
@@ -74,9 +74,9 @@ pub mod map;
 /// Google Cast client and DIAL fallback: [`cast::dial::DialClient`].
 pub use tv_rs_cast as cast;
 pub use tv_rs_cec as cec;
-pub use tv_rs_drivers as drivers;
 pub use tv_rs_core as core;
 pub use tv_rs_discovery as discovery;
+pub use tv_rs_drivers as drivers;
 pub use tv_rs_ir as ir;
 /// Samsung MDC commercial display protocol client: [`mdc::MdcClient`].
 pub use tv_rs_mdc as mdc;

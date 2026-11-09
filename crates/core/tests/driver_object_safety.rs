@@ -177,7 +177,10 @@ fn test_object_safety_and_dynamic_dispatch() {
 
         // 2. Connect dynamic dispatch and handle erasure
         let target = DiscoveredTv::probed(TvVendor::Samsung, "192.168.1.55");
-        let handle: BoxedDeviceHandle = boxed_driver.connect(&target).await.expect("connect succeeds");
+        let handle: BoxedDeviceHandle = boxed_driver
+            .connect(&target)
+            .await
+            .expect("connect succeeds");
 
         assert_eq!(handle.id().as_str(), "samsung-192.168.1.55");
         assert_eq!(handle.descriptor().address, "192.168.1.55");
@@ -186,7 +189,10 @@ fn test_object_safety_and_dynamic_dispatch() {
         assert_eq!(power_state, PowerState::On);
 
         // 3. Send dynamic dispatch
-        let ack = boxed_driver.send(Command::Power(true)).await.expect("send succeeds");
+        let ack = boxed_driver
+            .send(Command::Power(true))
+            .await
+            .expect("send succeeds");
         assert!(ack.id.is_some());
         assert_eq!(ack.message, None);
 
@@ -207,14 +213,20 @@ fn test_heterogeneous_driver_vector_dispatch() {
 
         assert_eq!(registry.len(), 3);
         let vendors: Vec<TvVendor> = registry.iter().map(|d| d.vendor()).collect();
-        assert_eq!(vendors, vec![TvVendor::Samsung, TvVendor::Lg, TvVendor::Roku]);
+        assert_eq!(
+            vendors,
+            vec![TvVendor::Samsung, TvVendor::Lg, TvVendor::Roku]
+        );
 
         for driver in registry.iter_mut() {
             let target = DiscoveredTv::probed(driver.vendor(), "192.168.1.10");
             let handle = driver.connect(&target).await.expect("connects");
             assert!(handle.id().as_str().contains(driver.vendor().as_str()));
 
-            let ack = driver.send(Command::Key(tv_rs_core::capability::Key::Power)).await.expect("sent");
+            let ack = driver
+                .send(Command::Key(tv_rs_core::capability::Key::Power))
+                .await
+                .expect("sent");
             assert!(ack.id.is_some());
         }
     });
@@ -261,7 +273,8 @@ fn test_driver_error_paths() {
 #[test]
 fn test_unrecognized_command_ack_and_mock_stream() {
     block_on(async {
-        let mut driver: Box<AnyDriver> = Box::new(ErasedDriver(ConcreteMockDriver::new(TvVendor::Philips)));
+        let mut driver: Box<AnyDriver> =
+            Box::new(ErasedDriver(ConcreteMockDriver::new(TvVendor::Philips)));
 
         let ack = driver
             .send(Command::Custom {

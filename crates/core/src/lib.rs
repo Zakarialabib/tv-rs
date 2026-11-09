@@ -62,9 +62,9 @@ pub mod driver;
 pub mod error;
 pub mod imperative;
 pub mod lease;
-pub mod observe;
 #[cfg(feature = "mock-backend")]
 pub mod mock;
+pub mod observe;
 pub mod provisioning;
 #[cfg(feature = "quirks")]
 pub mod quirks;
@@ -76,10 +76,10 @@ pub mod types;
 pub mod serde;
 
 pub use capability::{
-    AppLaunch, AppRef, BrightnessControl, Capability, CapabilityRegistry, CapabilitySet, DeviceHandle, Input,
-    InputSelect, Key, KeyInput, Orientation, OrientationControl, PanelHealth, PanelHealthProvider,
-    PanelHours, PanelLockControl, PowerControl, Probe, Rebootable, ScreenCastProvider,
-    SpatialAudioProvider, TextInput, VolumeControl,
+    AppLaunch, AppRef, BrightnessControl, Capability, CapabilityRegistry, CapabilitySet,
+    DeviceHandle, Input, InputSelect, Key, KeyInput, Orientation, OrientationControl, PanelHealth,
+    PanelHealthProvider, PanelHours, PanelLockControl, PowerControl, Probe, Rebootable,
+    ScreenCastProvider, SpatialAudioProvider, TextInput, VolumeControl,
 };
 #[cfg(feature = "supporting")]
 pub use capability::{FrameFormat, PanelHoursProvider, ScreenCapturer, ScreenFrame};
@@ -89,7 +89,9 @@ pub use caps::{
 };
 pub use command::{Command, CommandAck, CommandId};
 #[cfg(feature = "conformance")]
-pub use conformance::{ConformanceCase, ConformanceProvider, verify_orphaned_capabilities, Violation};
+pub use conformance::{
+    verify_orphaned_capabilities, ConformanceCase, ConformanceProvider, Violation,
+};
 pub use descriptor::{DeviceDescriptor, DeviceId, DeviceOs, DiscoveredTv, PowerState};
 pub use driver::{AnyDriver, BoxedDeviceHandle, Driver, ErasedDriver};
 pub use error::{AuthError, ProtocolError, QuirkId, Remedy, StateError, TransportError, TvError};

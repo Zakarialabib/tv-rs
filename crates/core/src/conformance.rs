@@ -124,7 +124,10 @@ fn capability_accessors(handle: &dyn DeviceHandle, violations: &mut Vec<Violatio
             handle.as_panel_health().is_some(),
         ),
         (Capability::ScreenCast, handle.as_screen_cast().is_some()),
-        (Capability::SpatialAudio, handle.as_spatial_audio().is_some()),
+        (
+            Capability::SpatialAudio,
+            handle.as_spatial_audio().is_some(),
+        ),
         #[cfg(feature = "supporting")]
         (
             Capability::LampOrPanelHours,

@@ -21,7 +21,7 @@ pub enum AppError {
     },
 
     /// A filesystem failure while reading the payload or writing the artifact.
-    #[error("io error at {path}: {source}")]
+    #[error("io error at {path:?}: {source}")]
     Io {
         /// The path involved.
         path: PathBuf,
