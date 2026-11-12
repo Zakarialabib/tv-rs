@@ -85,7 +85,7 @@ rcgen = "0.14"
 
 # --- errors / logging / cli ---
 thiserror = { version = "2", default-features = false }
-toml = "0.8"
+toml = "1.2"
 uuid = { version = "1", default-features = false }
 anyhow = "1"
 tracing = "0.1"
