@@ -3,7 +3,7 @@
 use std::time::Duration;
 use tv_rs::{mdc_handle, probe, sicp_handle, PowerState, TvVendor};
 use tv_rs_core::PowerState as CorePowerState;
-use tv_rs_sicp::{DisplayId, SicpClient, SicpInput, SicpOptions, SicpPower};
+use tv_rs_drivers::sicp::{DisplayId, SicpClient, SicpInput, SicpOptions, SicpPower};
 use tv_rs_sim::{MockMdcServer, MockSicpServer};
 
 #[tokio::test]

@@ -9,7 +9,7 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
-use tv_rs_mdc::protocol::{commands, ACK, HEADER, RESPONSE_COMMAND};
+use tv_rs_drivers::mdc::protocol::{commands, ACK, HEADER, RESPONSE_COMMAND};
 
 #[derive(Debug, Clone)]
 struct DisplayState {
@@ -214,14 +214,14 @@ impl Drop for MockMdcServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tv_rs_mdc::{DisplayId, MdcClient};
+    use tv_rs_drivers::mdc::{DisplayId, MdcClient};
 
     #[tokio::test]
     async fn mdc_server_answers_client_commands() {
         let server = MockMdcServer::start("127.0.0.1:0").await.unwrap();
         let client = MdcClient::with_options(
             server.local_addr().ip().to_string(),
-            tv_rs_mdc::MdcOptions {
+            tv_rs_drivers::mdc::MdcOptions {
                 port: server.local_addr().port(),
                 ..Default::default()
             },
@@ -230,7 +230,7 @@ mod tests {
 
         client.power_on().await.unwrap();
         let power = client.power().await.unwrap();
-        assert_eq!(power, tv_rs_mdc::MdcPower::On);
+        assert_eq!(power, tv_rs_drivers::mdc::MdcPower::On);
 
         client.set_volume(75).await.unwrap();
         let vol = client.volume().await.unwrap();

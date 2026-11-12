@@ -34,16 +34,16 @@
 
 use async_trait::async_trait;
 
-use tv_rs_cec::{CecAddress, CecClient, ClientTransport};
 use tv_rs_core::ProtocolError;
 use tv_rs_core::{
     AppLaunch, AppRef, Capability, CapabilitySet, CommandId, DeviceDescriptor, DeviceHandle,
     DeviceId, DeviceOs, Input, InputSelect, Key, KeyInput, PowerControl, PowerState,
     ScreenCastProvider, TextInput, TvError, VolumeControl,
 };
-use tv_rs_power::MacAddress;
-use tv_rs_roku::RokuKey;
-use tv_rs_tizen::TizenRemoteKey;
+use tv_rs_drivers::cec::{CecAddress, CecClient, ClientTransport};
+use tv_rs_drivers::power::MacAddress;
+use tv_rs_drivers::roku::RokuKey;
+use tv_rs_drivers::tizen::TizenRemoteKey;
 
 use crate::client::TvClient;
 use crate::dedupe;
@@ -684,12 +684,12 @@ fn host_of(address: &str) -> &str {
 ///
 /// The two enums are identical today; the conversion exists so the core owns the
 /// type and a backend can never widen it by accident.
-fn core_power_state(state: tv_rs_power::PowerState) -> PowerState {
+fn core_power_state(state: tv_rs_drivers::power::PowerState) -> PowerState {
     match state {
-        tv_rs_power::PowerState::On => PowerState::On,
-        tv_rs_power::PowerState::Standby => PowerState::Standby,
-        tv_rs_power::PowerState::Off => PowerState::Off,
-        tv_rs_power::PowerState::Unknown => PowerState::Unknown,
+        tv_rs_drivers::power::PowerState::On => PowerState::On,
+        tv_rs_drivers::power::PowerState::Standby => PowerState::Standby,
+        tv_rs_drivers::power::PowerState::Off => PowerState::Off,
+        tv_rs_drivers::power::PowerState::Unknown => PowerState::Unknown,
     }
 }
 
@@ -775,7 +775,7 @@ async fn wake_with_packet(mac: &str) -> Result<(), TvError> {
             "`{mac}` is not a hardware address"
         )))
     })?;
-    tv_rs_power::wake_on_lan(&address)
+    tv_rs_drivers::power::wake_on_lan(&address)
         .await
         .map_err(|error| map::power(&error))
 }
@@ -869,9 +869,9 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use tv_rs_roku::RokuClient;
-    use tv_rs_tizen::{DynConnectionPool, LiveChannelFactory, TizenClient};
-    use tv_rs_webos::{DynSessionPool, LiveSessionFactory, WebosClient};
+    use tv_rs_drivers::roku::RokuClient;
+    use tv_rs_drivers::tizen::{DynConnectionPool, LiveChannelFactory, TizenClient};
+    use tv_rs_drivers::webos::{DynSessionPool, LiveSessionFactory, WebosClient};
 
     fn tizen() -> TvClient {
         TvClient::Tizen {
@@ -1366,7 +1366,10 @@ mod tests {
 
         // A Tizen that rejected the pairing prompt routes to pairing-required,
         // not to the old catch-all's `Wait`.
-        let pairing = map::tizen(&tv_rs_tizen::TizenError::Unauthorized, Capability::Key);
+        let pairing = map::tizen(
+            &tv_rs_drivers::tizen::TizenError::Unauthorized,
+            Capability::Key,
+        );
         assert!(matches!(
             pairing,
             TvError::Auth(tv_rs_core::AuthError::PairingRequired)
@@ -1448,7 +1451,7 @@ mod tests {
     #[test]
     fn a_roku_permission_failure_routes_to_reprovisioning() {
         let error = map::roku(
-            &tv_rs_roku::RokuError::NotPermitted {
+            &tv_rs_drivers::roku::RokuError::NotPermitted {
                 remedy: "enable Control by mobile apps".to_string(),
             },
             Capability::Key,
@@ -1471,7 +1474,7 @@ mod tests {
     async fn twenty_key_presses_share_one_channel() {
         use std::sync::atomic::Ordering;
 
-        use tv_rs_tizen::testkit::{counters, factory};
+        use tv_rs_drivers::tizen::testkit::{counters, factory};
 
         let (opens, sent) = counters();
         let client = TvClient::Tizen {
@@ -1508,7 +1511,7 @@ mod tests {
     async fn webos_volume_reads_share_one_session() {
         use std::sync::atomic::Ordering;
 
-        use tv_rs_webos::testkit::{counters, factory};
+        use tv_rs_drivers::webos::testkit::{counters, factory};
 
         let (opens, served) = counters();
         let client = TvClient::Webos {
@@ -1542,7 +1545,7 @@ mod tests {
     #[cfg(feature = "testkit")]
     #[tokio::test]
     async fn close_all_drops_the_pooled_connection() {
-        use tv_rs_tizen::testkit::{counters, factory};
+        use tv_rs_drivers::tizen::testkit::{counters, factory};
 
         let (opens, sent) = counters();
         let client = TvClient::Tizen {

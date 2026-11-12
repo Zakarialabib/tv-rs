@@ -11,27 +11,16 @@ repository.workspace = true
 
 [dependencies]
 # Facade re-exports the protocol crates; it holds no protocol logic of its own.
+# The vendor protocols arrive through `tv-rs-drivers` feature flags: the
+# individual `tv-rs-<vendor>` crates are deprecated, unpublished shims, so a
+# published facade cannot name them as dependencies.
+
 tv-rs-core.workspace = true
 tv-rs-drivers = { workspace = true, features = ["discovery", "power", "roku", "ir", "mdc", "sicp", "tizen", "webos", "cast", "cec"] }
-tv-rs-discovery.workspace = true
-tv-rs-power.workspace = true
 tv-rs-transport.workspace = true
-tv-rs-tizen.workspace = true
-tv-rs-webos.workspace = true
-tv-rs-roku.workspace = true
-tv-rs-cast.workspace = true
-# MDC is a protocol crate like the others, but it is not reached through
-# `TvClient`: SSDP carries no authoritative vendor field, so a commercial panel
-# is never *classified* from a discovery reply. The facade re-exports it so a
-# caller that already knows (an operator adding a panel by address and display
-# id) can name its types and use its `DeviceHandle`.
-tv-rs-cec = { workspace = true, features = ["client"] }
-tv-rs-ir.workspace = true
-tv-rs-mdc.workspace = true
 tv-rs-dlna.workspace = true
 tv-rs-rag.workspace = true
 tv-rs-mirror.workspace = true
-tv-rs-sicp.workspace = true
 tv-rs-spatial-audio.workspace = true
 
 async-trait.workspace = true
@@ -60,11 +49,11 @@ conformance = ["tv-rs-core/conformance"]
 # refused connection per command.
 quirks = ["tv-rs-core/quirks"]
 
-# Test doubles from the protocol crates (`tv-rs-tizen/testkit`, `tv-rs-webos/testkit`),
-# so the facade can prove it reuses one pooled connection per TV (plan item 3.2)
+# Test doubles from `tv-rs-drivers` (`tizen::testkit`, `webos::testkit`), so the
+# facade can prove it reuses one pooled connection per TV (plan item 3.2)
 # without a television in the loop. Off by default: a released build carries no
 # test code.
-testkit = ["tv-rs-tizen/testkit", "tv-rs-webos/testkit"]
+testkit = ["tv-rs-drivers/testkit"]
 
 # The LFD surfaces that most deployments never touch (panel/lamp hours and
 # still-frame capture): the cloud agent deliberately carries no unused image

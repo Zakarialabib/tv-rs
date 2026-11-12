@@ -16,8 +16,8 @@
 use tv_rs_core::{AuthError, Capability, ProtocolError, TransportError, TvError};
 
 /// Maps a Tizen error.
-pub fn tizen(error: &tv_rs_tizen::TizenError, capability: Capability) -> TvError {
-    use tv_rs_tizen::TizenError;
+pub fn tizen(error: &tv_rs_drivers::tizen::TizenError, capability: Capability) -> TvError {
+    use tv_rs_drivers::tizen::TizenError;
 
     match error {
         TizenError::Unsupported(_) => TvError::Unsupported(capability),
@@ -45,8 +45,8 @@ pub fn tizen(error: &tv_rs_tizen::TizenError, capability: Capability) -> TvError
 }
 
 /// Maps a webOS error.
-pub fn webos(error: &tv_rs_webos::WebosError, capability: Capability) -> TvError {
-    use tv_rs_webos::WebosError;
+pub fn webos(error: &tv_rs_drivers::webos::WebosError, capability: Capability) -> TvError {
+    use tv_rs_drivers::webos::WebosError;
 
     match error {
         WebosError::Unsupported(_) => TvError::Unsupported(capability),
@@ -76,8 +76,8 @@ pub fn webos(error: &tv_rs_webos::WebosError, capability: Capability) -> TvError
 }
 
 /// Maps a Roku error.
-pub fn roku(error: &tv_rs_roku::RokuError, capability: Capability) -> TvError {
-    use tv_rs_roku::RokuError;
+pub fn roku(error: &tv_rs_drivers::roku::RokuError, capability: Capability) -> TvError {
+    use tv_rs_drivers::roku::RokuError;
 
     match error {
         RokuError::Unsupported(_) => TvError::Unsupported(capability),
@@ -97,8 +97,8 @@ pub fn roku(error: &tv_rs_roku::RokuError, capability: Capability) -> TvError {
 /// Discovery runs before there is a device, so there is no capability to name and no
 /// vendor to blame: a socket that will not open is a transport problem, and an SSDP
 /// answer nobody can parse is a protocol problem.
-pub fn discovery(error: &tv_rs_discovery::DiscoveryError) -> TvError {
-    use tv_rs_discovery::DiscoveryError;
+pub fn discovery(error: &tv_rs_drivers::discovery::DiscoveryError) -> TvError {
+    use tv_rs_drivers::discovery::DiscoveryError;
 
     match error {
         // A build-level gap, not a device condition: nothing the caller can retry
@@ -129,8 +129,8 @@ pub fn discovery(error: &tv_rs_discovery::DiscoveryError) -> TvError {
 }
 
 /// Maps a SICP error.
-pub fn sicp(error: &tv_rs_sicp::SicpError, _capability: Capability) -> TvError {
-    use tv_rs_sicp::SicpError;
+pub fn sicp(error: &tv_rs_drivers::sicp::SicpError, _capability: Capability) -> TvError {
+    use tv_rs_drivers::sicp::SicpError;
 
     match error {
         SicpError::Io(io) => TvError::Transport(TransportError::from_io(io)),
@@ -149,8 +149,8 @@ pub fn sicp(error: &tv_rs_sicp::SicpError, _capability: Capability) -> TvError {
 }
 
 /// Maps a power error.
-pub fn power(error: &tv_rs_power::PowerError) -> TvError {
-    use tv_rs_power::PowerError;
+pub fn power(error: &tv_rs_drivers::power::PowerError) -> TvError {
+    use tv_rs_drivers::power::PowerError;
 
     match error {
         // Wake is the only thing this crate does, so an unsupported path here is
@@ -181,7 +181,7 @@ mod tests {
     /// displays and left to believe it.
     #[test]
     fn a_silent_probe_asks_for_access_rather_than_reporting_no_displays() {
-        let error = tv_rs_discovery::DiscoveryError::SilentProbe {
+        let error = tv_rs_drivers::discovery::DiscoveryError::SilentProbe {
             target: "ssdp:all".to_string(),
         };
         let mapped = discovery(&error);
@@ -194,8 +194,8 @@ mod tests {
 
     #[test]
     fn every_vendor_error_routes_to_the_remedy_a_user_can_act_on() {
-        use tv_rs_tizen::TizenError;
-        use tv_rs_webos::WebosError;
+        use tv_rs_drivers::tizen::TizenError;
+        use tv_rs_drivers::webos::WebosError;
 
         let cases: Vec<(TvError, Remedy)> = vec![
             (
@@ -248,7 +248,7 @@ mod tests {
             ),
             (
                 roku(
-                    &tv_rs_roku::RokuError::NotPermitted {
+                    &tv_rs_drivers::roku::RokuError::NotPermitted {
                         remedy: "Settings → System → Control by mobile apps".into(),
                     },
                     Capability::Key,
@@ -257,14 +257,14 @@ mod tests {
             ),
             (
                 roku(
-                    &tv_rs_roku::RokuError::NotFound("no app".into()),
+                    &tv_rs_drivers::roku::RokuError::NotFound("no app".into()),
                     Capability::AppLaunch,
                 ),
                 Remedy::BackOff,
             ),
             (
                 sicp(
-                    &tv_rs_sicp::SicpError::Nak {
+                    &tv_rs_drivers::sicp::SicpError::Nak {
                         command: 0x18,
                         code: 0x01,
                     },
@@ -273,15 +273,17 @@ mod tests {
                 Remedy::BackOff,
             ),
             (
-                power(&tv_rs_power::PowerError::Unsupported(unsupported())),
+                power(&tv_rs_drivers::power::PowerError::Unsupported(unsupported())),
                 Remedy::Disable,
             ),
             (
-                power(&tv_rs_power::PowerError::InvalidMacAddress("zz".into())),
+                power(&tv_rs_drivers::power::PowerError::InvalidMacAddress(
+                    "zz".into(),
+                )),
                 Remedy::BackOff,
             ),
             (
-                discovery(&tv_rs_discovery::DiscoveryError::Malformed(
+                discovery(&tv_rs_drivers::discovery::DiscoveryError::Malformed(
                     "truncated".into(),
                 )),
                 Remedy::BackOff,
@@ -307,7 +309,7 @@ mod tests {
         // "Wake" for a television that was awake and waiting to be paired.
         for presented_key in [true, false] {
             let mapped = webos(
-                &tv_rs_webos::WebosError::RegistrationFailed {
+                &tv_rs_drivers::webos::WebosError::RegistrationFailed {
                     detail: "registration refused".into(),
                     presented_key,
                 },
@@ -327,14 +329,14 @@ mod tests {
     #[test]
     fn a_revoked_key_is_distinguishable_from_a_declined_prompt() {
         let declined = webos(
-            &tv_rs_webos::WebosError::RegistrationFailed {
+            &tv_rs_drivers::webos::WebosError::RegistrationFailed {
                 detail: "declined".into(),
                 presented_key: false,
             },
             Capability::Key,
         );
         let revoked = webos(
-            &tv_rs_webos::WebosError::RegistrationFailed {
+            &tv_rs_drivers::webos::WebosError::RegistrationFailed {
                 detail: "revoked".into(),
                 presented_key: true,
             },
@@ -353,7 +355,7 @@ mod tests {
     #[test]
     fn an_unsupported_capability_arrives_named() {
         let mapped = tizen(
-            &tv_rs_tizen::TizenError::Unsupported(unsupported()),
+            &tv_rs_drivers::tizen::TizenError::Unsupported(unsupported()),
             Capability::ScreenCast,
         );
         assert!(matches!(

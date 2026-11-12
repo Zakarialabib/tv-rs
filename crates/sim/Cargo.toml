@@ -15,8 +15,7 @@ futures-util.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
-tv-rs-mdc.workspace = true
-tv-rs-sicp.workspace = true
+tv-rs-drivers = { workspace = true, features = ["mdc", "sicp"] }
 tracing.workspace = true
 rcgen.workspace = true
 rustls.workspace = true

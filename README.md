@@ -256,24 +256,24 @@ resolves, not a target chosen for reach).
 
 ## Publishing
 
-Twenty-eight crates go out in topological dependency order because `cargo publish` is not atomic — a
+Nineteen crates go out in topological dependency order because `cargo publish` is not atomic — a
 partial release burns the version:
 
 ```
-tv-rs-core → tv-rs-transport → tv-rs-discovery → tv-rs-power → tv-rs-local
-  → tv-rs-dlna → tv-rs-cast → tv-rs-roku → tv-rs-mdc → tv-rs-sicp
-  → tv-rs-lgcmd → tv-rs-sim → tv-rs-tizen → tv-rs-webos → tv-rs-app
-  → tv-rs-cec → tv-rs-ir → tv-rs-mirror → tv-rs-spatial-audio → tv-rs-vision
-  → tv-rs-rules → tv-rs-rag → tv-rs-provision → tv-rs-companion → tv-rs
-  → tv-rs-media → tv-rs-agent → tv-rs-bluetooth
+tv-rs-core → tv-rs-transport → tv-rs-drivers → tv-rs-local
+  → tv-rs-dlna → tv-rs-lgcmd → tv-rs-sim → tv-rs-app → tv-rs-mirror
+  → tv-rs-spatial-audio → tv-rs-vision → tv-rs-rules → tv-rs-rag
+  → tv-rs-provision → tv-rs-companion → tv-rs → tv-rs-media
+  → tv-rs-agent → tv-rs-bluetooth
 ```
 
 `core` leads because every backend depends on its vocabulary; `local`, `media`,
-`agent` and `cec` are independent leaves. The list lives in `xtask/src/main.rs` so
-`cargo` can check that every name still exists.
+`agent` and `dlna` are independent leaves. The list lives in `xtask/src/main.rs` so
+`cargo` can check that every name still exists. The deprecated `tv-rs-<vendor>` crates
+are workspace-only shims and are never published.
 
 ```bash
-cargo xtask publish --dry-run              # verify all fourteen, upload nothing
+cargo xtask publish --dry-run              # verify all nineteen, upload nothing
 cargo xtask publish --yes                  # real publish, token from $CRATES_IO_TOKEN
 cargo xtask publish --version 0.3.0 --yes  # bump every pin, then publish in order
 ```

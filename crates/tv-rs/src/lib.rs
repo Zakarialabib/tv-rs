@@ -56,7 +56,7 @@ pub use client::{
 };
 pub use error::{Result, TvError};
 pub use tv_rs_core::observe::{ObservationError, ObservationStream, TvEvent};
-pub use tv_rs_discovery::{
+pub use tv_rs_drivers::discovery::{
     CompositeDiscoverySource, DiscoverySource, LgDiscoverySource, RokuDiscoverySource,
     SamsungDiscoverySource, SsdpDiscoverySource, WolDiscoverySource,
 };
@@ -71,32 +71,32 @@ pub use types::{DiscoveredTv, TvVendor};
 /// variant is a compile error here until someone names its remedy.
 pub mod map;
 
-/// Google Cast client and DIAL fallback: [`cast::dial::DialClient`].
-pub use tv_rs_cast as cast;
-pub use tv_rs_cec as cec;
 pub use tv_rs_core as core;
-pub use tv_rs_discovery as discovery;
 pub use tv_rs_drivers as drivers;
-pub use tv_rs_ir as ir;
+/// Google Cast client and DIAL fallback: [`cast::dial::DialClient`].
+pub use tv_rs_drivers::cast;
+pub use tv_rs_drivers::cec;
+pub use tv_rs_drivers::discovery;
+pub use tv_rs_drivers::ir;
 /// Samsung MDC commercial display protocol client: [`mdc::MdcClient`].
-pub use tv_rs_mdc as mdc;
+pub use tv_rs_drivers::mdc;
+/// Wake-on-LAN and power-state probing: [`power::WolSender`].
+pub use tv_rs_drivers::power;
+pub use tv_rs_drivers::power::PowerState;
+pub use tv_rs_drivers::roku;
+/// Philips SICP commercial display protocol client: [`sicp::SicpClient`].
+pub use tv_rs_drivers::sicp;
+/// Samsung Tizen remote channel and DIAL: [`tizen::TizenClient`].
+pub use tv_rs_drivers::tizen;
+/// LG webOS SSAP WebSocket client: [`webos::WebosClient`].
+pub use tv_rs_drivers::webos;
 /// Screen mirroring session vocabulary and wire framing: [`mirror::MirrorStart`], [`mirror::StreamPacket`].
 pub use tv_rs_mirror as mirror;
-/// Wake-on-LAN and power-state probing: [`power::WolSender`].
-pub use tv_rs_power as power;
-pub use tv_rs_power::PowerState;
 /// In-memory RAG grounding: vendor-quirks corpus, episodic remediation ledger and
 /// rule-grammar templates for the agent's healer and the rules compiler:
 /// [`rag::HybridRetriever`].
 pub use tv_rs_rag as rag;
-pub use tv_rs_roku as roku;
-/// Philips SICP commercial display protocol client: [`sicp::SicpClient`].
-pub use tv_rs_sicp as sicp;
 /// Spatial audio routing and sound dome / speaker sink management: [`spatial_audio::SpatialAudioRouter`].
 pub use tv_rs_spatial_audio as spatial_audio;
-/// Samsung Tizen remote channel and DIAL: [`tizen::TizenClient`].
-pub use tv_rs_tizen as tizen;
 /// TLS policy and pinning, shared by every vendor channel: [`transport::TlsPolicy`].
 pub use tv_rs_transport as transport;
-/// LG webOS SSAP WebSocket client: [`webos::WebosClient`].
-pub use tv_rs_webos as webos;

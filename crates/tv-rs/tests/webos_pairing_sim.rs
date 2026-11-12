@@ -10,8 +10,8 @@
 use std::time::Duration;
 
 use serde_json::json;
+use tv_rs_drivers::webos::{SsapUri, WebosClient, WebosError};
 use tv_rs_sim::{MockWebOsServer, PromptAcceptance};
-use tv_rs_webos::{SsapUri, WebosClient, WebosError};
 
 async fn start_mock() -> (MockWebOsServer, String, u16) {
     let server = MockWebOsServer::start("127.0.0.1:0")

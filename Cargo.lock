@@ -2888,24 +2888,14 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-tungstenite",
- "tv-rs-cast",
- "tv-rs-cec",
  "tv-rs-core",
- "tv-rs-discovery",
  "tv-rs-dlna",
  "tv-rs-drivers",
- "tv-rs-ir",
- "tv-rs-mdc",
  "tv-rs-mirror",
- "tv-rs-power",
  "tv-rs-rag",
- "tv-rs-roku",
- "tv-rs-sicp",
  "tv-rs-sim",
  "tv-rs-spatial-audio",
- "tv-rs-tizen",
  "tv-rs-transport",
- "tv-rs-webos",
 ]
 
 [[package]]
@@ -3217,8 +3207,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-tungstenite",
  "tracing",
- "tv-rs-mdc",
- "tv-rs-sicp",
+ "tv-rs-drivers",
  "tv-rs-transport",
 ]
 

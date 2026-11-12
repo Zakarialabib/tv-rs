@@ -217,19 +217,19 @@ The order lives in one place, `xtask/src/main.rs::ORDER`, so it cannot drift fro
 manifests:
 
 ```
-tv-rs-core → tv-rs-transport → tv-rs-discovery → tv-rs-power → tv-rs-local
-  → tv-rs-dlna → tv-rs-cast → tv-rs-roku → tv-rs-mdc → tv-rs-sicp → tv-rs-lgcmd
-  → tv-rs-sim → tv-rs-tizen → tv-rs-webos → tv-rs-app → tv-rs-cec → tv-rs-ir
-  → tv-rs-mirror → tv-rs-spatial-audio → tv-rs-vision → tv-rs-rules → tv-rs-rag
-  → tv-rs-provision → tv-rs-companion
-
-  → tv-rs → tv-rs-media → tv-rs-agent
-  → tv-rs-bluetooth
+tv-rs-core → tv-rs-transport → tv-rs-drivers → tv-rs-local
+  → tv-rs-dlna → tv-rs-lgcmd → tv-rs-sim → tv-rs-app → tv-rs-mirror
+  → tv-rs-spatial-audio → tv-rs-vision → tv-rs-rules → tv-rs-rag
+  → tv-rs-provision → tv-rs-companion → tv-rs → tv-rs-media
+  → tv-rs-agent → tv-rs-bluetooth
 ```
 
 `tv-rs-core` leads because every backend and the facade depend on its vocabulary;
 `tv-rs-transport` follows for the crates that open a TLS channel. `tv-rs-local`,
-`tv-rs-dlna`, `tv-rs-media`, `tv-rs-agent` and `tv-rs-cec` are independent leaves, and
-the facade (`tv-rs`) comes after the protocol crates it names. `tv-rs-app` is likewise a
-leaf. The full rules and the pre-release checklist are
+`tv-rs-dlna`, `tv-rs-media` and `tv-rs-agent` are independent leaves, and the facade
+(`tv-rs`) comes after the protocol crates it names. `tv-rs-app` is likewise a leaf.
+The ten `tv-rs-<vendor>` crates (`tizen`, `webos`, `roku`, `cast`, `cec`, `discovery`,
+`mdc`, `sicp`, `ir`, `power`) are deprecated, **unpublished** shims: their code lives in
+`tv-rs-drivers`, so nothing published may name them as a dependency. The full rules and
+the pre-release checklist are
 [05-rust-package-standard §Publishing](05-rust-package-standard.md).

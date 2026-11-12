@@ -85,7 +85,7 @@ async fn roku_device_info_roundtrip() {
         return;
     };
 
-    let client = tv_rs_roku::RokuClient::new(&host);
+    let client = tv_rs_drivers::roku::RokuClient::new(&host);
     let info = match client.query_device_info().await {
         Ok(info) => info,
         Err(error) => {
@@ -112,8 +112,8 @@ async fn roku_keypress_is_accepted() {
     };
 
     // `Home` is harmless: it only returns to the Roku home screen.
-    match tv_rs_roku::RokuClient::new(&host)
-        .send_keypress(tv_rs_roku::RokuKey::Home)
+    match tv_rs_drivers::roku::RokuClient::new(&host)
+        .send_keypress(tv_rs_drivers::roku::RokuKey::Home)
         .await
     {
         Ok(()) => println!("roku: Home keypress accepted by {host}"),
@@ -131,8 +131,8 @@ async fn tizen_channel_connects() {
         return;
     };
 
-    let client = tv_rs_tizen::TizenClient::new(&host);
-    match tv_rs_tizen::TizenSession::connect(&client).await {
+    let client = tv_rs_drivers::tizen::TizenClient::new(&host);
+    match tv_rs_drivers::tizen::TizenSession::connect(&client).await {
         Ok(session) => println!(
             "tizen: channel connected to {host}, token captured={}",
             session.token().is_some()
@@ -148,7 +148,7 @@ async fn webos_pairing_issues_client_key() {
         return;
     };
 
-    let client = tv_rs_webos::WebosClient::new(&host).with_device_name("tv-rs-hil");
+    let client = tv_rs_drivers::webos::WebosClient::new(&host).with_device_name("tv-rs-hil");
     match client.connect().await {
         Ok(session) => {
             println!(
@@ -157,7 +157,7 @@ async fn webos_pairing_issues_client_key() {
             );
             if let Some(key) = session.client_key() {
                 let path = format!("webos-client-key-{host}.json");
-                if let Err(error) = tv_rs_webos::save_client_key(&path, key).await {
+                if let Err(error) = tv_rs_drivers::webos::save_client_key(&path, key).await {
                     eprintln!("warning: could not persist client-key to {path}: {error}");
                 }
             }
@@ -176,7 +176,7 @@ async fn wake_on_lan_then_probe() {
         return;
     };
 
-    let mac: tv_rs_power::MacAddress = match mac.parse() {
+    let mac: tv_rs_drivers::power::MacAddress = match mac.parse() {
         Ok(mac) => mac,
         Err(error) => {
             eprintln!("skip: TV_RS_HIL_MAC is not a MAC address: {error}");
@@ -184,7 +184,7 @@ async fn wake_on_lan_then_probe() {
         }
     };
 
-    let sender = match tv_rs_power::WolSender::new() {
+    let sender = match tv_rs_drivers::power::WolSender::new() {
         Ok(sender) => sender,
         Err(error) => {
             eprintln!("skip: cannot open a WoL socket: {error}");
@@ -206,7 +206,7 @@ async fn wake_on_lan_then_probe() {
     // Give the TV a moment to bring the application services up.
     tokio::time::sleep(Duration::from_secs(5)).await;
 
-    match tv_rs_power::poll_power_state(&addr).await {
+    match tv_rs_drivers::power::poll_power_state(&addr).await {
         Ok(state) => println!("wol: state after wake at {addr} = {state:?}"),
         Err(error) => eprintln!("skip: probe against {addr} failed: {error}"),
     }

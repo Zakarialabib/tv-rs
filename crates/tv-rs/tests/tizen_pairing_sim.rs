@@ -8,13 +8,13 @@
 //! proves the `TrustOnFirstUse` path against the mock's self-signed
 //! certificate — the modern channel's own trust model.
 //!
-//! These tests drive the **real** `tv_rs_tizen` client over real sockets; the
+//! These tests drive the **real** `tv_rs_drivers::tizen` client over real sockets; the
 //! only simulated part is the television, in `crates/sim/src/tizen_server.rs`.
 
 use std::time::Duration;
 
+use tv_rs_drivers::tizen::{TizenClient, TizenError, TizenRemoteKey, TizenSession};
 use tv_rs_sim::MockTizenServer;
-use tv_rs_tizen::{TizenClient, TizenError, TizenRemoteKey, TizenSession};
 use tv_rs_transport::{cert_sink, CertFingerprint, TlsPolicy};
 
 /// A client pointed at the mock's plain-WS port.

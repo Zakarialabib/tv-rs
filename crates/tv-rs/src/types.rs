@@ -7,11 +7,11 @@ use crate::client::TvClient;
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use tv_rs_core::DeviceId;
-use tv_rs_discovery::{SsdpDeviceDescriptor, SsdpMsearchResponse};
-use tv_rs_roku::ROKU_ECP_PORT;
-use tv_rs_sicp::SICP_TCP_PORT;
-use tv_rs_tizen::TIZEN_WS_PORT;
-use tv_rs_webos::WEBOS_WS_PORT;
+use tv_rs_drivers::discovery::{SsdpDeviceDescriptor, SsdpMsearchResponse};
+use tv_rs_drivers::roku::ROKU_ECP_PORT;
+use tv_rs_drivers::sicp::SICP_TCP_PORT;
+use tv_rs_drivers::tizen::TIZEN_WS_PORT;
+use tv_rs_drivers::webos::WEBOS_WS_PORT;
 
 /// The television platform a discovered device runs.
 ///

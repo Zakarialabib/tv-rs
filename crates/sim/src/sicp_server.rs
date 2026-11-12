@@ -9,7 +9,7 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
-use tv_rs_sicp::protocol::{commands, control_types};
+use tv_rs_drivers::sicp::protocol::{commands, control_types};
 
 #[derive(Debug, Clone)]
 struct DisplayState {
@@ -171,14 +171,14 @@ impl Drop for MockSicpServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tv_rs_sicp::{DisplayId, SicpClient, SicpInput, SicpPower};
+    use tv_rs_drivers::sicp::{DisplayId, SicpClient, SicpInput, SicpPower};
 
     #[tokio::test]
     async fn sicp_server_answers_client_commands() {
         let server = MockSicpServer::start("127.0.0.1:0").await.unwrap();
         let client = SicpClient::with_options(
             server.local_addr().ip().to_string(),
-            tv_rs_sicp::SicpOptions {
+            tv_rs_drivers::sicp::SicpOptions {
                 port: server.local_addr().port(),
                 ..Default::default()
             },

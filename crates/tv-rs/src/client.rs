@@ -11,18 +11,20 @@ use std::sync::Arc;
 use crate::error::{Result, TvError};
 use crate::map;
 use crate::types::{DiscoveredTv, TvVendor};
-use tv_rs_cast::dial::DialClient;
-use tv_rs_cec::{CecAddress, CecClient, ClientTransport};
 use tv_rs_core::ProvisioningBundleV1;
 use tv_rs_core::{Capability, DeviceDescriptor, DeviceHandle, DeviceId, DeviceOs, ObservedField};
-use tv_rs_discovery::{DiscoverySource, SsdpDeviceDescriptor, SsdpMsearchResponse, SsdpScanner};
-use tv_rs_mdc::{MdcClient, MdcDevice};
-use tv_rs_power::PowerState;
-use tv_rs_roku::{RokuClient, RokuPowerMode};
-use tv_rs_sicp::{SicpClient, SicpDevice};
-use tv_rs_tizen::{DynConnectionPool, LiveChannelFactory, TizenClient, TizenRemoteKey};
+use tv_rs_drivers::cast::dial::DialClient;
+use tv_rs_drivers::cec::{CecAddress, CecClient, ClientTransport};
+use tv_rs_drivers::discovery::{
+    DiscoverySource, SsdpDeviceDescriptor, SsdpMsearchResponse, SsdpScanner,
+};
+use tv_rs_drivers::mdc::{MdcClient, MdcDevice};
+use tv_rs_drivers::power::PowerState;
+use tv_rs_drivers::roku::{RokuClient, RokuPowerMode};
+use tv_rs_drivers::sicp::{SicpClient, SicpDevice};
+use tv_rs_drivers::tizen::{DynConnectionPool, LiveChannelFactory, TizenClient, TizenRemoteKey};
+use tv_rs_drivers::webos::{DynSessionPool, LiveSessionFactory, WebosClient};
 use tv_rs_transport::TlsPolicy;
-use tv_rs_webos::{DynSessionPool, LiveSessionFactory, WebosClient};
 
 /// Classify a discovered device by its SSDP reply and UPnP descriptor.
 ///
@@ -133,7 +135,7 @@ pub async fn discover_from_sources(source: &dyn DiscoverySource) -> Result<Vec<D
     let mut tvs = Vec::new();
     for dev in devices {
         let vendor = match dev.kind {
-            tv_rs_discovery::types::DiscoveredDeviceKind::TvBrand(ref name) => {
+            tv_rs_drivers::discovery::types::DiscoveredDeviceKind::TvBrand(ref name) => {
                 let n = name.to_ascii_lowercase();
                 if n.contains("samsung") || n.contains("tizen") {
                     TvVendor::Samsung
@@ -147,7 +149,7 @@ pub async fn discover_from_sources(source: &dyn DiscoverySource) -> Result<Vec<D
                     TvVendor::Unknown
                 }
             }
-            tv_rs_discovery::types::DiscoveredDeviceKind::CommercialPanel(ref name) => {
+            tv_rs_drivers::discovery::types::DiscoveredDeviceKind::CommercialPanel(ref name) => {
                 let n = name.to_ascii_lowercase();
                 if n.contains("sicp") || n.contains("philips") {
                     TvVendor::Philips
@@ -157,7 +159,9 @@ pub async fn discover_from_sources(source: &dyn DiscoverySource) -> Result<Vec<D
                     TvVendor::Unknown
                 }
             }
-            tv_rs_discovery::types::DiscoveredDeviceKind::ChromecastLike(_) => TvVendor::GoogleCast,
+            tv_rs_drivers::discovery::types::DiscoveredDeviceKind::ChromecastLike(_) => {
+                TvVendor::GoogleCast
+            }
             _ => TvVendor::Unknown,
         };
 
@@ -243,7 +247,7 @@ pub async fn probe(address: &str) -> Option<DiscoveredTv> {
     let sicp_client = if let Some(port) = sicp_port {
         SicpClient::with_options(
             sicp_host,
-            tv_rs_sicp::SicpOptions {
+            tv_rs_drivers::sicp::SicpOptions {
                 port,
                 ..Default::default()
             },
@@ -266,8 +270,8 @@ pub async fn probe(address: &str) -> Option<DiscoveredTv> {
     // G10e models a panel as a separate erased handle, not a vendor — so naming it
     // would mean inventing a variant this crate does not have.
     if matches!(
-        tv_rs_power::poll_power_state(&format!("{address}:3000")).await,
-        Ok(tv_rs_power::PowerState::On)
+        tv_rs_drivers::power::poll_power_state(&format!("{address}:3000")).await,
+        Ok(tv_rs_drivers::power::PowerState::On)
     ) {
         return Some(DiscoveredTv::probed(TvVendor::Lg, address));
     }
@@ -452,7 +456,7 @@ impl TvClient {
                 let client = if let Some(port) = port {
                     SicpClient::with_options(
                         host,
-                        tv_rs_sicp::SicpOptions {
+                        tv_rs_drivers::sicp::SicpOptions {
                             port,
                             ..Default::default()
                         },
@@ -920,7 +924,7 @@ impl TvClient {
             Self::Tizen { client, .. } => {
                 let probe = format!("{}:{}", client.host(), client.port());
                 Ok(ObservedField::from_inference(
-                    tv_rs_power::poll_power_state(&probe)
+                    tv_rs_drivers::power::poll_power_state(&probe)
                         .await
                         .map_err(|error| map::power(&error))?,
                 ))
@@ -928,16 +932,16 @@ impl TvClient {
             Self::Webos { client, .. } => {
                 let probe = format!("{}:{}", client.host(), client.port());
                 Ok(ObservedField::from_inference(
-                    tv_rs_power::poll_power_state(&probe)
+                    tv_rs_drivers::power::poll_power_state(&probe)
                         .await
                         .map_err(|error| map::power(&error))?,
                 ))
             }
             Self::Philips { client, .. } => {
                 let state = match client.power().await {
-                    Ok(tv_rs_sicp::SicpPower::On) => PowerState::On,
-                    Ok(tv_rs_sicp::SicpPower::Off) => PowerState::Off,
-                    Ok(tv_rs_sicp::SicpPower::Standby) => PowerState::Standby,
+                    Ok(tv_rs_drivers::sicp::SicpPower::On) => PowerState::On,
+                    Ok(tv_rs_drivers::sicp::SicpPower::Off) => PowerState::Off,
+                    Ok(tv_rs_drivers::sicp::SicpPower::Standby) => PowerState::Standby,
                     Err(_) => PowerState::Unknown,
                 };
                 Ok(ObservedField::from_read(state))
@@ -945,7 +949,7 @@ impl TvClient {
             Self::GoogleCast { address, .. } => {
                 let probe = format!("{}:8009", address);
                 Ok(ObservedField::from_inference(
-                    tv_rs_power::poll_power_state(&probe)
+                    tv_rs_drivers::power::poll_power_state(&probe)
                         .await
                         .map_err(|error| map::power(&error))?,
                 ))
@@ -1082,7 +1086,7 @@ pub fn mdc_handle(address: impl Into<String>) -> Result<Box<dyn DeviceHandle>> {
     let client = if let Some(port) = port {
         MdcClient::with_options(
             host,
-            tv_rs_mdc::MdcOptions {
+            tv_rs_drivers::mdc::MdcOptions {
                 port,
                 ..Default::default()
             },
@@ -1124,7 +1128,7 @@ pub fn sicp_handle(address: impl Into<String>) -> Result<Box<dyn DeviceHandle>> 
     let client = if let Some(port) = port {
         SicpClient::with_options(
             host,
-            tv_rs_sicp::SicpOptions {
+            tv_rs_drivers::sicp::SicpOptions {
                 port,
                 ..Default::default()
             },
@@ -1490,8 +1494,8 @@ mod tests {
     #[tokio::test]
     async fn discover_from_sources_maps_discovered_devices_to_clients() {
         use std::net::Ipv4Addr;
-        use tv_rs_discovery::types::DiscoveredDeviceKind;
-        use tv_rs_discovery::{
+        use tv_rs_drivers::discovery::types::DiscoveredDeviceKind;
+        use tv_rs_drivers::discovery::{
             CompositeDiscoverySource, DeviceFingerprint, DiscoveredDevice, DiscoveryMethod,
             DiscoverySource,
         };
@@ -1507,7 +1511,7 @@ mod tests {
             fn method(&self) -> DiscoveryMethod {
                 DiscoveryMethod::LocalHttp
             }
-            async fn discover(&self) -> tv_rs_discovery::Result<Vec<DiscoveredDevice>> {
+            async fn discover(&self) -> tv_rs_drivers::discovery::Result<Vec<DiscoveredDevice>> {
                 Ok(vec![
                     DiscoveredDevice {
                         id: "samsung-mock".to_string(),
@@ -1587,8 +1591,8 @@ fn map_roku_power(mode: RokuPowerMode) -> PowerState {
 #[cfg(test)]
 mod power_state_tests {
     use super::map_roku_power;
-    use tv_rs_power::PowerState;
-    use tv_rs_roku::RokuPowerMode;
+    use tv_rs_drivers::power::PowerState;
+    use tv_rs_drivers::roku::RokuPowerMode;
 
     #[test]
     fn power_on_is_on() {
@@ -1628,7 +1632,7 @@ mod session_reuse_tests {
     use async_trait::async_trait;
 
     use super::*;
-    use tv_rs_tizen::{TizenChannel, TizenChannelFactory};
+    use tv_rs_drivers::tizen::{TizenChannel, TizenChannelFactory};
 
     /// A channel that records every frame it is asked to send.
     struct CountingChannel {
@@ -1637,12 +1641,12 @@ mod session_reuse_tests {
 
     #[async_trait]
     impl TizenChannel for CountingChannel {
-        async fn send_key(&mut self, _key: TizenRemoteKey) -> tv_rs_tizen::Result<()> {
+        async fn send_key(&mut self, _key: TizenRemoteKey) -> tv_rs_drivers::tizen::Result<()> {
             self.sent.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
 
-        async fn send_raw(&mut self, _raw: &str) -> tv_rs_tizen::Result<()> {
+        async fn send_raw(&mut self, _raw: &str) -> tv_rs_drivers::tizen::Result<()> {
             self.sent.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
@@ -1656,7 +1660,10 @@ mod session_reuse_tests {
 
     #[async_trait]
     impl TizenChannelFactory for CountingChannelFactory {
-        async fn open(&self, _client: &TizenClient) -> tv_rs_tizen::Result<Box<dyn TizenChannel>> {
+        async fn open(
+            &self,
+            _client: &TizenClient,
+        ) -> tv_rs_drivers::tizen::Result<Box<dyn TizenChannel>> {
             self.opens.fetch_add(1, Ordering::SeqCst);
             Ok(Box::new(CountingChannel {
                 sent: self.sent.clone(),
@@ -1708,7 +1715,7 @@ mod session_reuse_tests {
     #[cfg(feature = "testkit")]
     #[tokio::test]
     async fn webos_convenience_calls_share_one_pooled_session() {
-        use tv_rs_webos::testkit::{counters, factory};
+        use tv_rs_drivers::webos::testkit::{counters, factory};
 
         let (opens, served) = counters();
         let client = TvClient::Webos {
