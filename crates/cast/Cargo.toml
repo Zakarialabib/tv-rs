@@ -13,7 +13,7 @@ tv-rs-drivers = { workspace = true, features = ["cast"] }
 
 [dev-dependencies]
 bytes = "1"
-prost = "0.13"
+prost = "0.14"
 rcgen = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
