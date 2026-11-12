@@ -6,7 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-keywords = ["smart-tv", "driver", "tizen", "webos", "roku", "mdc", "sicp"]
+keywords = ["smart-tv", "driver", "tizen", "webos", "roku"]
 categories = ["api-bindings", "hardware-support"]
 
 [features]
