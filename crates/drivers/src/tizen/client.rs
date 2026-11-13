@@ -463,8 +463,8 @@ impl TizenClient {
     /// Uses `port` and **only** `port`.
     ///
     /// The port ladder exists because the generation of a panel is not known until
-    /// something answers. When the caller already knows â€” the quirks table says
-    /// `T-KTM` firmware does not listen on 8001 â€” trying the other port is a
+    /// something answers. When the caller already knows — the quirks table says
+    /// `T-KTM` firmware does not listen on 8001 — trying the other port is a
     /// guaranteed timeout per command, so this removes it from the ladder instead of
     /// relying on the failure being fast.
     #[must_use]
@@ -490,7 +490,7 @@ impl TizenClient {
     /// Sets the TLS certificate-validation policy.
     ///
     /// Use [`TlsPolicy::AcceptInvalid`] only as an interim escape hatch for the
-    /// `docs/02-playbook.md` Â§10 TLS-certificate-pinning gap; it is unsafe for production.
+    /// `docs/02-playbook.md` §10 TLS-certificate-pinning gap; it is unsafe for production.
     pub fn with_tls_policy(mut self, tls: TlsPolicy) -> Self {
         self.tls = tls;
         self
@@ -506,8 +506,8 @@ impl TizenClient {
     ///
     /// This is [`with_device_name`](Self::with_device_name) under the name the
     /// provisioning vocabulary uses, deliberately. On Tizen the identity a set
-    /// sees is the client-supplied remote name â€” base64'd into the channel
-    /// URL's `?name=` parameter and echoed back in the connect response â€” so
+    /// sees is the client-supplied remote name — base64'd into the channel
+    /// URL's `?name=` parameter and echoed back in the connect response — so
     /// the remote's *name* is the remote's *identity*. A mobile instalment
     /// re-pairing with a token that was issued to a desktop one must present
     /// the same identity, or the TV sees an unfamiliar remote holding a
@@ -579,10 +579,10 @@ impl TizenClient {
 
     /// Reads the set's device information, before any pairing.
     ///
-    /// `GET http://<ip>:8001/api/v2/` needs no token and no auth header â€” it is
+    /// `GET http://<ip>:8001/api/v2/` needs no token and no auth header — it is
     /// readable before the remote channel is ever opened, which is what makes it the
     /// one place a Samsung set will tell you its hardware address. The playbook
-    /// records the field, its traps and the five captures behind it (Â§3).
+    /// records the field, its traps and the five captures behind it (§3).
     ///
     /// # Errors
     ///
@@ -600,14 +600,14 @@ impl TizenClient {
 
     /// Reads one installed application's status.
     ///
-    /// `GET /api/v2/applications/{app_id}` â€” **no pairing and no token**, like
+    /// `GET /api/v2/applications/{app_id}` — **no pairing and no token**, like
     /// [`Self::device_info`]. The id is the same one a launch takes, so the presets
     /// in [`crate::tizen::apps`] and the ids in the DIAL manifest both work here.
     ///
     /// The foreground marker is `visible`, not `running`. `running` is a superset that
     /// includes background system apps, so a caller keying on it alone reports a
     /// background app as the one on screen. `visible` can also be absent on some
-    /// firmware, and absence means "this panel does not tell me" â€” not `false`.
+    /// firmware, and absence means "this panel does not tell me" — not `false`.
     ///
     /// # Errors
     ///
@@ -640,7 +640,7 @@ impl TizenClient {
     ///
     /// `POST http://host:8080/ws/apps/{app_id}`. This is DIAL's *launch*, not
     /// "load this URL": the body is an opaque payload a player app may read as a
-    /// deep link, and most ignore it. Kept separate from `open_url` on purpose â€” a
+    /// deep link, and most ignore it. Kept separate from `open_url` on purpose — a
     /// set with no browser has no browser, and making `open_url` mean "launch an
     /// app" on one vendor is the quiet divergence the capability table exists to
     /// prevent.
@@ -1070,8 +1070,8 @@ mod tests {
         assert!(rendered.contains("<redacted>"), "{rendered}");
     }
     /// The text frame's shape is what the playbook records: base64 in `Cmd`, the
-    /// literal `base64` in `DataOfCmd`, `SendInputString` in `TypeOfRemote`, and â€” the
-    /// detail that makes this its own type â€” **no `Option` field**.
+    /// literal `base64` in `DataOfCmd`, `SendInputString` in `TypeOfRemote`, and — the
+    /// detail that makes this its own type — **no `Option` field**.
     #[test]
     fn the_text_frame_is_the_documented_shape() {
         let payload = build_text_command_payload("hello").expect("non-empty");
@@ -1090,7 +1090,7 @@ mod tests {
         );
     }
 
-    /// UTF-8 is encoded as bytes, so a non-ASCII string survives the round trip â€”
+    /// UTF-8 is encoded as bytes, so a non-ASCII string survives the round trip —
     /// the set decides whether it can display it, not this client.
     #[test]
     fn non_ascii_text_is_encoded_as_its_utf8_bytes() {

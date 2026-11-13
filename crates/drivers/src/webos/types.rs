@@ -60,9 +60,9 @@ pub enum SsapUri {
     SystemLauncherForegroundApp,
     /// Type text into the television's focused field, through the IME service.
     ///
-    /// The text is plain UTF-8 â€” Samsung base64s its equivalent, webOS does not â€” and
+    /// The text is plain UTF-8 — Samsung base64s its equivalent, webOS does not — and
     /// the service answers `{"returnValue": true}`. Recorded with its sources in
-    /// `docs/02-playbook.md` Â§4.
+    /// `docs/02-playbook.md` §4.
     ImeInsertText,
     /// Close the IME input session, as the remote's Enter key does.
     ImeSendEnterKey,

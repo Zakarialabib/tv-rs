@@ -12,7 +12,7 @@
 //! - **Saved Device Registry** (`DeviceRegistry`)
 //!
 //! # Device Fingerprinting
-//! The [`DeviceFingerprint`] combines signatures (MAC pattern, mDNS hostname, SSDP server string,
+//! The [`crate::discovery::fingerprint::DeviceFingerprint`] combines signatures (MAC pattern, mDNS hostname, SSDP server string,
 //! open ports, HDMI-CEC vendor ID, Bluetooth advertising name, ADB model string) to identify:
 //! - Smart TV brands (Samsung Tizen, LG webOS, Sony Bravia, Roku TV)
 //! - Android TV boxes

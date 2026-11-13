@@ -10,7 +10,7 @@ use crate::tizen::error::Result;
 ///
 /// Enterprise / commercial panels instead require the token derived by the
 /// reverse-engineered "token generation math" (TV MAC + hardcoded secret salt)
-/// described in `docs/02-playbook.md` Â§10 (the "Token derivation" and "Encrypted
+/// described in `docs/02-playbook.md` §10 (the "Token derivation" and "Encrypted
 /// payload framing" gaps), and 2024+ firmware additionally encrypts WebSocket
 /// framing with AES-GCM. Both are Phase 3 work, so the default implementation below
 /// returns [`crate::tizen::TizenError::Unsupported`] rather than panicking; callers can fall
@@ -19,13 +19,13 @@ pub trait TizenAuthProvider {
     /// Returns a device token for the remote channel.
     ///
     /// The default returns [`crate::tizen::TizenError::Unsupported`] because the required token
-    /// math is blocked on `docs/02-playbook.md` Â§10 (enterprise token derivation and
+    /// math is blocked on `docs/02-playbook.md` §10 (enterprise token derivation and
     /// AES-GCM encrypted framing). Override once that reverse-engineering output is
     /// available. This never panics.
     fn device_token(&self) -> Result<String> {
         Err(tv_rs_transport::Unsupported::new(
             3,
-            "playbook Â§10 token derivation: enterprise token-generation math (TV MAC + \
+            "playbook §10 token derivation: enterprise token-generation math (TV MAC + \
              secret salt) requires REA decompilation of the vendor APK; consumer TVs \
              instead use the on-screen PIN handshake in TizenSession::connect, and 2024+ \
              AES-GCM framing is the encrypted-payload-framing gap",

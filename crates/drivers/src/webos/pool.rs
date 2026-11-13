@@ -2,7 +2,7 @@
 //!
 //! Every webOS command today pays the full handshake twice over: the WebSocket
 //! connect and the SSAP `register`. Worse, connecting without a stored
-//! `client-key` triggers the on-screen "Allow?" prompt â€” so a player that opens
+//! `client-key` triggers the on-screen "Allow?" prompt — so a player that opens
 //! a session per command turns every volume change into an interrupted show.
 //! The pool keeps one registered session per TV and reopens it exactly once
 //! when a request fails against it.
@@ -270,7 +270,7 @@ impl WebosSessionPool<LiveSessionFactory> {
 /// A session factory behind a box, so a pool can hold a factory it does not name.
 ///
 /// This is what lets a facade store one pool type while still accepting a
-/// caller-supplied factory â€” a different transport, or a test double.
+/// caller-supplied factory — a different transport, or a test double.
 pub type BoxedSessionFactory = Box<dyn WebosSessionFactory + Send + Sync>;
 
 #[async_trait]
@@ -423,7 +423,7 @@ impl<F: WebosSessionFactory> WebosSessionPool<F> {
     ///
     /// Plain UTF-8, unlike Samsung's base64 equivalent. The service is guarded
     /// (`ime.operation`), so a permission refusal is a real outcome rather than a
-    /// transport failure, and it needs a focused text field â€” with none focused the
+    /// transport failure, and it needs a focused text field — with none focused the
     /// set fails without saying which.
     pub async fn insert_text(&self, client: &WebosClient, text: &str, replace: bool) -> Result<()> {
         self.dispatch(
@@ -439,7 +439,7 @@ impl<F: WebosSessionFactory> WebosSessionPool<F> {
 
     /// Switches the active input through the pooled session.
     ///
-    /// `input_id` is the webOS id (`HDMI_1`, `tv`, â€¦); mapping a vendor-neutral
+    /// `input_id` is the webOS id (`HDMI_1`, `tv`, …); mapping a vendor-neutral
     /// input onto it is the caller's job.
     pub async fn switch_input(&self, client: &WebosClient, input_id: &str) -> Result<()> {
         self.dispatch(
@@ -466,11 +466,11 @@ impl<F: WebosSessionFactory> WebosSessionPool<F> {
     /// The pointer channel is a *second*, per-session WebSocket: the path comes
     /// from `getPointerInputSocket` on the pooled SSAP session, and the frames
     /// are plain text (`pointer.rs`). One pointer socket is kept per TV and
-    /// reused across presses â€” dialing costs a full WebSocket handshake, and a
+    /// reused across presses — dialing costs a full WebSocket handshake, and a
     /// remote that re-dialed on every key would be unusable. A dead socket is
     /// reopened exactly once, like a dead session.
     ///
-    /// `name` is the wire button name (`HOME`, `ENTER`, `VOLUMEUP`, â€¦). The
+    /// `name` is the wire button name (`HOME`, `ENTER`, `VOLUMEUP`, …). The
     /// vendor vocabulary is the caller's job: this crate does not depend on
     /// `tv-rs-core`, so the facade owns the key map.
     pub async fn send_key(&self, client: &WebosClient, name: &str) -> Result<()> {
@@ -512,7 +512,7 @@ impl<F: WebosSessionFactory> WebosSessionPool<F> {
     /// Asks the pooled SSAP session for a pointer path and dials it.
     ///
     /// The path is per-session, so it is fetched through the same session that
-    /// serves every other command â€” and re-fetched whenever the pointer socket
+    /// serves every other command — and re-fetched whenever the pointer socket
     /// has to be replaced.
     async fn open_pointer(&self, client: &WebosClient) -> Result<Box<dyn PointerWire>> {
         let payload = self
@@ -527,7 +527,7 @@ impl<F: WebosSessionFactory> WebosSessionPool<F> {
     /// Drops the pooled session for `host`; `true` when one was connected.
     ///
     /// Call this when a TV is removed from the fleet, or after
-    /// [`power_off`](Self::power_off) â€” the next command opens a fresh
+    /// [`power_off`](Self::power_off) — the next command opens a fresh
     /// session. Any pooled pointer socket for the same host goes with it: its
     /// path belongs to the session that issued it.
     pub async fn evict(&self, host: &str) -> bool {
@@ -632,8 +632,8 @@ fn take_value(outcome: Result<OpOutcome>) -> Result<Value> {
 pub mod testkit {
     //! Counting test doubles for [`WebosSessionPool`].
     //!
-    //! The pool behaviour that matters â€” one registered session reused across
-    //! commands, a dead session reopened exactly once, an idle session dropped â€”
+    //! The pool behaviour that matters — one registered session reused across
+    //! commands, a dead session reopened exactly once, an idle session dropped —
     //! is only observable through a factory that counts opens. A television
     //! cannot be asked to drop a socket on cue, so the counting factory lives
     //! here: this crate's own tests use it, and any downstream crate that enables

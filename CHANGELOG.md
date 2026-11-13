@@ -550,7 +550,7 @@ cast_channel.proto` compiled with `prost-build`), JSON-typed payloads for the
 
 - **Public EDID parser and active-display EDID enumeration in `tv-rs-local`
   (SignageMaster handoff E3b)**: `tv_rs_local::parse_edid(&[u8]) -> Result<Edid,
-EdidError>` reads the base block per VESA E-EDID 1.4 Â§3 — PNP manufacturer id,
+EdidError>` reads the base block per VESA E-EDID 1.4 §3 — PNP manufacturer id,
   product code, serial (numeric and descriptor), week/year, version, digital input,
   size in cm, the product-name descriptor and the preferred `DetailedTiming` (pixel
   clock, active/blank, image mm, `refresh_hz()`), extension count and a reported (not

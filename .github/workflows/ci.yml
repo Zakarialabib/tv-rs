@@ -51,6 +51,10 @@ jobs:
             echo "::error::tv-rs-core must not depend on tokio"
             exit 1
           fi
+      # `targets:` on the toolchain action has not installed this reliably; an
+      # explicit add makes the embedded build deterministic.
+      - name: Install the embedded target
+        run: rustup target add thumbv7em-none-eabihf
       - name: Core compiles without default features with alloc for embedded target
         run: cargo check -p tv-rs-core --no-default-features --features alloc --target thumbv7em-none-eabihf
       - run: cargo test -p tv-rs-core --features "mock-backend conformance quirks"

@@ -19,7 +19,7 @@
 //! Every method is synchronous: the file holds a handful of entries and callers
 //! invoke it from async commands, not on a hot path.
 //!
-//! Note the path is caller-chosen. The token is a credential â€” put the file
+//! Note the path is caller-chosen. The token is a credential — put the file
 //! somewhere only the application can read.
 
 use std::collections::BTreeMap;
@@ -55,7 +55,7 @@ impl SamsungTokenStore {
     /// Loads the store from `path`.
     ///
     /// A missing file yields an empty store. A corrupt file is renamed to
-    /// `<name>.corrupt` and the store starts empty â€” losing pairings is
+    /// `<name>.corrupt` and the store starts empty — losing pairings is
     /// recoverable (the TV prompts once), crashing at startup is not.
     pub fn load(path: impl Into<PathBuf>) -> Self {
         let path = path.into();

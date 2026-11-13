@@ -1,6 +1,6 @@
 //! A per-TV connection pool for the remote channel.
 //!
-//! Samsung TVs drop idle WebSocket channels â€” a player that sends a key press
+//! Samsung TVs drop idle WebSocket channels — a player that sends a key press
 //! once every few hours will find its socket dead on the next call. Reconnecting
 //! on every press costs a handshake (and, without a stored token, a PIN prompt),
 //! so the pool keeps one channel per TV and reopens it exactly once when a send
@@ -172,7 +172,7 @@ impl TizenConnectionPool<LiveChannelFactory> {
 /// A channel factory behind a box, so a pool can hold a factory it does not name.
 ///
 /// This is what lets a facade store one pool type while still accepting a
-/// caller-supplied factory â€” a different transport, or a test double.
+/// caller-supplied factory — a different transport, or a test double.
 pub type BoxedChannelFactory = Box<dyn TizenChannelFactory + Send + Sync>;
 
 #[async_trait]
@@ -228,7 +228,7 @@ impl<F: TizenChannelFactory> TizenConnectionPool<F> {
     /// Types `text` into the television's focused field.
     ///
     /// Base64 in `Cmd`, unlike webOS (plain UTF-8) and Roku (one key press per
-    /// character) â€” which is why this is three implementations rather than one shared
+    /// character) — which is why this is three implementations rather than one shared
     /// method. It travels on the remote channel, so it needs the pairing token like
     /// every other command sent there.
     ///
@@ -259,7 +259,7 @@ impl<F: TizenChannelFactory> TizenConnectionPool<F> {
     /// Drops the pooled channel for `host`; `true` when one was connected.
     ///
     /// Call this when a TV is removed from the fleet, or when the caller knows it
-    /// is powering off â€” the next send opens a fresh channel.
+    /// is powering off — the next send opens a fresh channel.
     pub async fn evict(&self, host: &str) -> bool {
         self.channels.lock().await.remove(host).is_some()
     }
@@ -334,8 +334,8 @@ impl<F: TizenChannelFactory> TizenConnectionPool<F> {
 pub mod testkit {
     //! Counting test doubles for [`TizenConnectionPool`].
     //!
-    //! The pool behaviour that matters â€” one channel reused across sends, a dead
-    //! channel reopened exactly once â€” is only observable through a factory that
+    //! The pool behaviour that matters — one channel reused across sends, a dead
+    //! channel reopened exactly once — is only observable through a factory that
     //! counts how many channels were opened. A television cannot be asked to drop
     //! a socket on cue, so the counting factory lives here: this crate's own tests
     //! use it, and any downstream crate that enables the `testkit` feature (the

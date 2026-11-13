@@ -2,7 +2,7 @@
 //!
 //! `com.webos.service.networkinput/getPointerInputSocket` (on the main SSAP
 //! socket) answers with a `socketPath` that is already a complete WebSocket
-//! URL â€” a per-session path such as
+//! URL — a per-session path such as
 //! `wss://<host>:3001/resources/<hash>/netinput.pointer.sock`. Dial that URL
 //! directly and send plain-text ASCII frames, one per message, in the form
 //!
@@ -15,14 +15,14 @@
 //!
 //! `down:0` is a plain move, `down:1` a press-and-drag. The frame is always
 //! terminated by a blank line (a trailing `\n` after the last field), contains
-//! no `\r`, and the TV never acknowledges anything â€” every send is
+//! no `\r`, and the TV never acknowledges anything — every send is
 //! fire-and-forget. Before the socket is torn down the last write needs a short
 //! grace period or the TV drops it unprocessed.
 //!
-//! Provenance: measured on webOS 23 (`d-gubert/lgtv-remote` PROTOCOL.md Â§6-7),
+//! Provenance: measured on webOS 23 (`d-gubert/lgtv-remote` PROTOCOL.md §6-7),
 //! and confirmed by four independent implementations (`lgtv2` index.js,
 //! `pywebostv` controls.py, `aiopylgtv` webos_client.py, and the droidactor
-//! field writeup). The pointer channel accepts no text/keyboard frames â€” text
+//! field writeup). The pointer channel accepts no text/keyboard frames — text
 //! entry stays on `com.webos.service.ime/*` over the main socket.
 
 use std::time::Duration;
@@ -46,11 +46,11 @@ const CLOSE_GRACE: Duration = Duration::from_millis(120);
 /// One plain-text frame for the pointer socket.
 ///
 /// Button names are case-sensitive on the wire (`ENTER`, not `OK`; `HOME`,
-/// `BACK`, `VOLUMEUP`, â€¦). The full vocabulary the pointer channel accepts is
+/// `BACK`, `VOLUMEUP`, …). The full vocabulary the pointer channel accepts is
 /// the SSAP key-code alias set kept in `tv-rs-core`'s key map.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PointerFrame<'a> {
-    /// A single press-and-release of `name` â€” one atomic frame.
+    /// A single press-and-release of `name` — one atomic frame.
     Button(&'a str),
     /// "OK" at the current pointer position.
     Click,
@@ -78,7 +78,7 @@ pub enum PointerFrame<'a> {
 
 impl PointerFrame<'_> {
     /// Encodes this frame exactly as the TV expects: a `type:` header line,
-    /// then `key:value` lines, terminated by a blank line â€” ASCII only.
+    /// then `key:value` lines, terminated by a blank line — ASCII only.
     #[must_use]
     pub fn encode(&self) -> String {
         match self {
@@ -124,7 +124,7 @@ impl PointerSocket {
     /// Dials the pointer socket at the complete `socketPath` URL and returns a
     /// live connection.
     ///
-    /// No `client-key` or extra headers are needed â€” the path itself is the
+    /// No `client-key` or extra headers are needed — the path itself is the
     /// session ticket, issued over the main SSAP connection. TLS follows the
     /// same [`TlsPolicy`](crate::webos::TlsPolicy) as the main socket (webOS serves
     /// the pointer path on the self-signed certificate too).
@@ -184,7 +184,7 @@ impl PointerSocket {
 /// A live pointer connection, as the session pool needs to see it.
 ///
 /// Implemented for [`PointerSocket`]; the trait exists for the same reason
-/// [`WebosSessionWire`](crate::webos::pool::WebosSessionWire) does â€” so the pool's
+/// [`WebosSessionWire`](crate::webos::pool::WebosSessionWire) does — so the pool's
 /// reuse and reopen-once behaviour can be proven without a television. Frames
 /// arrive already encoded, so the trait method carries no lifetime.
 #[async_trait::async_trait]

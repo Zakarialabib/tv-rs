@@ -1,6 +1,6 @@
 //! Serde payload structs exchanged with the Tizen TV.
 //!
-//! Naming follows `<Protocol><Payload>` from `docs/05-rust-package-standard.md` Â§6.
+//! Naming follows `<Protocol><Payload>` from `docs/05-rust-package-standard.md` §6.
 
 use crate::tizen::error::TizenError;
 use serde::{Deserialize, Serialize};
@@ -134,7 +134,7 @@ pub struct TizenRemoteCommand {
 /// `Cmd`. Sending the key shape with text in it types nothing on some firmware and
 /// something unexpected on others, so the difference is a type the compiler enforces.
 ///
-/// Source and traps: `docs/02-playbook.md` Â§3.
+/// Source and traps: `docs/02-playbook.md` §3.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TizenTextCommand {
     /// Always `ms.remote.control`.
@@ -149,7 +149,7 @@ pub struct TizenTextCommandParams {
     /// The base64 of the text's UTF-8 bytes.
     #[serde(rename = "Cmd")]
     pub cmd: String,
-    /// Always the literal `base64` â€” it tells the set how to read `Cmd`.
+    /// Always the literal `base64` — it tells the set how to read `Cmd`.
     #[serde(rename = "DataOfCmd")]
     pub data_of_cmd: String,
     /// Always `SendInputString`.
@@ -190,13 +190,13 @@ pub struct TizenDialLaunchResponse {
 /// models, and the honest answer there is "no address", never a guess.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DeviceInfo {
-    /// `device.wifiMac` â€” the address a Wake-on-LAN packet targets.
+    /// `device.wifiMac` — the address a Wake-on-LAN packet targets.
     ///
     /// **It is the Wi-Fi address even on a set that is currently wired**, so on a
     /// wired set it may not be the interface that answers a magic packet.
     /// [`DeviceInfo::network_type`] is what tells the two apart.
     pub wifi_mac: Option<String>,
-    /// `device.networkType` â€” `"wireless"` or `"wired"`.
+    /// `device.networkType` — `"wireless"` or `"wired"`.
     pub network_type: Option<String>,
     /// `device.modelName`, when reported.
     pub model_name: Option<String>,
@@ -217,7 +217,7 @@ impl DeviceInfo {
 ///
 /// A document that is not JSON is a JSON error; one that parses but carries no
 /// `device` object is [`crate::tizen::TizenError::Protocol`], because that is a firmware
-/// change rather than an empty answer â€” and calling it "no MAC" would hide it.
+/// change rather than an empty answer — and calling it "no MAC" would hide it.
 pub fn parse_device_info(body: &str) -> crate::tizen::Result<DeviceInfo> {
     let value: serde_json::Value = serde_json::from_str(body)?;
     let device = value.get("device").ok_or_else(|| {
@@ -262,7 +262,7 @@ mod device_info_tests {
     }
 
     /// `wifiMac` is optional on some firmware, and the honest answer is then "no
-    /// address" â€” not a guess, and not an error that hides the rest of the document.
+    /// address" — not a guess, and not an error that hides the rest of the document.
     #[test]
     fn a_document_without_wifi_mac_answers_no_address() {
         let info = parse_device_info(r#"{"device":{"networkType":"wired"}}"#).expect("parses");
@@ -280,7 +280,7 @@ mod device_info_tests {
     }
 
     /// A document that parses but carries no `device` object is a firmware change, not
-    /// an empty answer â€” reading it as "no MAC" would hide the change.
+    /// an empty answer — reading it as "no MAC" would hide the change.
     #[test]
     fn a_document_without_a_device_object_is_a_protocol_error() {
         let error = parse_device_info(r#"{"version":"2.0.25"}"#).expect_err("no device object");
@@ -313,7 +313,7 @@ mod device_info_tests {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TizenAppStatus {
-    /// The app id â€” the same id a launch takes.
+    /// The app id — the same id a launch takes.
     #[serde(rename = "id")]
     pub id: String,
 
@@ -329,7 +329,7 @@ pub struct TizenAppStatus {
     #[serde(rename = "running")]
     pub running: bool,
 
-    /// Whether the app is the one on screen â€” the foreground marker.
+    /// Whether the app is the one on screen — the foreground marker.
     ///
     /// Optional because some firmware and models omit the field entirely (a
     /// Home-Assistant thread hit `KeyError: 'visible'`). A missing field means "this
@@ -344,7 +344,7 @@ pub struct TizenAppStatus {
 /// # Errors
 ///
 /// Returns [`TizenError::Json`] when the body is not JSON, and
-/// [`TizenError::Protocol`] when the document parses but carries no id â€” a body that
+/// [`TizenError::Protocol`] when the document parses but carries no id — a body that
 /// is not an app status is a protocol error rather than an empty answer, and an app
 /// that exists without an id is not a thing this endpoint returns.
 pub fn parse_app_status(
@@ -362,7 +362,7 @@ mod app_status_tests {
     use super::*;
 
     /// The foreground shape, verbatim from the FHEM thread: `running` and `visible`
-    /// agree here, which is exactly why `running` is the dangerous field â€” it looks
+    /// agree here, which is exactly why `running` is the dangerous field — it looks
     /// correct when both agree.
     #[test]
     fn the_documented_body_parses_with_both_bits() {
@@ -411,7 +411,7 @@ mod app_status_tests {
         );
     }
 
-    /// A *missing* `id` is serde's shape error â€” the field is required, so the
+    /// A *missing* `id` is serde's shape error — the field is required, so the
     /// document never reaches the semantic check. That is the right owner for it:
     /// serde is the authority on shape, and this function is the authority on meaning.
     #[test]

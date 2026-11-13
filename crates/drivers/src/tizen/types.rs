@@ -21,9 +21,9 @@ pub const TIZEN_DIAL_DESC_PATH: &str = "/ssdp/device-desc.xml";
 
 /// Path of the unauthenticated device-information document.
 ///
-/// It shares port 8001 with the remote channel's WebSocket, at a different path â€” and
+/// It shares port 8001 with the remote channel's WebSocket, at a different path — and
 /// unlike the channel, this read needs no pairing and no token. Where the MAC it
-/// carries comes from, and its traps: `docs/02-playbook.md` Â§3.
+/// carries comes from, and its traps: `docs/02-playbook.md` §3.
 pub const TIZEN_DEVICE_INFO_PATH: &str = "/api/v2/";
 
 /// Prefix for DIAL app-launch requests (`POST {prefix}{app_id}`).
@@ -70,7 +70,7 @@ impl TizenLaunchAction {
 /// Validates a raw Samsung `KEY_*` code.
 ///
 /// The TV key set varies by model and firmware, so this checks the wire shape
-/// (`KEY_` + 1â€“35 uppercase ASCII/digit/underscore characters) rather than
+/// (`KEY_` + 1–35 uppercase ASCII/digit/underscore characters) rather than
 /// maintaining an exhaustive allow-list. Use it before sending a code that is
 /// not one of the typed [`TizenRemoteKey`] variants.
 pub fn validate_remote_key_code(code: &str) -> Result<()> {
@@ -200,10 +200,10 @@ impl TizenRemoteKey {
     }
 }
 
-/// `GET /api/v2/applications/{app_id}` â€” one installed application's status.
+/// `GET /api/v2/applications/{app_id}` — one installed application's status.
 ///
 /// A *point* query, not a list: the bare `/api/v2/applications` form is unverified
-/// (see the plan's B2 verdict), so the id comes from the caller â€” either a preset
+/// (see the plan's B2 verdict), so the id comes from the caller — either a preset
 /// from [`crate::tizen::apps`] or an id read out of the DIAL manifest.
 pub const TIZEN_APP_STATUS_PATH: &str = "/api/v2/applications";
 

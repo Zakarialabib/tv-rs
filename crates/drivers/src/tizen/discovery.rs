@@ -2,7 +2,7 @@
 //!
 //! A generic SSDP sweep finds every UPnP device on the LAN and then has to guess
 //! which of them are controllable televisions. Samsung TVs answer a dedicated
-//! search target â€” `urn:samsung-com:device:RemoteControlReceiver:1` â€” and nothing
+//! search target — `urn:samsung-com:device:RemoteControlReceiver:1` — and nothing
 //! else does, so querying that target turns "identify the box" into a lookup.
 //!
 //! The description fetch still runs, because the ST reply alone carries no name
@@ -27,7 +27,7 @@ pub const SSDP_MULTICAST_ADDR: &str = "239.255.255.250:1900";
 pub struct SamsungTv {
     /// Address the reply came from.
     pub ip: String,
-    /// `LOCATION` â€” the UPnP description document.
+    /// `LOCATION` — the UPnP description document.
     pub location: String,
     /// `<friendlyName>`, when the description exposes it.
     pub name: Option<String>,
@@ -35,7 +35,7 @@ pub struct SamsungTv {
     pub model: Option<String>,
     /// `<manufacturer>`, when the description exposes it.
     pub manufacturer: Option<String>,
-    /// `<UDN>` â€” the device's stable identity.
+    /// `<UDN>` — the device's stable identity.
     pub udn: Option<String>,
 }
 
@@ -207,7 +207,7 @@ pub struct DescriptionIdentity {
     pub model: Option<String>,
     /// `<manufacturer>`.
     pub manufacturer: Option<String>,
-    /// `<UDN>` â€” the device's stable identity.
+    /// `<UDN>` — the device's stable identity.
     pub udn: Option<String>,
 }
 
@@ -228,7 +228,7 @@ pub fn parse_description(xml: &str) -> Result<DescriptionIdentity> {
     Ok(identity)
 }
 
-/// `http://192.168.1.10:8001/...` â†’ `192.168.1.10`.
+/// `http://192.168.1.10:8001/...` → `192.168.1.10`.
 fn host_of(location: &str) -> Option<String> {
     let rest = location
         .strip_prefix("http://")

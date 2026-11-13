@@ -1,12 +1,12 @@
-//! `tv-rs-tizen` â€” Samsung Tizen WebSocket control and DIAL app launching.
+//! `tv-rs-tizen` — Samsung Tizen WebSocket control and DIAL app launching.
 //!
 //! This crate implements the Phase-1 Tizen remote channel (the legacy unencrypted
 //! WebSocket on port 8001 and the modern TLS WebSocket on port 8002) plus the DIAL
-//! launcher on port 8080. See `docs/02-playbook.md` Â§3 for the protocol facts and
-//! Â§10 for the reverse-engineering gaps that are intentionally deferred.
+//! launcher on port 8080. See `docs/02-playbook.md` §3 for the protocol facts and
+//! §10 for the reverse-engineering gaps that are intentionally deferred.
 //!
 //! Blocked capabilities (TLS certificate-pinning bypass, enterprise token math and
-//! AES-GCM encrypted framing) surface as [`TizenError::Unsupported`]; this crate
+//! AES-GCM encrypted framing) surface as [`TizenError::Unsupported`](crate::tizen::TizenError::Unsupported); this crate
 //! never panics in library code.
 //!
 //! # Example

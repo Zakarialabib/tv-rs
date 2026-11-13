@@ -243,9 +243,9 @@ impl WebosClient {
     ///
     /// This is [`with_device_name`](Self::with_device_name) under the name the
     /// provisioning vocabulary uses, deliberately. On webOS the *pairing*
-    /// identity is the `client-key` the TV issued â€” there is no client-identity
+    /// identity is the `client-key` the TV issued — there is no client-identity
     /// field in the registration manifest, and inventing a non-standard one
-    /// would make this client the only TV on the LAN that understands it â€” so
+    /// would make this client the only TV on the LAN that understands it — so
     /// the deterministic surface a set actually shows for "who is asking" is
     /// the name in the "Allow?" prompt, echoed back in
     /// [`WebosPairing::device_name`]. A mobile instalment re-registering with a
@@ -567,13 +567,13 @@ impl WebosSession {
 
     /// Types `text` into the field the television currently has focused.
     ///
-    /// The IME service takes **plain UTF-8** â€” unlike Samsung's equivalent, which
-    /// base64s the string â€” and answers `{"returnValue": true}`. Recorded with its
-    /// sources in `docs/02-playbook.md` Â§4.
+    /// The IME service takes **plain UTF-8** — unlike Samsung's equivalent, which
+    /// base64s the string — and answers `{"returnValue": true}`. Recorded with its
+    /// sources in `docs/02-playbook.md` §4.
     ///
     /// **A focused text field is required.** With none focused the television fails
     /// rather than typing somewhere, and nothing in the reply distinguishes that from
-    /// a field that took the text â€” so a caller that needs certainty reads the field
+    /// a field that took the text — so a caller that needs certainty reads the field
     /// back, or does not type at all.
     ///
     /// # Errors

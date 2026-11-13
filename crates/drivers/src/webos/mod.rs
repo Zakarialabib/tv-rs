@@ -1,4 +1,4 @@
-//! `tv-rs-webos` â€” LG webOS SSAP control over the JSON-RPC WebSocket transport.
+//! `tv-rs-webos` — LG webOS SSAP control over the JSON-RPC WebSocket transport.
 //!
 //! LG webOS exposes the SSAP (Second Screen Application Protocol) as a JSON-RPC-ish
 //! WebSocket service: unencrypted on port `3000` and TLS-wrapped on port `3001`. The
@@ -31,8 +31,8 @@
 //! ```
 //!
 //! The TLS certificate-pinning work needed for reliable port `3001` use against
-//! self-signed TV certificates is deferred to Phase 3 (`docs/02-playbook.md` Â§10,
-//! "TLS certificate pinning"); see [`TlsPolicy`].
+//! self-signed TV certificates is deferred to Phase 3 (`docs/02-playbook.md` §10,
+//! "TLS certificate pinning"); see [`TlsPolicy`](tv_rs_transport::TlsPolicy).
 
 // The public error enums embed `tokio_tungstenite`'s error, which is large by
 // construction. Boxing it would break the #[from] conversions callers rely on,
