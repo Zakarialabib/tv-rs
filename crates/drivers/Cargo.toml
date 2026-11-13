@@ -123,7 +123,7 @@ tokio-serial = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 tokio-tungstenite = { workspace = true, optional = true }
-prost = { version = "0.13", optional = true }
+prost = { version = "0.14", optional = true }
 bytes = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"], optional = true }
