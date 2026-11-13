@@ -1,5 +1,11 @@
 # tv-rs-tizen
 
+> **Deprecated in 0.8.0 — not published.** This crate is a `publish = false` workspace
+> shim that re-exports [`tv-rs-drivers`](https://crates.io/crates/tv-rs-drivers) with
+> the `tizen` feature. The code described below lives in `crates/drivers/src/tizen/`.
+> New code should depend on `tv-rs-drivers`, not on this crate.
+
+
 Samsung Tizen control: the remote WebSocket channel on 8001/8002, the `DIAL` launcher
 on 8080, pairing-token persistence, and the per-TV connection pool.
 

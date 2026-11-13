@@ -301,6 +301,7 @@ Each card: **id · branch · context · files · steps · verification · PR tit
 **Corrections carried forward:**
 - `G28` was over-stated as “all cargo gates blocked”; the companion pins the **sub-crates**, not the umbrella, so its build was never blocked. The feature-matrix gate (**TV-18**) is the durable fix.
 - The `tv-rs` README states “thirteen installable crates” and “`tv-rs-mdc` merged but not published” — that reflects an older version page; `0.7.1` re-exports **17 sub-crates** on docs.rs. The consolidation spec uses the `0.7.1` topology.
+- **Updated 2026-11-13:** the README and `docs/03-matrix.md` now state the 0.8.0 reality — **nineteen published crates**, all at `0.8.0`, with the ten vendor protocols consolidated into `tv-rs-drivers` and the old `tv-rs-<vendor>` names unpublished shims. This spec remains a historical document; where its topology disagrees with `03-matrix.md`, the matrix wins.
 
 **History:**
 - **v3.0** (2026-11-07) — tv-rs-only reframe at `0.7.1`. `tv-drivers` consolidation plan (`TV-10 … TV-13`), `Driver` trait, observation channel, capability registry, `no_std` gate, feature-matrix gate, version cadence, HIL rows, vision honesty fix. Companion `C-*` tasks and `cctv`/`mediamaster` tasks removed to their own specs.

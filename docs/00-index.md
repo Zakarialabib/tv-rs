@@ -81,9 +81,9 @@ tells you **where** to read more. The numbered pages are the long form.
 **Facade** — the `tv-rs` crate: `discover()`, `identify_vendor()`, `TvClient`.
 It holds no protocol logic; it classifies a device and forwards. Where: [README §How it fits together](../README.md), [`src/client.rs`](../crates/tv-rs/src/client.rs).
 
-**Protocol crate** — one crate per vendor or concern (`tv-rs-tizen`,
-`tv-rs-webos`, `tv-rs-roku`, `tv-rs-discovery`, `tv-rs-power`). Each has the same
-module shape. Where: [01-architecture](01-architecture.md).
+**Protocol module** — one module per vendor inside `tv-rs-drivers`, behind a feature
+flag (`tizen`, `webos`, `roku`, `cast`, `cec`, `mdc`, `sicp`, `ir`, `discovery`,
+`power`). Each has the same module shape. Where: [01-architecture](01-architecture.md).
 
 **Transport crate** — `tv-rs-transport`: the TLS policy and connector, and the
 budgeted WebSocket frame reader both vendor crates share. Where: [`crates/transport/src/`](../crates/transport/src/).
@@ -103,7 +103,7 @@ devices answer with a `LOCATION` header pointing at an XML description. No
 credentials. Where: [02-playbook §1](02-playbook.md#1-discovery).
 
 **UPnP descriptor** — the XML document behind `LOCATION`: friendly name,
-manufacturer, model, `UDN`. Where: [`crates/discovery/src/client.rs`](../crates/discovery/src/client.rs).
+manufacturer, model, `UDN`. Where: [`crates/drivers/src/discovery/client.rs`](../crates/drivers/src/discovery/client.rs).
 
 **WoL (Wake-on-LAN)** — a 102-byte "magic packet" (six `0xFF` then the MAC
 sixteen times) to UDP 9. Only reliable way to wake a TV from a hard-off state.
@@ -111,7 +111,7 @@ Where: [02-playbook §2](02-playbook.md#2-power).
 
 **Power state** — `On` / `Standby` / `Off` / `Unknown`, from a short TCP connect:
 refused means the NIC is up but services are not (`Standby`), timeout means
-`Off`. Where: [`crates/power/src/types.rs`](../crates/power/src/types.rs).
+`Off`. Where: [`crates/drivers/src/power/types.rs`](../crates/drivers/src/power/types.rs).
 
 **Tizen** — Samsung's TV OS. Remote channel is a WebSocket: `ws://:8001`
 (legacy) or `wss://:8002` (2018+). The handshake is
@@ -119,7 +119,7 @@ refused means the NIC is up but services are not (`Standby`), timeout means
 time instead of asking the viewer to approve. Where: [02-playbook §3](02-playbook.md#3-samsung-tizen).
 
 **DIAL** — a REST launcher on port 8080 that starts an app by id without a
-prompt. Where: [`crates/tizen/src/client.rs`](../crates/tizen/src/client.rs).
+prompt. Where: [`crates/drivers/src/tizen/client.rs`](../crates/drivers/src/tizen/client.rs).
 
 **SSAP** — LG webOS's JSON-RPC-ish WebSocket protocol on 3000 (plain) / 3001
 (TLS). The first connection shows an "Allow?" prompt and returns a `client-key`.
@@ -174,32 +174,32 @@ Where: [`crates/transport/src/unsupported.rs`](../crates/transport/src/unsupport
 the full list is [02-playbook §10](02-playbook.md#10-not-implemented-here).
 
 **`TizenConnectionPool`** — one WebSocket channel per TV; a failed send reopens
-it once and replays the frame, because TVs drop idle sockets. Where: [`crates/tizen/src/pool.rs`](../crates/tizen/src/pool.rs).
+it once and replays the frame, because TVs drop idle sockets. Where: [`crates/drivers/src/tizen/pool.rs`](../crates/drivers/src/tizen/pool.rs).
 The facade's Tizen variant holds one, so a key press reuses the channel instead of
 paying a handshake per press.
 
 **`WebosSessionPool`** — the same idea for LG: one registered SSAP session per TV,
 because connecting without a stored `client-key` raises the on-screen "Allow?"
-prompt. Where: [`crates/webos/src/pool.rs`](../crates/webos/src/pool.rs).
+prompt. Where: [`crates/drivers/src/webos/pool.rs`](../crates/drivers/src/webos/pool.rs).
 
 **`DynConnectionPool` / `DynSessionPool`** — a pool with its factory erased
 (`TizenConnectionPool<Box<dyn TizenChannelFactory + Send + Sync>>` and its webOS
 twin), which is what lets a facade store one pool type while a caller still supplies
-its own factory. Where: [`crates/tizen/src/pool.rs`](../crates/tizen/src/pool.rs),
-[`crates/webos/src/pool.rs`](../crates/webos/src/pool.rs).
+its own factory. Where: [`crates/drivers/src/tizen/pool.rs`](../crates/drivers/src/tizen/pool.rs),
+[`crates/drivers/src/webos/pool.rs`](../crates/drivers/src/webos/pool.rs).
 
 **`TvClient::close_all()`** — drops every pooled connection the handle owns and
 returns how many; the lever a mobile app pulls when it goes to the background,
 since the OS will not close a WebSocket for it. Where: [`crates/tv-rs/src/handle.rs`](../crates/tv-rs/src/handle.rs).
 
 **`testkit`** — the counting channel/session factories behind the `testkit` feature of
-`tv-rs-tizen`, `tv-rs-webos` and `tv-rs` (off by default). They are how connection
+`tv-rs-drivers` and `tv-rs` (off by default). They are how connection
 reuse is proved in CI without a television: twenty key presses through the facade must
-open exactly one channel. Where: [`crates/tizen/src/pool.rs`](../crates/tizen/src/pool.rs).
+open exactly one channel. Where: [`crates/drivers/src/tizen/pool.rs`](../crates/drivers/src/tizen/pool.rs).
 
 **`SamsungTokenStore`** — file-backed pairing tokens keyed by IP. A corrupt file
 is quarantined instead of aborting startup, and an empty token never overwrites a
-stored one. Where: [`crates/tizen/src/token_store.rs`](../crates/tizen/src/token_store.rs).
+stored one. Where: [`crates/drivers/src/tizen/token_store.rs`](../crates/drivers/src/tizen/token_store.rs).
 
 **`identify_vendor`** — the heuristic that turns an SSDP reply and its descriptor
 into `Samsung` / `Lg` / `Roku` / `Unknown`. Deliberately narrow: unknown is a
@@ -212,7 +212,7 @@ results in [08-hil-results](08-hil-results.md).
 **`discover_tvs_with(callback)`** — discovery that hands each device over as its
 descriptor resolves, so a television that answers in 40 ms surfaces then rather than
 after the slowest reply in the window. The socket loop is written out rather than shared
-with `msearch` because the descriptor fetch has to `await` inside it. Where: [`crates/discovery/src/client.rs`](../crates/discovery/src/client.rs).
+with `msearch` because the descriptor fetch has to `await` inside it. Where: [`crates/drivers/src/discovery/client.rs`](../crates/drivers/src/discovery/client.rs).
 
 **`mdc_handle(address)`** — the facade's entry point for a commercial Samsung panel,
 returning the same erased `DeviceHandle` the rest of a fleet is driven through.
@@ -265,7 +265,7 @@ the capability traits (`PowerControl`, `KeyInput`, `TextInput`, `AppLaunch`,
 `PanelHealthProvider`; behind `supporting`: `PanelHoursProvider`,
 `ScreenCapturer`). No generics, no vendor enum in the type. Where:
 `crates/core/src/capability.rs`; implemented for `TvClient` in
-`crates/tv-rs/src/handle.rs` and for the MDC device in `crates/mdc/src/handle.rs`.
+`crates/tv-rs/src/handle.rs` and for the MDC device in `crates/drivers/src/mdc/handle.rs`.
 
 **`CommandId`** — the caller's correlation id for a command. The contract is explicit:
 backends do **not** deduplicate, so a retry is a second press unless the caller checks.
@@ -323,7 +323,7 @@ accessor agreement, unsupported routing, identity stability), behind the
 `running` and `visible`. `running` is a **superset** of foreground — background system
 apps report `running: true` while not on screen — so `visible` is the marker a caller
 must read, and a panel that omits `visible` answers `None`, which is not `false`.
-Where: `crates/tizen/src/payload.rs` (`TizenAppStatus`, `parse_app_status`).
+Where: `crates/drivers/src/tizen/payload.rs` (`TizenAppStatus`, `parse_app_status`).
 
 **RenderingControl** — the UPnP service that carries volume and mute, separate from
 AVTransport (casting/playback) and with its own control URL, so a renderer can be

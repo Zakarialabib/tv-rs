@@ -1,5 +1,11 @@
 # LG Serial Command Restrictions
 
+> **Superseded (2026-11-13).** Two facts in the investigation below have changed: the
+> webOS code now lives in `tv-rs-drivers` (`webos`), not the deprecated `tv-rs-webos`
+> shim; and `tv-rs-lgcmd` — the LG commercial serial crate this ADR called "planned" —
+> **exists and is published**. The verdict stands (the claim conflates SSAP with the
+> ASCII serial protocol), but read the crate names as they are today.
+
 **Verdict:** UNCONFIRMED (structurally inapplicable)
 
 ## The Claim

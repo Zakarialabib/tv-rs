@@ -1,5 +1,11 @@
 # tv-rs-cast
 
+> **Deprecated in 0.8.0 — not published.** This crate is a `publish = false` workspace
+> shim that re-exports [`tv-rs-drivers`](https://crates.io/crates/tv-rs-drivers) with
+> the `cast` feature. The code described below lives in `crates/drivers/src/cast/`.
+> New code should depend on `tv-rs-drivers`, not on this crate.
+
+
 Google Cast sender implementation for smart TVs and Chromecasts.
 
 ## Features

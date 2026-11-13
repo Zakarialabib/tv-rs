@@ -1,5 +1,11 @@
 # tv-rs-mdc
 
+> **Deprecated in 0.8.0 — not published.** This crate is a `publish = false` workspace
+> shim that re-exports [`tv-rs-drivers`](https://crates.io/crates/tv-rs-drivers) with
+> the `mdc` feature. The code described below lives in `crates/drivers/src/mdc/`.
+> New code should depend on `tv-rs-drivers`, not on this crate.
+
+
 Samsung Multiple Display Control (MDC) over TCP 1515 or RS-232.
 
 ```toml
@@ -7,8 +13,8 @@ Samsung Multiple Display Control (MDC) over TCP 1515 or RS-232.
 tv-rs-mdc = "0.3"
 ```
 
-`tv-rs-mdc` is new: it publishes with the `0.3.0` release and is not on the registry
-before that. Everything else in this workspace's published set is at `0.2.0` today.
+`tv-rs-mdc` is not published: the implementation moved to `tv-rs-drivers` (feature
+`mdc`) in 0.8.0, and this crate is a workspace-only shim.
 
 ## What it does
 

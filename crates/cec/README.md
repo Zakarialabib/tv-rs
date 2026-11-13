@@ -1,5 +1,11 @@
 # tv-rs-cec
 
+> **Deprecated in 0.8.0 — not published.** This crate is a `publish = false` workspace
+> shim that re-exports [`tv-rs-drivers`](https://crates.io/crates/tv-rs-drivers) with
+> the `cec` feature. The code described below lives in `crates/drivers/src/cec/`.
+> New code should depend on `tv-rs-drivers`, not on this crate.
+
+
 HDMI-CEC control and platform-native bindings for display power, standby, and active source switching.
 
 ## Transports

@@ -108,7 +108,7 @@ The crate exists and is tested — `tv-rs-androidtv` on branch `spec/atr-v2-spik
 
 - **Wire**: `polo.proto` (verbatim AOSP) + `remotemessage.proto`; the prost
   bindings are **pre-generated and committed** (`src/proto/polo.rs`, `remote.rs` —
-  the same pattern `tv-rs-cast` uses), so no CI job or contributor checkout needs
+  the same pattern `tv-rs-drivers` (`cast`) uses), so no CI job or contributor checkout needs
   `protoc`. Regenerate when a `.proto` changes and commit the diff in the same
   commit. Varint framing per the reference client's `_DecodeVarint` contract.
 - **Pairing**: full 8-step Polo handshake in `client.rs` (`pair()`), the secret

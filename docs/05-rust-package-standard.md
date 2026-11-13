@@ -4,7 +4,7 @@ A prescriptive standard for building and maintaining Rust library packages and
 workspaces. Project-agnostic: it was distilled from two shipping packages of
 opposite shape, and both are cited as evidence for each rule.
 
-- **`tv-rs`** — a fifteen-crate workspace (facade, protocol, support,
+- **`tv-rs`** — a nineteen-crate workspace (facade, protocol, support,
   reconciliation and tooling crates).
 - **`ezviz-openapi-rs`** — a single crate with one optional feature.
 
@@ -165,16 +165,16 @@ not `test_vendor_2`).
 
 Universal rules. Project-specific detail goes in the project's own naming page.
 
-| Kind | Convention | Example |
-|---|---|---|
-| Crate / package | kebab-case | `tv-rs-roku`, `ezviz-openapi` |
-| Module / file | snake_case (lowercase, hyphens only in package names) | `client.rs`, `pc_sdk.rs` |
-| Type / trait | PascalCase | `RokuClient`, `EcpRestClient` |
-| Trait | `<Subject><Action>` | `SsdpDiscovery`, `PowerControl` |
-| Wire payload struct | `<Subject><Payload>` | `TizenChannelConnectPayload`, `SsdpMsearchResponse` |
-| Function / variable | snake_case, full words | `build_magic_packet`, `client_key` |
-| Constant | `UPPER_SNAKE_CASE`, prefixed by subject | `SSDP_MULTICAST_IP`, `ROKU_ECP_PORT` |
-| Error | `<Crate>Error` + `Result` alias | `TizenError`, `RokuError` |
+| Kind                | Convention                                            | Example                                             |
+| ------------------- | ----------------------------------------------------- | --------------------------------------------------- |
+| Crate / package     | kebab-case                                            | `tv-rs-drivers`, `ezviz-openapi`                    |
+| Module / file       | snake_case (lowercase, hyphens only in package names) | `client.rs`, `pc_sdk.rs`                            |
+| Type / trait        | PascalCase                                            | `RokuClient`, `EcpRestClient`                       |
+| Trait               | `<Subject><Action>`                                   | `SsdpDiscovery`, `PowerControl`                     |
+| Wire payload struct | `<Subject><Payload>`                                  | `TizenChannelConnectPayload`, `SsdpMsearchResponse` |
+| Function / variable | snake_case, full words                                | `build_magic_packet`, `client_key`                  |
+| Constant            | `UPPER_SNAKE_CASE`, prefixed by subject               | `SSDP_MULTICAST_IP`, `ROKU_ECP_PORT`                |
+| Error               | `<Crate>Error` + `Result` alias                       | `TizenError`, `RokuError`                           |
 
 - A fixed **module vocabulary** keeps crates navigable: `lib.rs`, `error.rs`,
   `types.rs`, `payload.rs`, `protocol.rs`, `client.rs`, `auth.rs`.

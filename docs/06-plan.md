@@ -258,7 +258,8 @@ inference, with the reasoning for each step written into its doc comment. The au
 "nothing probes a single address today" was false, and it was false in the same way G16's
 was: a grep that found no *new* function and concluded no *function*. Recorded because the
 next reader will otherwise repeat the mistake — and because it nearly cost a duplicate:
-the first attempt at this item added a unicast-SSDP probe to `tv-rs-discovery`, which is a
+the first attempt at this item added a unicast-SSDP probe to `tv-rs-drivers`
+(`discovery`), which is a
 different mechanism for a question already answered, and was reverted rather than shipped
 unused. A unicast SSDP probe *would* add something the facade's vendor-by-vendor probe
 cannot (it could name a device whose HTTP APIs are unreachable), but nothing needs that
@@ -270,7 +271,7 @@ and three of the four were already done:
 
 - **G16 — DIAL launching: DONE.** The item's own "decided shape" — *expose the DIAL
   capability as its own operation, taking an app id and a payload* — is exactly what
-  exists: `build_dial_launch_url` (`crates/tizen/src/client.rs:234`),
+  exists: `build_dial_launch_url` (`crates/drivers/src/tizen/client.rs:234`),
   `TizenClient::dial_launch(app_id, payload)` (line 625), `launch_with_payload` as a
   **public trait method** (`crates/core/src/capability.rs:422`), and the facade routing
   Tizen + payload to DIAL (`crates/tv-rs/src/handle.rs:348`) — whose doc comment already
@@ -529,7 +530,7 @@ dropped. Sony Bravia is not a candidate; the rest of Appendix A is.
 
 ## 5. Native CEC — only after a measurement
 
-`tv-rs-cec` shells out to `cec-client`. That is a deliberate trade (no `unsafe`, no C
+`tv-rs-drivers` (`cec`) shells out to `cec-client`. That is a deliberate trade (no `unsafe`, no C
 toolchain), and it is fine until someone shows the subprocess latency hurts. If that
 measurement exists, add a `cec-native` feature that talks to `/dev/cec` / `libcec` with `unsafe`
 confined to one module; keep the subprocess adapter as the default.
@@ -574,10 +575,10 @@ network transfer for a shared source; no regression in the existing `Media` trai
 ## 9. Release `0.7.0`
 
 Every open item above, shipped in the order of this page: `tv-rs-core`, protocol
-crates, `tv-rs-mdc`, then the agent, media and facade. Under the policy in
+crates, `tv-rs-drivers`, then the agent, media and facade. Under the policy in
 `CONTRIBUTING.md` the additions are a **minor** bump.
 
-**Exit:** all fifteen publishable crates published at the same version;
+**Exit:** all nineteen published crates at the same version;
 [`08-hil-results.md`](08-hil-results.md) has at least one real row; the vendor capability
 table ([`03-matrix.md` §Capability truth](03-matrix.md#capability-truth)) states each
 vendor's absence rather than implying a capability it lacks.

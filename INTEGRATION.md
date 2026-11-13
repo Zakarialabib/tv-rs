@@ -41,7 +41,7 @@ needs no credentials and no pairing, which is why it is safe to call on a timer.
 across reboots. That matters:
 
 - `wake` needs a MAC, so nothing advertised by discovery can wake a panel. Keep your
-  own MAC table keyed by IP or serial and call `tv-rs-power` yourself.
+  own MAC table keyed by IP or serial and call `tv-rs-drivers` (`power`) yourself.
 - The quirks table matches on model prefix, and the model is often enough — see §4.
 
 **If SSDP returns nothing**, the network is the problem, not the crate: AP isolation
@@ -238,11 +238,11 @@ dependency graph.
 ## 7. Panels the network cannot reach
 
 If the screen has no IP — a consumer set on the wall, an HDMI matrix, a panel whose
-control features the vendor removed — `tv-rs-cec` sends HDMI-CEC frames through
-`cec-client`:
+control features the vendor removed — `tv-rs-drivers` (`cec`) sends HDMI-CEC frames
+through `cec-client`:
 
 ```rust,no_run
-use tv_rs_cec::{CecAddress, CecClient, ClientTransport};
+use tv_rs_drivers::cec::{CecAddress, CecClient, ClientTransport};
 
 let cec = CecClient::new(ClientTransport::new("cec-client"));
 cec.power_on(CecAddress::Tv).await?;
@@ -278,14 +278,14 @@ tested-against-mocks until that table has rows.
 
 | You need                                                | Reach for                                                                            | Not                                            |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------- |
-| one operation on one screen                             | `TvClient`                                                                           | the vendor crates directly                     |
+| one operation on one screen                             | `TvClient`                                                                           | `tv-rs-drivers` directly                       |
 | the same operation on many                              | `DeviceHandle` traits                                                                | matching on `TvVendor`                         |
-| vendor-specific extras                                  | `as_tizen()` / `as_webos()` / `as_roku()`                                            | feature-detecting at runtime                   |
+| vendor-specific extras                                  | `as_tizen()` / `as_webos()` / `as_roku()` / `as_cast()` / `as_cec()`                | feature-detecting at runtime                   |
 | panel lock / orientation / health on a commercial panel | `as_panel_lock()` / `as_orientation()` / `as_panel_health()` on an MDC-backed handle | faking a read the consumer channel cannot make |
 | fleet policy                                            | `tv-rs-agent`                                                                        | a retry loop per device                        |
 | video                                                   | `tv-rs-media`                                                                        | a hand-rolled range handler                    |
-| a panel with no IP                                      | `tv-rs-cec`                                                                          | pretending the network one is down             |
+| a panel with no IP                                      | `tv-rs-drivers` (`cec`)                                                              | pretending the network one is down             |
 
-The facade holds no protocol logic; the vendor crates hold no policy; the agent holds
+The facade holds no protocol logic; `tv-rs-drivers` holds no policy; the agent holds
 no transport. Behaviour that does not fit one of those rows usually means the
 integration is reaching through a seam that exists for a reason.

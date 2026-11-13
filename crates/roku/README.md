@@ -1,5 +1,11 @@
 # tv-rs-roku
 
+> **Deprecated in 0.8.0 — not published.** This crate is a `publish = false` workspace
+> shim that re-exports [`tv-rs-drivers`](https://crates.io/crates/tv-rs-drivers) with
+> the `roku` feature. The code described below lives in `crates/drivers/src/roku/`.
+> New code should depend on `tv-rs-drivers`, not on this crate.
+
+
 Roku External Control Protocol (ECP) client over HTTP REST (port 8060).
 
 ## Supported Operations

@@ -257,7 +257,7 @@ working from refused. That is not verified, so it is not code. Two traps either 
 **Key presses have no SSAP message.** They go through the pointer socket:
 `getPointerInputSocket` returns a WebSocket, and a press is a `type:button` frame on it.
 The facade keeps one such socket per TV and reuses it across presses
-(`crates/webos/src/pool.rs`); registration must ask for `CONTROL_INPUT_TEXT` and
+(`crates/drivers/src/webos/pool.rs`); registration must ask for `CONTROL_INPUT_TEXT` and
 `CONTROL_MOUSE_AND_KEYBOARD` or the TV refuses the path.
 
 Traps:

@@ -1,5 +1,11 @@
 # tv-rs-discovery
 
+> **Deprecated in 0.8.0 — not published.** This crate is a `publish = false` workspace
+> shim that re-exports [`tv-rs-drivers`](https://crates.io/crates/tv-rs-drivers) with
+> the `discovery` feature. The code described below lives in `crates/drivers/src/discovery/`.
+> New code should depend on `tv-rs-drivers`, not on this crate.
+
+
 Universal display discovery, device fingerprinting, and persistent device registry:
 finds televisions, digital signage panels, streaming boxes, and media receivers across LAN and peripheral buses.
 

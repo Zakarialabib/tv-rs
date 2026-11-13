@@ -1,5 +1,11 @@
 # tv-rs-webos
 
+> **Deprecated in 0.8.0 — not published.** This crate is a `publish = false` workspace
+> shim that re-exports [`tv-rs-drivers`](https://crates.io/crates/tv-rs-drivers) with
+> the `webos` feature. The code described below lives in `crates/drivers/src/webos/`.
+> New code should depend on `tv-rs-drivers`, not on this crate.
+
+
 LG webOS control over SSAP, the JSON-RPC-ish WebSocket service every LG set
 exposes: plain on port `3000`, TLS-wrapped on `3001`. This crate owns the
 handshake, the pairing prompt, session reuse and the pointer channel; `tv-rs`

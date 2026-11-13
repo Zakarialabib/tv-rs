@@ -21,12 +21,13 @@ if let Some(tv) = tvs.first() {
 
 - `tv-rs` — this facade: `TvClient`, discovery, vendor dispatch
 - `tv-rs-core` — the device model: capability traits, `DeviceHandle`, confidence, error taxonomy
-- `tv-rs-discovery`, `tv-rs-power` — SSDP, mDNS, and Wake-on-LAN
-- `tv-rs-tizen`, `tv-rs-webos`, `tv-rs-roku` — consumer smart TV backends
-- `tv-rs-cast` — Google Cast sender with media transport controls
-- `tv-rs-mdc`, `tv-rs-sicp`, `tv-rs-lgcmd` — commercial display protocols
-- `tv-rs-cec` — HDMI-CEC over subprocess (`cec-client`) or platform-native FFI
+- `tv-rs-drivers` — every vendor protocol behind a feature flag: SSDP, Wake-on-LAN, Tizen, webOS, Roku, Google Cast, Samsung MDC, Philips SICP, HDMI-CEC, IR
+- `tv-rs-lgcmd` — LG commercial serial (`ka`/`mc`)
 - `tv-rs-agent` — desired-state reconciliation, lease handling, healing ladder, audit log
 - `tv-rs-media` — `206`/HLS serving
+
+The ten old `tv-rs-<vendor>` crate names are deprecated, unpublished shims that
+re-export `tv-rs-drivers`; new code should depend on `tv-rs-drivers` with the
+features it needs.
 
 Documentation, including what is deliberately unsupported, lives in the repository `docs/` directory. Every deferred capability returns a typed error rather than pretending to work.

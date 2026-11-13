@@ -9,12 +9,12 @@ on its own. No Tauri, no database, no TV control, no network.
 
 ## Install
 
-`tv-rs-local` is on crates.io at `0.2.0` (the workspace's published set moves
+`tv-rs-local` is on crates.io at `0.8.0` (the workspace's published set moves
 together):
 
 ```toml
 [dependencies]
-tv-rs-local = "0.2"
+tv-rs-local = "0.8"
 ```
 
 Working inside this workspace, use the sibling path:

@@ -7,11 +7,9 @@ roadmap** (`docs/specs/ROADMAP-DESKTOP.md` §12–§13 there — deliberately no
 because it is another repository). This page holds only the durable contract: who
 owns what, the no-duplication rules, the integration contracts, and the gates.
 
-Registry note: crates.io serves **thirteen crates at `0.2.0`** today; `tv-rs-mdc` and
-`tv-rs-app` are merged in this workspace and ride the `0.3.0` release (the registry
-table in
-[`03-matrix.md` §Published](03-matrix.md#published-cratesio-verified-2026-10-22-against-the-registry-api)
-is the version truth).
+Registry note: crates.io serves **nineteen crates at `0.8.0`** (the registry table in
+[`03-matrix.md` §Published](03-matrix.md#published) is the version truth). The ten
+deprecated `tv-rs-<vendor>` names are workspace-only shims and are not published.
 
 ## 1. Domain ownership
 
@@ -42,9 +40,9 @@ forever. Signage is the first adopter, not the crate's design center: no Tauri,
 2. **The agent is not adopted wholesale by default.** The app's scheduler and
    database remain the source of desired state; `tv-rs-agent` is a later
    decision (see the crate's own docs for the reconciler it offers).
-3. **No Cast/AirPlay/Android TV control** until those crates exist; discovery
-   sources only.
-4. **Dependency policy is semver from the registry**: `tv-rs = "0.2"`; no git
+3. **No AirPlay or Android TV control**; Google Cast is available through
+   `tv-rs-drivers` (`cast`). Everything else is discovery sources only.
+4. **Dependency policy is semver from the registry**: `tv-rs = "0.8"`; no git
    pin, no fork, no path override, no floating branch.
 
 Non-goals that bound the whole program: no schedules, campaigns, content,
@@ -92,7 +90,7 @@ These are review gates, not suggestions.
    the app.
 9. **Feature-gated platform code.** `tv-rs-local` isolates Windows/Linux
    platform `unsafe`; `tv-rs-core` keeps `forbid(unsafe_code)`.
-10. **Dependency policy.** Use the published `tv-rs = "0.2"` semver dependency;
+10. **Dependency policy.** Use the published `tv-rs = "0.8"` semver dependency;
     no git pin, fork or local path. No floating branch.
 11. **Every extraction deletes the old path.** A move is not complete while
     both implementations are reachable.
@@ -177,7 +175,7 @@ serial_number, usn }` is evidence.
 | -------------- | ------------------------------------------------------------------------- |
 | Contract       | the app's command-contract checker                                        |
 | Types          | the app's TypeScript typecheck                                            |
-| TV adapter     | `cargo test -p tv-rs-tizen` / `tv-rs-webos` / `tv-rs-roku`                |
+| TV adapter     | `cargo test -p tv-rs-drivers --features "tizen webos roku"`               |
 | Local probe    | `cargo test -p tv-rs-local`                                               |
 | DLNA transport | `cargo test -p tv-rs-dlna`; cast/stop/GENA parity                         |
 | Dependency     | `cargo tree -i native-tls` empty; `cargo tree -d` reviewed                |
