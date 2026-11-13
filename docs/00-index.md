@@ -1,6 +1,6 @@
 # Documentation
 
-Fifteen published crates, one facade, one idea: speak each TV's own protocol and never
+Nineteen published crates, one facade, one idea: speak each TV's own protocol and never
 hide a failure behind a panic. This page is both the **index** — it routes to
 everything in `docs/` and to the root pages beside it — and the **term map**: every
 word you will meet in the code or the protocol docs, with the place that explains it.
@@ -18,6 +18,7 @@ word you will meet in the code or the protocol docs, with the place that explain
 | 6   | [`06-plan.md`](06-plan.md)                                                                                             | **The one plan.** Open work only, with an exit criterion per item, plus the expansion proposal as an appendix. Landed work lives in the CHANGELOG.                                 |
 | 7   | [`07-adoption.md`](07-adoption.md)                                                                                     | The contract for adopting this workspace inside an application: what the app owns, what the crate owns, the no-duplication rules.                                                  |
 | 8   | [`08-hil-results.md`](08-hil-results.md)                                                                               | What has actually run against a physical TV. Today: nothing.                                                                                                                       |
+| 9   | [`09-change-classes.md`](09-change-classes.md)                                                                         | **New here?** Classify a change before you write it: what is breaking, what is an improvement, what is a better way of handling things — and where each gets recorded.             |
 | —   | [`../INTEGRATION.md`](../INTEGRATION.md)                                                                               | **Putting it in an application**: discovery, TLS pinning, quirks, a fleet, media, CEC, the pre-ship checklist.                                                                     |
 | —   | [`../README.md`](../README.md)                                                                                         | The face of the project: what it is, install, the ten-line example, the crate list.                                                                                                |
 | —   | [`../QUIRKS.md`](../QUIRKS.md)                                                                                         | Submitting a model/firmware quirk row.                                                                                                                                             |
@@ -47,7 +48,8 @@ word you will meet in the code or the protocol docs, with the place that explain
 | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `crates/core`                                       | the device model: capability traits, the erased `DeviceHandle`, `CommandId`, observed state, the error taxonomy |
 | `crates/tv-rs`                                      | facade: discovery orchestration, vendor identification, `TvClient`                                              |
-| `crates/{discovery,power,tizen,webos,roku,mdc,cec}` | one wire protocol each (SSDP, Wake-on-LAN, Tizen, webOS, Roku ECP, Samsung MDC, HDMI-CEC)                       |
+| `crates/drivers`                                    | vendor protocols behind feature flags: SSDP, Wake-on-LAN, Tizen, webOS, Roku ECP, MDC, SICP, CEC, IR, Cast      |
+| `crates/<vendor>`                                   | deprecated **unpublished** shims: the ten old vendor crate names re-export `tv-rs-drivers`                      |
 | `crates/local`                                      | the host's own display (EDID/mode probing)                                                                      |
 | `crates/{transport,dlna,media}`                     | support: TLS/frame reader; DLNA renderer transport; `206`/HLS server                                            |
 | `crates/app`                                        | the TV app producer: a supplied payload in, `.wgt` / webOS app directory / web bundle out                       |

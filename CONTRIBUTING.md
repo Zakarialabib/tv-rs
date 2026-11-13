@@ -43,12 +43,16 @@ TV_RS_HIL_ROKU_HOST=192.168.1.40 cargo test --features hil --test hardware_in_th
 
 ## Layout rules
 
-Each protocol crate follows the same module shape — see
-[`docs/01-architecture.md`](docs/01-architecture.md):
+The vendor protocols live in one crate, `crates/drivers/src/<protocol>/`, behind a
+feature flag — see [`docs/01-architecture.md`](docs/01-architecture.md). Each protocol
+module follows the same shape:
 
 ```
-<protocol>/src/{lib,auth,protocol,payload,types,client,error}.rs
+crates/drivers/src/<protocol>/{mod,auth,protocol,payload,types,client,error}.rs
 ```
+
+The deprecated `crates/<vendor>` directories are `publish = false` shims and hold no
+protocol code; do not add any.
 
 - `auth.rs` holds the authentication trait. Anything that depends on
   undocumented vendor behaviour returns a typed `Unsupported` error; library
@@ -74,6 +78,11 @@ Group related files in a commit; do not mix formatting churn with behaviour.
 
 ## Versioning policy
 
+**Classify the change before you write it.** [`docs/09-change-classes.md`](docs/09-change-classes.md)
+is the short guide: what counts as breaking, what is an improvement, what is a better
+way of handling things, and where each one gets recorded. Read it first; the rules
+below are the detail.
+
 `0.x` until the error taxonomy and the capability traits have been stable for a full
 release cycle; from `1.0`, plain [SemVer](https://semver.org/spec/v2.0.0.html).
 
@@ -97,7 +106,7 @@ quirk row, a new feature flag (off by default), a new field on a struct that is
 mapping lives in downstream retry code. Add a variant, add its remedy, add the
 exhaustiveness test case — in the same PR.
 
-All fourteen crates are versioned together and published together: `cargo xtask
+All nineteen crates are versioned together and published together: `cargo xtask
 publish --version X.Y.Z` rewrites the pins. A partial release is worse than a
 late one.
 
